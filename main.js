@@ -14,7 +14,7 @@
  *    сначала SIGTERM, через 4 с — SIGKILL.
  */
 
-const { app, BrowserWindow, Menu, protocol, net: electronNet, shell } = require('electron');
+const { app, BrowserWindow, Menu, protocol, net: electronNet, shell, clipboard } = require('electron');
 const { spawn, execFileSync } = require('child_process');
 const nodeNet = require('net');
 const fs = require('fs');
@@ -23,7 +23,7 @@ const path = require('path');
 
 /* ========================= настройки ========================= */
 
-const DSH_BIN = process.env.DSH_BIN || '/usr/bin/dsh'; // путь к бинарнику dsh
+let DSH_BIN = process.env.DSH_BIN || '/usr/bin/dsh'; // путь к бинарнику dsh (let: после установки из окна обновляется, если npm prefix не /usr)
 const DSH_ARGS = process.env.DSH_ARGS
   ? process.env.DSH_ARGS.split(' ').filter(Boolean)
   : ['--profile', 'web', '--no-open'];
@@ -183,6 +183,36 @@ async function waitForAuthUrl(timeoutMs = 20000) {
   const deadline = Date.now() + timeoutMs;
   while (!authUrl && Date.now() < deadline) await sleep(100);
   return authUrl;
+}
+
+/* ---------------- проверка установки dsh ---------------- */
+
+// Проверяем не только наличие файла, но и что бинарник реально запускается:
+// битый symlink, несовместимый Node или отсутствующий npm дадут ошибку здесь,
+// а не загадочным ENOENT в момент старта. dsh --version занимает ~60 мс.
+function dshInstallCheck() {
+  if (!DSH_BIN || !fs.existsSync(DSH_BIN)) return { ok: false, reason: 'missing' };
+  try {
+    const out = execFileSync(DSH_BIN, ['--version'], { encoding: 'utf8', timeout: 8000 });
+    return { ok: true, version: (out.trim().split('\n').pop() || '').trim() };
+  } catch (e) {
+    const detail = String(e.stderr || e.message || '').trim().split('\n').slice(-3).join(' ').slice(0, 300);
+    return { ok: false, reason: 'broken', detail };
+  }
+}
+
+// Есть ли npm и доступен ли глобальный prefix без sudo — от этого зависит,
+// можно ли ставить dsh кнопкой прямо из окна.
+const INSTALL_CMD = 'npm install -g @deepseek-ai/dsh';
+function npmInstallInfo() {
+  try {
+    const prefix = execFileSync('npm', ['prefix', '-g'], { encoding: 'utf8', timeout: 10000 }).trim();
+    fs.accessSync(path.join(prefix, 'lib', 'node_modules'), fs.constants.W_OK);
+    return { hasNpm: true, canAuto: true, prefix, command: INSTALL_CMD };
+  } catch (e) {
+    const noNpm = /ENOENT/.test(String(e.code || e.message || ''));
+    return { hasNpm: !noNpm, canAuto: false, command: noNpm ? INSTALL_CMD : 'sudo ' + INSTALL_CMD };
+  }
 }
 
 /* ---------------- запуск процесса dsh ---------------- */
@@ -379,6 +409,81 @@ function showPastePage() {
   showStatus('Нужен токен', body, true);
 }
 
+/* ---------------- страница «dsh не установлен» ----------------
+ * Порт закрыт и бинарника dsh нет — вместо попытки старта и ENOENT показываем
+ * инструкцию: команда установки, «Скопировать», (если глобальный npm prefix
+ * доступен без sudo) «Установить» с живым логом, и «Проверить ещё раз».
+ * Состояние кэшируем: во время установки страница перерисовывается каждые
+ * 800 мс, и execFileSync в каждом рендере забивал бы main-процесс.
+ */
+let installState = { check: null, npmInfo: null, running: false, log: [], timer: null, proc: null };
+
+function refreshInstallState() {
+  installState.check = dshInstallCheck();
+  installState.npmInfo = npmInstallInfo();
+}
+
+function showInstallPage(note, noteIsError = false) {
+  if (!win || win.isDestroyed()) return;
+  if (!installState.running) refreshInstallState();
+  const check = installState.check;
+  const npmInfo = installState.npmInfo;
+  const installing = installState.running;
+  const noteHtml = note
+    ? `<p style="color:${noteIsError ? '#f85149' : '#3fb950'}">${esc(note)}</p>`
+    : '';
+  const body = `
+    ${noteHtml}
+    <p>Лаунчер не может запустить DeepSeek Harness: по пути
+       <code>${esc(DSH_BIN)}</code> бинарника <code>dsh</code>
+       ${installing ? 'идёт установка' : check.reason === 'missing' ? 'нет' : 'он не запускается'}</p>
+    ${!installing && check.detail ? `<p>Детали: <code>${esc(check.detail)}</code></p>` : ''}
+    ${installing
+      ? '<p>Последние строки установки:</p>\n     <pre>' + esc(installState.log.slice(-40).join('\n') || '…') + '</pre>'
+      : '<p>Установите dsh (нужен Node.js 22+ и npm):</p>\n     <pre>' + esc(npmInfo.command) + '</pre>\n     ' + (
+          npmInfo.canAuto
+            ? '<p>Или нажмите «Установить» — лаунчер выполнит команду сам.</p>'
+            : npmInfo.hasNpm
+              ? '<p>Этой команде нужен <code>sudo</code> — выполните её в терминале и нажмите «Проверить ещё раз».</p>'
+              : '<p>npm в системе нет: сначала установите Node.js (22+) с npm, затем команду выше, и нажмите «Проверить ещё раз».</p>'
+        )}
+    <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap">
+      ${installing ? '' : `<button onclick="location.href='dshlauncher://install/copy/'">Скопировать команду</button>`}
+      ${installing ? '' : (npmInfo.canAuto ? `<button onclick="location.href='dshlauncher://install/run/'">Установить</button>` : '')}
+      <button onclick="location.href='dshlauncher://install/recheck/'">Проверить ещё раз</button>
+    </div>`;
+  showStatus(installing ? 'Устанавливаю dsh…' : 'Нужен DeepSeek Harness', body, !installing);
+}
+
+/* ---------------- запуск dsh и доведение окна до GUI ---------------- */
+
+async function launchDsh() {
+  showStatus('Запуск DeepSeek Harness…',
+    `<p>Запускаю <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>.<br>Жду, пока сервис поднимется…</p>`);
+  startDsh();
+
+  const up = await waitForPort();
+  if (!up) {
+    showStatus('Не удалось запустить dsh',
+      `<p>Процесс не поднял сервис на <code>${PLAIN_URL}</code>.<br>
+         Проверьте, что команда запускается в терминале:
+         <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>.<br>
+         Последние строки журнала:</p>${stderrBlock()}`, true);
+    startWatchdog(); // если dsh запустят вручную — окно оживёт само
+    return;
+  }
+
+  const url = authUrl || (await waitForAuthUrl());
+  if (url) {
+    await win.loadURL(url); // обмен токена на куки, затем редирект на чистый URL
+  } else if (await plainUrlIsAuthed()) {
+    await win.loadURL(PLAIN_URL); // старое куки ещё валидно
+  } else {
+    showPastePage();
+  }
+  startWatchdog();
+}
+
 /* ---------------- основной поток ---------------- */
 
 protocol.registerSchemesAsPrivileged([
@@ -484,11 +589,17 @@ async function onRetryRequest() {
           showPastePage();
         }
       } else {
-        showStatus('dsh не запущен',
-          `<p>Порт ${PORT} закрыт — <code>dsh</code> не запущен.</p>
-             <p>Запустите его в терминале: <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>
-             и нажмите «Проверить снова». Либо закройте окно и запустите
-             dsh-launcher снова.</p>`, false);
+        // Бинарник мог исчезнуть (разустановка, другой DSH_BIN) — тогда
+        // совет запускать его в терминале бессмысленен.
+        if (!dshInstallCheck().ok) {
+          showInstallPage('dsh не найден — установите его (команда на странице).');
+        } else {
+          showStatus('dsh не запущен',
+            `<p>Порт ${PORT} закрыт — <code>dsh</code> не запущен.</p>
+               <p>Запустите его в терминале: <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>
+               и нажмите «Проверить снова». Либо закройте окно и запустите
+               dsh-launcher снова.</p>`, false);
+        }
       }
     }
   } catch (e) {
@@ -496,6 +607,103 @@ async function onRetryRequest() {
   }
   return new Response('<!doctype html><html><body style="background:#0f1115;margin:0"></body></html>',
     { headers: { 'content-type': 'text/html' } });
+}
+
+function blankResponse() {
+  return new Response('<!doctype html><html><body style="background:#0f1115;margin:0"></body></html>',
+    { headers: { 'content-type': 'text/html' } });
+}
+
+// «Скопировать команду» на странице установки dsh.
+function onInstallCopy() {
+  try {
+    if (!installState.npmInfo) refreshInstallState();
+    clipboard.writeText(installState.npmInfo.command);
+    console.log('[launcher] команда установки скопирована в буфер обмена');
+    showInstallPage('Команда скопирована в буфер обмена — вставьте её в терминал.');
+  } catch (e) {
+    console.error('[launcher] onInstallCopy:', e.message);
+    showInstallPage('Не удалось скопировать команду: ' + e.message, true);
+  }
+  return blankResponse();
+}
+
+// «Проверить ещё раз»: dsh появился (поставили вручную или кнопкой) — продолжаем запуск.
+async function onInstallRecheck() {
+  try {
+    if (installState.running) return blankResponse(); // установка идёт — страница обновится сама
+    refreshInstallState();
+    if (installState.check.ok) {
+      console.log(`[launcher] dsh найден (${installState.check.version}) — начинаю запуск`);
+      await launchDsh();
+      return blankResponse();
+    }
+    console.log(`[launcher] повторная проверка: dsh всё ещё не найден (${installState.check.reason})`);
+    showInstallPage('dsh всё ещё не найден — установите его командой выше, затем проверьте снова.', true);
+  } catch (e) {
+    console.error('[launcher] onInstallRecheck:', e.message);
+    showInstallPage('Ошибка проверки: ' + e.message, true);
+  }
+  return blankResponse();
+}
+
+// «Установить»: npm install -g прямо из окна, с живым логом.
+async function onInstallRun() {
+  try {
+    if (installState.running || !win || win.isDestroyed() || stopping) return blankResponse();
+    refreshInstallState();
+    const npmInfo = installState.npmInfo;
+    if (!npmInfo.canAuto) {
+      showInstallPage('Кнопка «Установить» недоступна: глобальный npm prefix требует sudo — выполните команду в терминале.', true);
+      return blankResponse();
+    }
+    installState.running = true;
+    installState.log = [];
+    console.log(`[launcher] установка dsh из окна: ${npmInfo.command}`);
+    installState.proc = spawn('npm', ['install', '-g', '@deepseek-ai/dsh'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = installState.proc;
+    const onData = (d) => {
+      for (const line of d.toString().split('\n')) {
+        const t = line.trim();
+        if (!t) continue;
+        installState.log.push(t);
+        if (installState.log.length > 500) installState.log.shift();
+      }
+    };
+    p.stdout.on('data', onData);
+    p.stderr.on('data', onData);
+    installState.timer = setInterval(() => showInstallPage(), 800);
+    const code = await new Promise((resolve) => {
+      let settled = false;
+      const done = (c) => { if (!settled) { settled = true; resolve(c); } };
+      p.on('close', (c) => done(c === null ? -1 : c));
+      p.on('error', () => done(-1)); // npm не запустился — close может не прийти
+    });
+    clearInterval(installState.timer);
+    installState.running = false;
+    installState.proc = null;
+    if (code === 0) {
+      console.log('[launcher] dsh установлен — продолжаю запуск');
+      // Если prefix не /usr, бинарник лёг не в DSH_BIN — подхватываем фактический путь.
+      if (!fs.existsSync(DSH_BIN)) {
+        const cand = path.join(npmInfo.prefix, 'bin', 'dsh');
+        if (fs.existsSync(cand)) {
+          console.log(`[launcher] DSH_BIN обновлён: ${DSH_BIN} -> ${cand}`);
+          DSH_BIN = cand;
+        }
+      }
+      await launchDsh();
+    } else {
+      console.error(`[launcher] установка dsh завершилась с кодом ${code}`);
+      showInstallPage(`Установка завершилась с кодом ${code} (строки выше) — повторите в терминале.`, true);
+    }
+  } catch (e) {
+    console.error('[launcher] onInstallRun:', e.message);
+    installState.running = false;
+    try { clearInterval(installState.timer); } catch { /* noop */ }
+    showInstallPage('Не удалось запустить установку: ' + e.message, true);
+  }
+  return blankResponse();
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -516,6 +724,9 @@ async function onReady() {
     try {
       const u = new URL(request.url);
       if (u.pathname.startsWith('/retry/')) return onRetryRequest();
+      if (u.pathname.startsWith('/install/copy/')) return onInstallCopy();
+      if (u.pathname.startsWith('/install/run/')) return onInstallRun();
+      if (u.pathname.startsWith('/install/recheck/')) return onInstallRecheck();
     } catch { /* noop */ }
     return onPasteRequest(request);
   });
@@ -626,30 +837,20 @@ async function onReady() {
     return;
   }
 
-  showStatus('Запуск DeepSeek Harness…',
-    `<p>Запускаю <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>.<br>Жду, пока сервис поднимется…</p>`);
-  startDsh();
-
-  const up = await waitForPort();
-  if (!up) {
-    showStatus('Не удалось запустить dsh',
-      `<p>Процесс не поднял сервис на <code>${PLAIN_URL}</code>.<br>
-         Проверьте, что команда запускается в терминале:
-         <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>.<br>
-         Последние строки журнала:</p>${stderrBlock()}`, true);
-    startWatchdog(); // если dsh запустят вручную — окно оживёт само
+  // Порт закрыт — будем запускать dsh сами. Сначала проверяем, что он вообще
+  // установлен: иначе вместо понятной страницы — ENOENT после попытки старта.
+  const installCheck = dshInstallCheck();
+  if (!installCheck.ok) {
+    console.log(
+      `[launcher] dsh не найден (${installCheck.reason}` +
+      (installCheck.detail ? ': ' + installCheck.detail : '') +
+      ') — показываю страницу установки'
+    );
+    showInstallPage();
+    startWatchdog(); // если dsh поставят и запустят вручную — окно оживёт само
     return;
   }
-
-  const url = authUrl || (await waitForAuthUrl());
-  if (url) {
-    await win.loadURL(url); // обмен токена на куки, затем редирект на чистый URL
-  } else if (await plainUrlIsAuthed()) {
-    await win.loadURL(PLAIN_URL); // старое куки ещё валидно
-  } else {
-    showPastePage();
-  }
-  startWatchdog();
+  await launchDsh();
 }
 
 /* ---------------- закрытие = остановка ---------------- */
@@ -660,6 +861,9 @@ app.on('before-quit', (e) => {
   if (stopping) return;
   stopping = true;
   e.preventDefault();
+  if (installState.running && installState.proc) {
+    try { installState.proc.kill('SIGTERM'); } catch { /* noop */ }
+  }
   Promise.resolve().then(() => stopDsh()).finally(() => app.quit());
 });
 
