@@ -1,20 +1,24 @@
 name: build-deb
 
+# Как выпустить релиз:
+#   1. Дописать раздел `## [X.Y.Z]` в CHANGELOG.md (он станет описанием релиза).
+#   2. git tag vX.Y.Z && git push origin vX.Y.Z
+# Тег vX.Y.Z даёт пакет X.Y.Z-1; тег vX.Y.Z-R — пакет X.Y.Z-R (перепаковка
+# той же версии). Version: в deb/control для релиза переписывается из тега.
+#
+# Пуш в main (кроме правок *.md) — только сборка: .deb в артефактах прогона,
+# без релиза. Триггера pull_request НЕТ намеренно: репозиторий публичный, и
+# код стороннего PR выполнялся бы в джобе (npm ci из чужого package.json).
 on:
   push:
     branches: [main]
-  # Триггера pull_request НЕТ намеренно: репозиторий публичный, и любой
-  # форк-PR запускал бы сборку (минуты/очередь CI) и, что важнее, код
-  # стороннего автора выполнялся бы в джобе (npm ci из чужого
-  # package.json). Код из PR проверяется вручную (diff) или локальной
-  # сборкой ./build-deb.sh. Ручные сборки кода из main — кнопка
-  # Run workflow ниже. В терминале v* теги создавать не нужно — тег
-  # создаёт сам CI после зелёной сборки в main (тег-триггер снят,
-  # иначе собственные теги CI повторно запускали бы воркфлоу).
+    tags: ['v*']
+    # Для пушей тегов фильтр путей не применяется — только для веток.
+    paths-ignore: ['**.md']
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Тег релиза, напр. v1.0.0-12. Пусто = просто сборка без релиза'
+        description: 'Тег релиза, напр. v1.1.0. Пусто = просто сборка без релиза'
         required: false
         type: string
 
@@ -25,81 +29,96 @@ jobs:
     # бинарник Electron, от версии ОС раннера она не зависит).
     runs-on: ubuntu-24.04
     permissions:
-      contents: write # сам CI создаёт релиз-тег и Release
+      contents: write # создание Release (и тега — при ручном запуске)
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # история и теги — для поиска предыдущего релиза
 
       - name: Determine version
-        # - пуш в main: АВТОРЕЛИЗ — база X.Y из Version: в deb/control,
-        #   ревизия = следующая свободная после существующих тегов
-        #   v<база>-*.
-        # - dispatch с полем «Тег релиза»: релиз с этой версией (тег
-        #   создаст сама акция, если его ещё нет).
-        # - dispatch без поля: только сборка, версия из deb/control.
-        # Для релиза версия переписывается в deb/control рабочей копии —
-        # имя .deb из build-deb.sh совпадает с релизом.
+        # - пуш тега v*: релиз этого тега;
+        # - ручной запуск с полем «Тег релиза»: релиз с этим тегом (если тега
+        #   ещё нет — его создаст акция на текущем коммите);
+        # - пуш в main / ручной запуск без поля: только сборка, версия из
+        #   deb/control.
         id: ver
         env:
           DISPATCH_TAG: ${{ inputs.tag }}
         run: |
           set -eu
-          ver=$(sed -n 's/^Version: *//p' deb/control)
-          releasing=false
-          case "$GITHUB_EVENT_NAME" in
-            workflow_dispatch)
-              if [ -n "${DISPATCH_TAG:-}" ]; then
-                ver="${DISPATCH_TAG#v}"
-                releasing=true
-              fi
-              ;;
-            push)
-              # Авто-релиз: база X.Y — из deb/control
-              base=${ver%-*}
-              base_re=$(printf '%s' "$base" | sed 's/\./\\./g')
-              # максимальная ревизия среди тегов v<база>-* (пусто, если нет)
-              last=$(git ls-remote --tags origin 'v*' --refs \
-                | sed 's|.*refs/tags/v||' \
-                | grep -E '^[0-9]+(\.[0-9]+)+-[0-9]+$' \
-                | grep -E "^${base_re}-[0-9]+$" \
-                | sed 's/.*-//' | sort -n | tail -1 || true)
-              rev=$(( ${last:-0} + 1 ))
-              # Повторный запуск после сбоя релиза: максимальный тег мог
-              # уже указывать на этот коммит (прошлый запуск успел его
-              # создать) — тогда не инкрементим, а переиспользуем.
-              if [ -n "${last:-}" ]; then
-                sha=$(git ls-remote origin "refs/tags/v$base-$last" | awk '{print $1}' || true)
-                if [ "$sha" = "$GITHUB_SHA" ]; then rev=$last; fi
-              fi
-              # Если же кандидат занят ЧУЖИМ коммитом — берём следующую
-              # свободную ревизию.
-              while :; do
-                cand="$base-$rev"
-                sha=$(git ls-remote origin "refs/tags/v$cand" | awk '{print $1}' || true)
-                if [ -z "$sha" ]; then
-                  ver="$cand"
-                  break
-                fi
-                if [ "$sha" = "$GITHUB_SHA" ]; then
-                  ver="$cand"
-                  echo "Тег v$cand уже существует и указывает на этот коммит — обновляю релиз"
-                  break
-                fi
-                rev=$((rev + 1))
-              done
-              releasing=true
-              ;;
-          esac
-          echo "$ver" | grep -Eq '^[0-9]+(\.[0-9]+)+-[0-9]+$' || {
-            echo "::error::Версия '$ver' не в формате X.Y.Z-R (напр. 1.0.0-10)"
-            exit 1; }
-          echo "version=$ver" >> "$GITHUB_OUTPUT"
-          echo "releasing=$releasing" >> "$GITHUB_OUTPUT"
-          if [ "$releasing" = true ]; then
+          tag=""
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag="$GITHUB_REF_NAME"
+          elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ -n "${DISPATCH_TAG:-}" ]; then
+            tag="$DISPATCH_TAG"
+            case "$tag" in v*) ;; *) tag="v$tag" ;; esac
+            # Существующий тег должен указывать на собираемый коммит — иначе
+            # к релизу приложился бы пакет из другого кода.
+            if sha=$(git rev-parse -q --verify "refs/tags/$tag^{commit}"); then
+              [ "$sha" = "$GITHUB_SHA" ] || {
+                echo "::error::Тег $tag уже есть и указывает на ${sha:0:7}, а собирается ${GITHUB_SHA:0:7}. Запустите воркфлоу на нужном коммите или возьмите новый тег."
+                exit 1; }
+            fi
+          fi
+
+          if [ -n "$tag" ]; then
+            v="${tag#v}"
+            if echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+              ver="$v-1"
+            elif echo "$v" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$'; then
+              ver="$v"
+            else
+              echo "::error::Тег '$tag' не в формате vX.Y.Z или vX.Y.Z-R"
+              exit 1
+            fi
             sed -i "s/^Version: .*/Version: $ver/" deb/control
             echo "deb/control: Version -> $ver"
+            releasing=true
           else
+            ver=$(sed -n 's/^Version: *//p' deb/control)
+            releasing=false
             echo "Только сборка (без релиза), версия: $ver"
           fi
+          echo "$ver" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+-[0-9]+$' || {
+            echo "::error::Версия '$ver' не в формате X.Y.Z-R (напр. 1.1.0-1)"
+            exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "releasing=$releasing" >> "$GITHUB_OUTPUT"
+
+      - name: Release notes
+        # Описание релиза — раздел CHANGELOG.md: сначала `## [X.Y.Z-R]`
+        # (как в теге), затем `## [X.Y.Z]`. Нет раздела — список коммитов
+        # с предыдущего тега v*. В конце — ссылка на полное сравнение.
+        if: steps.ver.outputs.releasing == 'true'
+        env:
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          set -eu
+          v="${TAG#v}"
+          section() {
+            awk -v h="## [$1]" '
+              index($0, h) == 1 { on = 1; next }
+              on && /^## / { exit }
+              on { print }
+            ' CHANGELOG.md | sed -e '/./,$!d' # без пустых строк в начале
+          }
+          notes=$(section "$v")
+          [ -n "$notes" ] || notes=$(section "${v%-*}")
+          prev=$(git describe --tags --abbrev=0 --match 'v*' "$GITHUB_SHA^" 2>/dev/null || true)
+          if [ -z "$notes" ]; then
+            echo "::warning::В CHANGELOG.md нет раздела [$v] — в описание пойдёт список коммитов"
+            if [ -n "$prev" ]; then range="$prev..$GITHUB_SHA"; else range="$GITHUB_SHA"; fi
+            notes=$(git log --no-merges --format='- %s' "$range")
+          fi
+          {
+            printf '%s\n' "$notes"
+            if [ -n "$prev" ]; then
+              printf '\n**Full Changelog**: %s/%s/compare/%s...%s\n' \
+                "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$prev" "$TAG"
+            fi
+          } > release-notes.md
+          cat release-notes.md
 
       - uses: actions/setup-node@v7
         with:
@@ -131,8 +150,9 @@ jobs:
         if: success() && steps.ver.outputs.releasing == 'true'
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: v${{ steps.ver.outputs.version }}
-          # Если тега ещё нет — акция создаст его на собранном коммите
+          tag_name: ${{ steps.ver.outputs.tag }}
+          # Если тега ещё нет (ручной запуск) — акция создаст его на собранном коммите
           target_commitish: ${{ github.sha }}
           files: dsh-launcher_*_amd64.deb
-          generate_release_notes: true
+          body_path: release-notes.md
+          make_latest: true
