@@ -1,7 +1,8 @@
 name: build-deb
 
 # Как выпустить релиз:
-#   1. Дописать раздел `## [X.Y.Z]` в CHANGELOG.md (он станет описанием релиза).
+#   1. Дописать раздел `## [X.Y.Z]` в CHANGELOG.md (русский) и CHANGELOG.en.md
+#      (английский) — оба станут описанием релиза.
 #   2. git tag vX.Y.Z && git push origin vX.Y.Z
 # Тег vX.Y.Z даёт пакет X.Y.Z-1; тег vX.Y.Z-R — пакет X.Y.Z-R (перепаковка
 # той же версии). Version: в deb/control для релиза переписывается из тега.
@@ -87,32 +88,45 @@ jobs:
           echo "releasing=$releasing" >> "$GITHUB_OUTPUT"
 
       - name: Release notes
-        # Описание релиза — раздел CHANGELOG.md: сначала `## [X.Y.Z-R]`
-        # (как в теге), затем `## [X.Y.Z]`. Нет раздела — список коммитов
-        # с предыдущего тега v*. В конце — ссылка на полное сравнение.
+        # Описание релиза — раздел версии из CHANGELOG.md (русский) и
+        # CHANGELOG.en.md (английский), через разделитель. В каждом файле
+        # ищется сначала `## [X.Y.Z-R]` (как в теге), затем `## [X.Y.Z]`.
+        # Нет английского — релиз выйдет с одним русским (с предупреждением);
+        # нет ни одного — список коммитов с предыдущего тега v*.
+        # В конце — ссылка на полное сравнение.
         if: steps.ver.outputs.releasing == 'true'
         env:
           TAG: ${{ steps.ver.outputs.tag }}
         run: |
           set -eu
           v="${TAG#v}"
-          section() {
-            awk -v h="## [$1]" '
+          section() { # section <файл> <версия>
+            [ -f "$1" ] || return 0
+            awk -v h="## [$2]" '
               index($0, h) == 1 { on = 1; next }
               on && /^## / { exit }
               on { print }
-            ' CHANGELOG.md | sed -e '/./,$!d' # без пустых строк в начале
+            ' "$1" | sed -e '/./,$!d' # без пустых строк в начале
           }
-          notes=$(section "$v")
-          [ -n "$notes" ] || notes=$(section "${v%-*}")
+          notes_for() { # notes_for <файл>
+            n=$(section "$1" "$v")
+            [ -n "$n" ] || n=$(section "$1" "${v%-*}")
+            printf '%s' "$n"
+          }
+          ru=$(notes_for CHANGELOG.md)
+          en=$(notes_for CHANGELOG.en.md)
           prev=$(git describe --tags --abbrev=0 --match 'v*' "$GITHUB_SHA^" 2>/dev/null || true)
-          if [ -z "$notes" ]; then
-            echo "::warning::В CHANGELOG.md нет раздела [$v] — в описание пойдёт список коммитов"
-            if [ -n "$prev" ]; then range="$prev..$GITHUB_SHA"; else range="$GITHUB_SHA"; fi
-            notes=$(git log --no-merges --format='- %s' "$range")
-          fi
           {
-            printf '%s\n' "$notes"
+            if [ -n "$ru" ] && [ -n "$en" ]; then
+              printf '## Русский\n\n%s\n\n---\n\n## English\n\n%s\n' "$ru" "$en"
+            elif [ -n "$ru$en" ]; then
+              echo "::warning::Раздел [$v] есть только в одном из CHANGELOG.md / CHANGELOG.en.md" >&2
+              printf '%s\n' "$ru$en"
+            else
+              echo "::warning::В CHANGELOG нет раздела [$v] — в описание пойдёт список коммитов" >&2
+              if [ -n "$prev" ]; then range="$prev..$GITHUB_SHA"; else range="$GITHUB_SHA"; fi
+              git log --no-merges --format='- %s' "$range"
+            fi
             if [ -n "$prev" ]; then
               printf '\n**Full Changelog**: %s/%s/compare/%s...%s\n' \
                 "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$prev" "$TAG"

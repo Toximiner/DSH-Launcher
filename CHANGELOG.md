@@ -1,7 +1,10 @@
 # Изменения
 
+**Русский** | [English](CHANGELOG.en.md)
+
 Формат — [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/).
-Раздел `## [X.Y.Z]` становится описанием релиза `vX.Y.Z` на GitHub.
+Раздел `## [X.Y.Z]` (вместе с тем же разделом из `CHANGELOG.en.md`)
+становится описанием релиза `vX.Y.Z` на GitHub.
 
 ## [1.1.0] — 2026-10-03
 

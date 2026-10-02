@@ -108,7 +108,7 @@ cp dsh.desktop ~/Desktop/ && chmod +x ~/Desktop/dsh.desktop   # desktop icon
 
 Ready-made packages are published in the repository's GitHub **Releases** —
 the easiest way is to download the latest `.deb` from there and install it.
-What changed in each version is in [CHANGELOG.md](CHANGELOG.md) (in Russian).
+What changed in each version is in [CHANGELOG.en.md](CHANGELOG.en.md).
 
 ### Building it yourself
 
