@@ -41,7 +41,8 @@ jobs:
           fi
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v5
+        # v5 всё ещё node20; node24 появился с v6, берём актуальный major
+        uses: actions/upload-artifact@v7
         with:
           name: dsh-launcher-deb
           path: dsh-launcher_*_amd64.deb
