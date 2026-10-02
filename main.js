@@ -558,6 +558,58 @@ async function onReady() {
     console.error('[launcher] рендер-процесс завершился:', details.reason, 'exitCode=' + details.exitCode);
   });
 
+  // Управление, как в браузере: меню отключено (Menu.setApplicationMenu(null)),
+  // поэтому стандартные ускорители (Reload и т.п.) не работают — привязываем свои.
+  // F5 / Ctrl+R — перезагрузка страницы; Ctrl+Shift+R — без кэша.
+  // Ctrl+= / Ctrl+- — шаг масштаба; Ctrl+0 — сброс.
+  // Масштаб сохраняем в userData, чтобы не сбрасывался между запусками.
+  // (Ctrl+колесо не поддержано: в свежих Electron wheel-события в main-процесс
+  //  приходят ненадёжно, а перехват колес в самой странице конфликтует с
+  //  обработчиками загруженной страницы.)
+  const wc = win.webContents;
+  const zoomFile = path.join(app.getPath('userData'), 'zoom-level.json');
+  let zoomSaveTimer = null;
+  const saveZoom = (level) => {
+    clearTimeout(zoomSaveTimer);
+    zoomSaveTimer = setTimeout(() => {
+      try { fs.writeFileSync(zoomFile, JSON.stringify({ zoomLevel: level })); }
+      catch { /* noop */ }
+    }, 400);
+  };
+  const applyZoom = (level, note) => {
+    const z = Math.max(-5, Math.min(5, level));
+    wc.setZoomLevel(z);
+    saveZoom(z);
+    if (note) console.log(`[launcher] ${note}`);
+  };
+  try {
+    const savedZoom = JSON.parse(fs.readFileSync(zoomFile, 'utf8'));
+    if (Number.isFinite(savedZoom.zoomLevel)) {
+      wc.setZoomLevel(Math.max(-5, Math.min(5, savedZoom.zoomLevel)));
+      console.log(`[launcher] восстановлен масштаб: ${savedZoom.zoomLevel}`);
+    }
+  } catch { /* noop */ }
+  win.webContents.on('before-input-event', (event, input) => {
+    try {
+      if (input.type !== 'keyDown') return;
+      // code — физическая клавиша (не зависит от раскладки: RU/EN/другие)
+      if (input.key === 'F5' || (input.control && input.code === 'KeyR')) {
+        event.preventDefault();
+        if (input.shift) wc.reloadIgnoringCache(); else wc.reload();
+        console.log(`[launcher] перезагрузка страницы (${input.key === 'F5' ? 'F5' : 'Ctrl+R'})`);
+      } else if (input.control && (input.code === 'Equal' || input.code === 'NumpadAdd')) {
+        event.preventDefault();
+        applyZoom(wc.getZoomLevel() + 0.5);
+      } else if (input.control && (input.code === 'Minus' || input.code === 'NumpadSubtract')) {
+        event.preventDefault();
+        applyZoom(wc.getZoomLevel() - 0.5);
+      } else if (input.control && (input.code === 'Digit0' || input.code === 'Numpad0')) {
+        event.preventDefault();
+        applyZoom(0, 'масштаб сброшен (Ctrl+0)');
+      }
+    } catch (e) { console.error('[launcher] ошибка в обработчике клавиш:', e); }
+  });
+
   const alreadyRunning = await portOpen();
   if (alreadyRunning) {
     console.log('[launcher] port already open — attaching to running dsh');
