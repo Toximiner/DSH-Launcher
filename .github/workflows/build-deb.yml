@@ -32,10 +32,8 @@ jobs:
       - name: Check version consistency
         run: |
           want=$(sed -n 's/^Version: //p' deb/control)
-          got=$(ls dsh-launcher_*_amd64.deb | head -1)
-          got=${got#dsh-launcher_}; got=${got%.deb}
-          if [ "$got" != "$want" ]; then
-            echo "::error::Расхождение версий: в deb/control 'Version: $want', а скрипт собрал $got. Поменяйте REV в build-deb.sh и Version в deb/control синхронно."
+          if [ ! -f "dsh-launcher_${want}_amd64.deb" ]; then
+            echo "::error::Расхождение версий: в deb/control 'Version: $want', а скрипт собрал: $(ls dsh-launcher_*_amd64.deb). Поменяйте REV в build-deb.sh и Version в deb/control синхронно."
             exit 1
           fi
 
