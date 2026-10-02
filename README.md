@@ -44,9 +44,26 @@ npm start
 
 ## Ярлык (если ещё не поставлен)
 
+`dsh.desktop` лежит в репозитории **не** — он создаётся локально, потому
+что содержит абсолютные пути вашей машины:
+
 ```sh
 # из каталога проекта:
 chmod +x run.sh
+cat > dsh.desktop <<EOF
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=DeepSeek Harness
+GenericName=AI Chat
+Comment=Launcher for DeepSeek Harness (dsh --profile web)
+Exec=$PWD/run.sh
+Icon=$PWD/icon.png
+Terminal=false
+Categories=Development;Utility;
+Keywords=dsh;deepseek;ai;chat;harness;
+StartupWMClass=dsh-launcher
+EOF
 cp dsh.desktop ~/.local/share/applications/      # пункт в меню приложений
 cp dsh.desktop ~/Desktop/ && chmod +x ~/Desktop/dsh.desktop   # иконка на рабочем столе
 # GNOME: на иконке на рабочем столе — ПКМ → «Allow Launching»
