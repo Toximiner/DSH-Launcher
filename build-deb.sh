@@ -12,7 +12,7 @@ STAGE=build/deb
 OUT="${NAME}_${VER}-${REV}_${ARCH}.deb"
 
 [ -x node_modules/electron/dist/electron ] || {
-  echo "Сначала установите electron: npm install" >&2; exit 1; }
+  echo "Нет бинарника Electron: npm install && npx install-electron" >&2; exit 1; }
 
 rm -rf build
 mkdir -p \

@@ -57,15 +57,16 @@ cp dsh.desktop ~/Desktop/ && chmod +x ~/Desktop/dsh.desktop   # иконка н�
 ### Сборка самостоятельно
 
 Нужны (только на **машине сборки**): Ubuntu/Debian amd64 с `dpkg-deb`
-(пакет `dpkg-dev`), Node.js 20+ и доступ в интернет (npm скачает
-Electron ~290 МБ). На целевой машине node/npm **не нужны** — самодостаточный
-пакет, Electron входит внутрь.
+(пакет `dpkg-dev`), Node.js 22.12+ (требование Electron 44) и доступ в
+интернет (скачается бинарник Electron ~290 МБ). На целевой машине node/npm
+**не нужны** — самодостаточный пакет, Electron входит внутрь.
 
 ```sh
 git clone git@github.com:Toximiner/DSH-Launcher.git
 cd DSH-Launcher
-npm install        # только на машине сборки
-./build-deb.sh     # ~2 минуты (xz-сжатие) → dsh-launcher_<версия>_<rev>_amd64.deb
+npm install            # только на машине сборки
+npx install-electron   # Electron 44+ не скачивает бинарник автоматически
+./build-deb.sh         # ~2 минуты (xz-сжатие) → dsh-launcher_<версия>_<rev>_amd64.deb
 
 sudo dpkg -i dsh-launcher_1.0.0-9_amd64.deb
 # либо: sudo apt install ./dsh-launcher_1.0.0-9_amd64.deb
