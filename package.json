@@ -5,7 +5,8 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "icon": "node make-icon.js"
+    "icon": "node make-icon.js",
+    "banner": "electron make-banner.js --no-sandbox"
   },
   "license": "MIT",
   "devDependencies": {
