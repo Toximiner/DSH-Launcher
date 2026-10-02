@@ -47,7 +47,7 @@ Constants at the very top of `main.js`, or environment variables:
 
 | Variable                | Default                   | What it does                  |
 |-------------------------|---------------------------|-------------------------------|
-| `DSH_BIN`               | `/usr/bin/dsh`            | path to the dsh binary        |
+| `DSH_BIN`               | auto-detected (see below) | path to the dsh binary        |
 | `DSH_ARGS`              | `--profile web --no-open` | launch arguments (shell-like: spaces, `"…"`, `'…'`, `\`) |
 | `DSH_CWD`               | home directory            | dsh working directory         |
 | `DSH_PORT`              | `3080`                    | web UI port                   |
@@ -61,6 +61,13 @@ in the top-right corner; the choice is saved to
 locale is used (`LC_ALL` / `LC_MESSAGES` / `LANG`): `ru*` means Russian,
 anything else English. `DSH_LAUNCHER_LANG=ru|en` forces the language and
 overrides the saved choice.
+
+If `DSH_BIN` is not set, the launcher looks for dsh itself: `/usr/bin/dsh`,
+`PATH`, `~/.npm-global/bin`, `~/.local/bin`, `/usr/local/bin`, every nvm
+version (`~/.nvm/versions/node/*/bin`) and `$(npm prefix -g)/bin`. The path
+found is remembered in `~/.config/dsh-launcher/dsh-bin.json`. dsh is started
+with its own directory first in `PATH`, so a dsh installed via nvm gets its
+own node even when launched from the desktop shortcut.
 
 The dsh process log is written to `logs/dsh.log`.
 
@@ -176,7 +183,7 @@ and remove `--no-sandbox` from the last line of `run.sh`.
 
 ## Troubleshooting
 
-- If dsh is not installed (or `DSH_BIN` points to a missing file), the
+- If dsh is not found (or `DSH_BIN` points to a missing file), the
   window offers to install it: the `npm install -g @deepseek-ai/dsh`
   command with a “Copy command” button and, if the global npm prefix is
   writable without sudo, an “Install” button (installs right from the

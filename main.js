@@ -53,7 +53,11 @@ function splitArgs(str) {
 
 /* ========================= настройки ========================= */
 
-let DSH_BIN = process.env.DSH_BIN || '/usr/bin/dsh'; // путь к бинарнику dsh (let: после установки из окна обновляется, если npm prefix не /usr)
+const DSH_BIN_DEFAULT = '/usr/bin/dsh';
+const DSH_BIN_EXPLICIT = Boolean(process.env.DSH_BIN);
+// путь к бинарнику dsh; если DSH_BIN не задан и /usr/bin/dsh нет — ищется
+// в PATH, npm prefix, nvm и т.п. (см. findDsh), найденный путь запоминается
+let DSH_BIN = process.env.DSH_BIN || DSH_BIN_DEFAULT;
 const DSH_ARGS = process.env.DSH_ARGS
   ? splitArgs(process.env.DSH_ARGS)
   : ['--profile', 'web', '--no-open'];
@@ -227,19 +231,84 @@ async function waitForAuthUrl(timeoutMs = 20000) {
 
 /* ---------------- проверка установки dsh ---------------- */
 
-// Проверяем не только наличие файла, но и что бинарник реально запускается:
-// битый symlink, несовместимый Node или отсутствующий npm дадут ошибку здесь,
-// а не загадочным ENOENT в момент старта. dsh --version занимает ~60 мс.
-// Асинхронно: при медленной системе синхронный вызов замораживал бы окно.
-async function dshInstallCheck() {
-  if (!DSH_BIN || !fs.existsSync(DSH_BIN)) return { ok: false, reason: 'missing' };
+// Окружение для запуска dsh: каталог бинарника — первым в PATH. dsh — это
+// `#!/usr/bin/env node`-скрипт; установленный через nvm, он должен получить
+// node из того же каталога, а при запуске с ярлыка nvm в PATH нет.
+function dshEnv(extra) {
+  return { ...process.env, PATH: path.dirname(DSH_BIN) + path.delimiter + (process.env.PATH || ''), ...extra };
+}
+
+async function probeDsh(bin) {
+  if (!bin || !fs.existsSync(bin)) return { ok: false, reason: 'missing' };
   try {
-    const { stdout: out } = await execFileAsync(DSH_BIN, ['--version'], { encoding: 'utf8', timeout: 8000 });
+    const env = { ...process.env, PATH: path.dirname(bin) + path.delimiter + (process.env.PATH || '') };
+    const { stdout: out } = await execFileAsync(bin, ['--version'], { encoding: 'utf8', timeout: 8000, env });
     return { ok: true, version: (out.trim().split('\n').pop() || '').trim() };
   } catch (e) {
     const detail = String(e.stderr || e.message || '').trim().split('\n').slice(-3).join(' ').slice(0, 300);
     return { ok: false, reason: 'broken', detail };
   }
+}
+
+const dshBinPrefFile = () => path.join(app.getPath('userData'), 'dsh-bin.json');
+
+// Где искать dsh, если DSH_BIN не задан: запомненный путь, /usr/bin/dsh,
+// PATH, типичные каталоги пользовательских npm-установок, все версии nvm
+// (свежие первыми). npm prefix -g — последним, он медленный.
+function dshCandidates() {
+  const home = os.homedir();
+  const list = [];
+  try { list.push(JSON.parse(fs.readFileSync(dshBinPrefFile(), 'utf8')).bin); } catch { /* не запоминали */ }
+  list.push(DSH_BIN_DEFAULT);
+  for (const dir of String(process.env.PATH || '').split(path.delimiter)) if (dir) list.push(path.join(dir, 'dsh'));
+  list.push(path.join(home, '.npm-global', 'bin', 'dsh'), path.join(home, '.local', 'bin', 'dsh'), '/usr/local/bin/dsh');
+  const nvmDir = process.env.NVM_DIR || path.join(home, '.nvm');
+  try {
+    const vers = fs.readdirSync(path.join(nvmDir, 'versions', 'node'))
+      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+    for (const v of vers) list.push(path.join(nvmDir, 'versions', 'node', v, 'bin', 'dsh'));
+  } catch { /* nvm нет */ }
+  return [...new Set(list.filter(Boolean))];
+}
+
+// Проверяем не только наличие файла, но и что бинарник реально запускается:
+// битый symlink, несовместимый Node или отсутствующий npm дадут ошибку здесь,
+// а не загадочным ENOENT в момент старта. dsh --version занимает ~60 мс.
+// Асинхронно: при медленной системе синхронный вызов замораживал бы окно.
+// Если DSH_BIN не задан явно — перебираем кандидатов (dshCandidates) и
+// переключаем DSH_BIN на первый рабочий, запоминая его в userData/dsh-bin.json.
+async function dshInstallCheck() {
+  if (DSH_BIN_EXPLICIT) return probeDsh(DSH_BIN);
+  let firstBroken = null;
+  const tryBin = async (bin) => {
+    const r = await probeDsh(bin);
+    if (r.ok) {
+      if (bin !== DSH_BIN) console.log(`[launcher] dsh найден: ${bin} (${r.version})`);
+      DSH_BIN = bin;
+      try {
+        fs.mkdirSync(path.dirname(dshBinPrefFile()), { recursive: true });
+        fs.writeFileSync(dshBinPrefFile(), JSON.stringify({ bin }));
+      } catch (e) { console.error('[launcher] dsh-bin.json:', e.message); }
+    } else if (r.reason === 'broken' && !firstBroken) {
+      firstBroken = { ...r, bin };
+    }
+    return r.ok ? r : null;
+  };
+  for (const bin of dshCandidates()) {
+    const r = await tryBin(bin);
+    if (r) return r;
+  }
+  try {
+    const prefix = (await execFileAsync('npm', ['prefix', '-g'], { encoding: 'utf8', timeout: 10000 })).stdout.trim();
+    const r = await tryBin(path.join(prefix, 'bin', 'dsh'));
+    if (r) return r;
+  } catch { /* npm нет */ }
+  if (firstBroken) {
+    DSH_BIN = firstBroken.bin; // показываем на странице тот, что сломан
+    return { ok: false, reason: 'broken', detail: firstBroken.detail };
+  }
+  DSH_BIN = DSH_BIN_DEFAULT;
+  return { ok: false, reason: 'missing' };
 }
 
 // Есть ли npm и доступен ли глобальный prefix без sudo — от этого зависит,
@@ -275,7 +344,7 @@ function startDsh() {
   console.log(`[launcher] starting: ${DSH_BIN} ${DSH_ARGS.join(' ')} (cwd=${CWD}, log=${LOG_FILE})`);
   dshProc = spawn(DSH_BIN, DSH_ARGS, {
     cwd: CWD,
-    env: { ...process.env, DSH_STARTED_BY: 'dsh-launcher' },
+    env: dshEnv({ DSH_STARTED_BY: 'dsh-launcher' }),
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true, // dsh становится лидером своей процесс-группы — можно убить всё дерево
   });
@@ -538,9 +607,12 @@ async function showInstallPage(note, noteIsError = false) {
     <p>${installing
       ? tr(`Лаунчер не может запустить DeepSeek Harness: идёт установка <code>dsh</code>.`,
            `The launcher cannot start DeepSeek Harness: <code>dsh</code> is being installed.`)
-      : check.reason === 'missing'
+      : check.reason === 'missing' && DSH_BIN_EXPLICIT
         ? tr(`Лаунчер не может запустить DeepSeek Harness: по пути <code>${esc(DSH_BIN)}</code> бинарника <code>dsh</code> нет.`,
              `The launcher cannot start DeepSeek Harness: there is no <code>dsh</code> binary at <code>${esc(DSH_BIN)}</code>.`)
+      : check.reason === 'missing'
+        ? tr(`Лаунчер не нашёл <code>dsh</code>: искал <code>${DSH_BIN_DEFAULT}</code>, в PATH, в каталогах npm и nvm.`,
+             `The launcher could not find <code>dsh</code>: looked at <code>${DSH_BIN_DEFAULT}</code>, in PATH, and in npm and nvm directories.`)
         : tr(`Лаунчер не может запустить DeepSeek Harness: бинарник <code>${esc(DSH_BIN)}</code> не запускается.`,
              `The launcher cannot start DeepSeek Harness: the <code>${esc(DSH_BIN)}</code> binary fails to run.`)}</p>
     ${!installing && check.detail ? `<p>${tr('Детали', 'Details')}: <code>${esc(check.detail)}</code></p>` : ''}
@@ -661,7 +733,7 @@ async function runMarketInstall() {
   console.log(`[launcher] установка плагина маркета: ${marketCommand()}`);
   try {
     const p = spawn(DSH_BIN, ['plugin', '--profile', DSH_PROFILE, 'add', MARKET_PKG],
-      { cwd: CWD, stdio: ['ignore', 'pipe', 'pipe'] });
+      { cwd: CWD, env: dshEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
     marketState.proc = p;
     const onData = (d) => {
       for (const line of d.toString().split('\n')) {
@@ -996,13 +1068,12 @@ async function onInstallRun() {
     installState.proc = null;
     if (code === 0) {
       console.log('[launcher] dsh установлен — продолжаю запуск');
-      // Если prefix не /usr, бинарник лёг не в DSH_BIN — подхватываем фактический путь.
-      if (!fs.existsSync(DSH_BIN)) {
-        const cand = path.join(npmInfo.prefix, 'bin', 'dsh');
-        if (fs.existsSync(cand)) {
-          console.log(`[launcher] DSH_BIN обновлён: ${DSH_BIN} -> ${cand}`);
-          DSH_BIN = cand;
-        }
+      // Если prefix не /usr, бинарник лёг не в /usr/bin — находим и запоминаем фактический путь.
+      const check = await dshInstallCheck();
+      if (!check.ok) {
+        showInstallPage(() => tr('npm сообщил об успехе, но dsh так и не запускается — см. детали ниже.',
+          'npm reported success, but dsh still does not run — see details below.'), true);
+        return blankResponse();
       }
       await launchDsh();
     } else {

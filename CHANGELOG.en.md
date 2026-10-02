@@ -5,6 +5,16 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- The launcher did not find dsh installed outside `/usr/bin` (via nvm,
+  `~/.npm-global`, etc.), including one installed with the “Install”
+  button: the next launch offered installation again. dsh is now looked up
+  in `PATH`, npm directories and every nvm version, the path found is
+  remembered, and dsh runs with its own node even from the desktop shortcut.
+
 ## [1.1.0] — 2026-10-03
 
 ### Added
