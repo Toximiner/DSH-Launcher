@@ -49,26 +49,44 @@ if (process.platform === 'linux') {
   );
 }
 
+// Есть ли в системе реальный GPU (render-узлы /dev/dri/renderD*).
+// ВМ/VNC без 3D-ускорения их не имеют.
+const hasGpuRenderNode = (() => {
+  try { return fs.readdirSync('/dev/dri').some((f) => /^renderD/.test(f)); }
+  catch { return false; }
+})();
+
 // Окно на Wayland предъявляется через EGL. Если у GPU виртуалки нет рабочего
 // драйвера (ANGLE/EGL-ошибки в логе), окно «показано» по логам Electron, но на
 // экране его не видно. X11/XWayland-путь деградирует до программного рендера —
 // окно остаётся видимым. На X11-сессиях ничего не меняем.
+// Если реальный GPU есть (renderD* в /dev/dri) — не форсим X11: нативный
+// Wayland работает, а X11/XWayland-окно на KWin остаётся невидимым. Ручной
+// переключатель: DSH_LAUNCHER_OZONE=x11|wayland.
 const isWaylandSession = process.platform === 'linux' &&
   (String(process.env.XDG_SESSION_TYPE || '').toLowerCase() === 'wayland' ||
    Boolean(process.env.WAYLAND_DISPLAY));
 if (isWaylandSession) {
-  app.commandLine.appendSwitch('ozone-platform', 'x11');
-  console.log('[launcher] Wayland-сессия — окно веду через X11 (XWayland): при сломанном GPU на Wayland окно невидимо');
+  // Ошибку в значении DSH_LAUNCHER_OZONE не передаём в Electron:
+  // неизвестный ozone-platform может не инициализироваться вовсе.
+  const envOzone = String(process.env.DSH_LAUNCHER_OZONE || '').toLowerCase();
+  const ozoneManual = envOzone === 'x11' || envOzone === 'wayland';
+  const ozone = ozoneManual ? envOzone : hasGpuRenderNode ? 'wayland' : 'x11';
+  app.commandLine.appendSwitch('ozone-platform', ozone);
+  console.log(
+    `[launcher] Wayland-сессия — ozone-platform=${ozone}` +
+    (ozoneManual
+      ? ' (принудительно: DSH_LAUNCHER_OZONE)'
+      : hasGpuRenderNode
+        ? ' (есть реальный GPU — нативный Wayland; X11/XWayland-окно на KWin невидимо)'
+        : ' (render-узлов нет — окно веду через X11 (XWayland))')
+  );
 }
 
 // ВМ/VNC без 3D-ускорения: render-узлов нет, EGL гарантированно не поднимется —
 // идём сразу в программный рендер, минуя цикл падений GPU-процесса (ANGLE/EGL
 // ошибки в логе). То же, если библиотек EGL в системе нет вовсе. Ручной
 // переключатель: DSH_LAUNCHER_NO_GPU=1.
-const hasGpuRenderNode = (() => {
-  try { return fs.readdirSync('/dev/dri').some((f) => /^renderD/.test(f)); }
-  catch { return false; }
-})();
 const hasEglLibs = (() => {
   try {
     const out = execFileSync('ldconfig', ['-p'], { encoding: 'utf8', timeout: 2000 });
@@ -519,6 +537,17 @@ async function onReady() {
   });
   // диагностика: из лога должно быть видно, что окно показало и что загрузилось
   win.once('ready-to-show', () => { win.show(); console.log('[launcher] окно показано'); });
+  // Страховка: на нативном Wayland ready-to-show может прийти с большим
+  // опозданием (или не прийти вовсе) — окно с show:false остаётся невидимым.
+  // Если через 8 с оно всё ещё не показано — показываем вручную.
+  setTimeout(() => {
+    // isDestroyed: окно могли закрыть (и app.quit()) раньше таймера —
+    // методы на уничтоженном окне бросают исключение.
+    if (win && !win.isDestroyed() && !win.isVisible()) {
+      console.log('[launcher] ready-to-show не пришло за 8 с — показываю окно вручную');
+      win.show();
+    }
+  }, 8000);
   win.webContents.on('did-finish-load', () => {
     try { console.log('[launcher] страница загружена:', win.webContents.getURL().slice(0, 120)); } catch { /* noop */ }
   });
