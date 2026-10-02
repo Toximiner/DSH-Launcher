@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
     tags: ['v*']
+  # PR (в т.ч. из форков) тоже получают сборку — required-чек 'build'
+  # из branch protection обязан что-то проверять. Для pull_request
+  # releasing всегда false (не тег и нет поля dispatch), а токен у
+  # форк-PR read-only: наружный PR не может ни опубликовать Release,
+  # ни изменить репозиторий.
+  pull_request:
   workflow_dispatch:
     inputs:
       tag:
