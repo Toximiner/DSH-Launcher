@@ -1,0 +1,10 @@
+#!/bin/sh
+# Настройка SUID-хелпера sandbox Chromium (работает при установке от root:
+# sudo dpkg -i / sudo apt install ./...). Если не получилось — приложение
+# само откатится на --no-sandbox (см. run.sh).
+SB=/opt/dsh-launcher/electron/chrome-sandbox
+if [ -f "$SB" ]; then
+  chown root:root "$SB" 2>/dev/null || true
+  chmod 4755 "$SB" 2>/dev/null || true
+fi
+exit 0

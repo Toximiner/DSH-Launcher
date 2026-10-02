@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=DeepSeek Harness
+GenericName=AI Chat
+Comment=Launcher for DeepSeek Harness (dsh --profile web)
+Exec=dsh-launcher
+Icon=dsh-launcher
+Terminal=false
+Categories=Development;Utility;
+Keywords=dsh;deepseek;ai;chat;harness;
+StartupWMClass=dsh-launcher
