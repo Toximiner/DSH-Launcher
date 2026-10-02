@@ -490,6 +490,161 @@ async function showInstallPage(note, noteIsError = false) {
   showStatus(installing ? 'Устанавливаю dsh…' : 'Нужен DeepSeek Harness', body, !installing);
 }
 
+/* ---------------- плагин маркета (dshmarket) ----------------
+ * Перед тем как лаунчер сам запускает dsh, проверяем, что в профиле стоит
+ * плагин маркета. Если нет — спрашиваем пользователя: «Установить»
+ * (dsh plugin --profile <профиль> add dshmarket, с живым логом), «Не сейчас»
+ * или «Не спрашивать больше» (запоминается в userData/market-prompt.json).
+ * Ставим именно до старта: плагины dsh подхватывает при запуске. К уже
+ * запущенному dsh (режим подключения) вопрос не задаём.
+ * Проверка — чтение $DSH_HOME/profiles/<профиль>/package.json (по умолчанию
+ * ~/.dsh), без запуска dsh.
+ */
+const MARKET_PKG = 'dshmarket';
+
+function profileFromArgs(args) {
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--profile' && args[i + 1]) return args[i + 1];
+    if (args[i].startsWith('--profile=')) return args[i].slice('--profile='.length);
+  }
+  return null;
+}
+const DSH_PROFILE = profileFromArgs(DSH_ARGS);
+
+function marketInstalled() {
+  if (!DSH_PROFILE) return true; // профиль не задан — не знаем, где смотреть, не спрашиваем
+  try {
+    const dshHome = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
+    const pkgFile = path.join(dshHome, 'profiles', DSH_PROFILE, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
+    const bundles = (pkg.dsh && pkg.dsh.profile && pkg.dsh.profile.bundles) || [];
+    return Boolean(pkg.dependencies && pkg.dependencies[MARKET_PKG]) || bundles.includes(MARKET_PKG);
+  } catch {
+    return false; // профиля ещё нет — dsh plugin add создаст его сам
+  }
+}
+
+const marketPrefFile = () => path.join(app.getPath('userData'), 'market-prompt.json');
+
+function marketPromptDisabled() {
+  try { return JSON.parse(fs.readFileSync(marketPrefFile(), 'utf8')).dontAsk === true; }
+  catch { return false; }
+}
+
+let marketState = { resolve: null, running: false, log: [], timer: null, proc: null };
+
+function marketCommand() {
+  return `${DSH_BIN} plugin --profile ${DSH_PROFILE} add ${MARKET_PKG}`;
+}
+
+function showMarketPage(note, noteIsError = false) {
+  const installing = marketState.running;
+  const noteHtml = note
+    ? `<p style="color:${noteIsError ? '#f85149' : '#3fb950'}">${esc(note)}</p>`
+    : '';
+  const body = installing
+    ? `<p>Выполняю <code>${esc(marketCommand())}</code></p>
+       <p>Последние строки установки:</p>
+       <pre>${esc(marketState.log.slice(-40).join('\n') || '…')}</pre>`
+    : `${noteHtml}
+       <p>В профиле <code>${esc(DSH_PROFILE)}</code> не найден плагин маркета
+          <code>${MARKET_PKG}</code>. Установить его перед запуском dsh?</p>
+       <pre>${esc(marketCommand())}</pre>
+       ${noteIsError && marketState.log.length ? `<pre>${esc(marketState.log.slice(-20).join('\n'))}</pre>` : ''}
+       <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap">
+         <button onclick="location.href='dshlauncher://market/install/'">Установить</button>
+         <button onclick="location.href='dshlauncher://market/skip/'">Не сейчас</button>
+         <button onclick="location.href='dshlauncher://market/never/'">Не спрашивать больше</button>
+       </div>`;
+  showStatus(installing ? `Устанавливаю ${MARKET_PKG}…` : `Установить ${MARKET_PKG}?`, body, noteIsError);
+}
+
+// Показывает вопрос и ждёт нажатия: 'install' | 'skip' | 'never'.
+function askMarket(note, noteIsError) {
+  return new Promise((resolve) => {
+    marketState.resolve = resolve;
+    showMarketPage(note, noteIsError);
+  });
+}
+
+function onMarketChoice(choice) {
+  const resolve = marketState.resolve;
+  if (resolve && !marketState.running) {
+    marketState.resolve = null;
+    resolve(choice);
+  }
+  return blankResponse();
+}
+
+async function runMarketInstall() {
+  marketState.running = true;
+  marketState.log = [];
+  console.log(`[launcher] установка плагина маркета: ${marketCommand()}`);
+  try {
+    const p = spawn(DSH_BIN, ['plugin', '--profile', DSH_PROFILE, 'add', MARKET_PKG],
+      { cwd: CWD, stdio: ['ignore', 'pipe', 'pipe'] });
+    marketState.proc = p;
+    const onData = (d) => {
+      for (const line of d.toString().split('\n')) {
+        const t = line.trim();
+        if (!t) continue;
+        marketState.log.push(t);
+        if (marketState.log.length > 500) marketState.log.shift();
+      }
+    };
+    p.stdout.on('data', onData);
+    p.stderr.on('data', onData);
+    showMarketPage();
+    marketState.timer = setInterval(() => showMarketPage(), 800);
+    return await new Promise((resolve) => {
+      let settled = false;
+      const done = (c) => { if (!settled) { settled = true; resolve(c); } };
+      p.on('close', (c) => done(c === null ? -1 : c));
+      p.on('error', (e) => { marketState.log.push(e.message); done(-1); });
+    });
+  } finally {
+    clearInterval(marketState.timer);
+    marketState.running = false;
+    marketState.proc = null;
+  }
+}
+
+async function offerMarketIfMissing() {
+  if (marketInstalled()) return;
+  if (marketPromptDisabled()) {
+    console.log(`[launcher] ${MARKET_PKG} не установлен, вопрос отключён (${marketPrefFile()})`);
+    return;
+  }
+  console.log(`[launcher] ${MARKET_PKG} не установлен в профиле ${DSH_PROFILE} — спрашиваю пользователя`);
+  let note = null;
+  let noteIsError = false;
+  for (;;) {
+    const choice = await askMarket(note, noteIsError);
+    if (stopping) return;
+    if (choice === 'never') {
+      try {
+        fs.mkdirSync(path.dirname(marketPrefFile()), { recursive: true });
+        fs.writeFileSync(marketPrefFile(), JSON.stringify({ dontAsk: true }));
+      } catch (e) { console.error('[launcher] market-prompt.json:', e.message); }
+      console.log('[launcher] пользователь отказался от маркета навсегда');
+      return;
+    }
+    if (choice !== 'install') {
+      console.log('[launcher] установка маркета отложена (не сейчас)');
+      return;
+    }
+    const code = await runMarketInstall();
+    if (stopping) return;
+    if (code === 0 && marketInstalled()) {
+      console.log(`[launcher] ${MARKET_PKG} установлен`);
+      return;
+    }
+    console.error(`[launcher] установка ${MARKET_PKG} не удалась (код ${code})`);
+    note = `Установка не удалась (код ${code}). Можно повторить или продолжить без маркета.`;
+    noteIsError = true;
+  }
+}
+
 /* ---------------- запуск dsh и доведение окна до GUI ---------------- */
 
 // Защита от повторного запуска: двойной клик «Проверить ещё раз» или
@@ -508,6 +663,8 @@ async function launchDsh() {
   }
   launching = true;
   try {
+    await offerMarketIfMissing();
+    if (stopping) return;
     await launchDshInner();
   } finally {
     launching = false;
@@ -595,7 +752,7 @@ function startWatchdog() {
   if (watchdogStarted) return;
   watchdogStarted = true;
   (async () => {
-    portState = await portOpen(); // базовое состояние, без срабатываний
+    portState = (await portOpen()) ? 'up' : 'down'; // базовое состояние, без срабатываний
     setInterval(async () => {
       if (stopping) return;
       const state = (await portOpen()) ? 'up' : 'down';
@@ -612,10 +769,17 @@ function startWatchdog() {
   })();
 }
 
+// Маршрут запроса dshlauncher://…: у нестандартной схемы первый сегмент
+// (retry, install, paste, market) URL-парсер кладёт в host, а не в pathname —
+// склеиваем обратно: dshlauncher://install/run/ -> '/install/run/'.
+function launcherRoute(url) {
+  const u = new URL(url);
+  return '/' + u.host + u.pathname;
+}
+
 function onPasteRequest(request) {
   try {
-    const u = new URL(request.url);
-    const pasted = decodeURIComponent(u.pathname.replace(/^\/paste\//, ''));
+    const pasted = decodeURIComponent(launcherRoute(request.url).replace(/^\/paste\//, ''));
     if (/^https?:\/\//i.test(pasted) && win && !win.isDestroyed()) {
       console.log('[launcher] loading pasted URL');
       win.loadURL(pasted).catch((e) => console.error('[launcher] loadURL:', e.message));
@@ -780,11 +944,14 @@ async function onReady() {
   Menu.setApplicationMenu(null);
   protocol.handle('dshlauncher', (request) => {
     try {
-      const u = new URL(request.url);
-      if (u.pathname.startsWith('/retry/')) return onRetryRequest();
-      if (u.pathname.startsWith('/install/copy/')) return onInstallCopy();
-      if (u.pathname.startsWith('/install/run/')) return onInstallRun();
-      if (u.pathname.startsWith('/install/recheck/')) return onInstallRecheck();
+      const route = launcherRoute(request.url);
+      if (route.startsWith('/retry/')) return onRetryRequest();
+      if (route.startsWith('/install/copy/')) return onInstallCopy();
+      if (route.startsWith('/install/run/')) return onInstallRun();
+      if (route.startsWith('/install/recheck/')) return onInstallRecheck();
+      if (route.startsWith('/market/install/')) return onMarketChoice('install');
+      if (route.startsWith('/market/skip/')) return onMarketChoice('skip');
+      if (route.startsWith('/market/never/')) return onMarketChoice('never');
     } catch { /* noop */ }
     return onPasteRequest(request);
   });
@@ -921,6 +1088,9 @@ app.on('before-quit', (e) => {
   e.preventDefault();
   if (installState.running && installState.proc) {
     try { installState.proc.kill('SIGTERM'); } catch { /* noop */ }
+  }
+  if (marketState.proc) {
+    try { marketState.proc.kill('SIGTERM'); } catch { /* noop */ }
   }
   Promise.resolve().then(() => stopDsh()).finally(() => app.quit());
 });
