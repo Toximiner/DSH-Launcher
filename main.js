@@ -244,7 +244,10 @@ async function probeDsh(bin) {
     const { stdout: out } = await execFileAsync(bin, ['--version'], { encoding: 'utf8', timeout: 8000, env: envWithBinDir(bin) });
     return { ok: true, version: (out.trim().split('\n').pop() || '').trim() };
   } catch (e) {
-    const detail = String(e.stderr || e.message || '').trim().split('\n').slice(-3).join(' ').slice(0, 300);
+    // Строка с самой ошибкой полезнее хвоста стектрейса («at …», «Node.js vX»).
+    const lines = String(e.stderr || e.message || '').trim().split('\n').map((l) => l.trim()).filter(Boolean);
+    const errLine = lines.find((l) => !l.startsWith('at ') && /error|ERR_/i.test(l));
+    const detail = (errLine || lines.slice(-3).join(' ')).slice(0, 300);
     return { ok: false, reason: 'broken', detail };
   }
 }
@@ -347,17 +350,32 @@ function writableOrCreatable(dir) {
   try { fs.accessSync(dir, fs.constants.W_OK); return true; } catch { return false; }
 }
 
+// dsh нужен Node.js 22+. npm ставит его и на более старый Node без единого
+// предупреждения (Ubuntu 24.04: Node 18 из apt), а потом dsh не запускается.
+const MIN_NODE_MAJOR = 22;
+
+async function nodeVersionNear(npm) {
+  try {
+    const { stdout } = await execFileAsync('node', ['--version'], { encoding: 'utf8', timeout: 5000, env: envWithBinDir(npm) });
+    return stdout.trim();
+  } catch { return null; }
+}
+
 async function npmInstallInfo() {
   const npm = findNpm();
   if (!npm) return { hasNpm: false, canAuto: false, command: INSTALL_CMD };
+  const nodeVersion = await nodeVersionNear(npm);
+  const major = Number((/^v(\d+)/.exec(nodeVersion || '') || [])[1]);
+  const nodeOld = Number.isFinite(major) && major < MIN_NODE_MAJOR;
   try {
     const prefix = (await execFileAsync(npm, ['prefix', '-g'], { encoding: 'utf8', timeout: 10000, env: envWithBinDir(npm) })).stdout.trim();
-    const canAuto = writableOrCreatable(path.join(prefix, 'lib', 'node_modules')) &&
+    const writable = writableOrCreatable(path.join(prefix, 'lib', 'node_modules')) &&
       writableOrCreatable(path.join(prefix, 'bin'));
-    return { hasNpm: true, canAuto, npm, prefix, command: canAuto ? INSTALL_CMD : 'sudo ' + INSTALL_CMD };
+    return { hasNpm: true, canAuto: writable && !nodeOld, nodeVersion, nodeOld, npm, prefix,
+      command: writable ? INSTALL_CMD : 'sudo ' + INSTALL_CMD };
   } catch (e) {
     console.error('[launcher] npm prefix -g:', e.message);
-    return { hasNpm: true, canAuto: false, npm, command: 'sudo ' + INSTALL_CMD };
+    return { hasNpm: true, canAuto: false, nodeVersion, nodeOld, npm, command: 'sudo ' + INSTALL_CMD };
   }
 }
 
@@ -670,7 +688,10 @@ async function showInstallPage(note, noteIsError = false) {
     ${installing
       ? `<p>${tr('Последние строки установки:', 'Latest install output:')}</p>\n     <pre>` + esc(installState.log.slice(-40).join('\n') || '…') + '</pre>'
       : `<p>${tr('Установите dsh (нужен Node.js 22+ и npm):', 'Install dsh (requires Node.js 22+ and npm):')}</p>\n     <pre>` + esc(npmInfo.command) + '</pre>\n     ' + (
-          npmInfo.canAuto
+          npmInfo.nodeOld
+            ? tr(`<p>Но сейчас найден Node.js <code>${esc(npmInfo.nodeVersion)}</code>, а dsh нужен Node.js ${MIN_NODE_MAJOR} или новее — на нём dsh не запустится. Сначала обновите Node.js (например, через nvm: <code>nvm install ${MIN_NODE_MAJOR}</code>, или пакеты NodeSource), затем установите dsh и нажмите «Проверить ещё раз».</p>`,
+                 `<p>However, Node.js <code>${esc(npmInfo.nodeVersion)}</code> was found, and dsh needs Node.js ${MIN_NODE_MAJOR} or newer — dsh will not run on it. Upgrade Node.js first (e.g. with nvm: <code>nvm install ${MIN_NODE_MAJOR}</code>, or NodeSource packages), then install dsh and click “Check again”.</p>`)
+          : npmInfo.canAuto
             ? tr('<p>Или нажмите «Установить» — лаунчер выполнит команду сам.</p>',
                  '<p>Or click “Install” — the launcher will run the command for you.</p>')
             : npmInfo.hasNpm
@@ -928,6 +949,9 @@ async function launchDshInner() {
     return;
   }
 
+  // Порт уже поднят нами: проверка watchdog, начатая во время запуска и
+  // завершившаяся после, не должна принять это за перезапуск dsh.
+  portState = 'up';
   const url = authUrl || (await waitForAuthUrl());
   if (url) {
     await loadInWin(url); // обмен токена на куки, затем редирект на чистый URL
@@ -1109,8 +1133,12 @@ async function onInstallRecheck() {
       await launchDsh();
       return blankResponse();
     }
-    console.log(`[launcher] повторная проверка: dsh всё ещё не найден (${installState.check.reason})`);
-    showInstallPage(() => tr('dsh всё ещё не найден — установите его командой выше, затем проверьте снова.', 'dsh is still not found — install it with the command above, then check again.'), true);
+    console.log(installState.check.reason === 'broken'
+      ? `[launcher] повторная проверка: dsh найден, но не запускается (${installState.check.detail || ''})`
+      : '[launcher] повторная проверка: dsh всё ещё не найден');
+    showInstallPage(() => installState.check && installState.check.reason === 'broken'
+      ? tr('dsh найден, но не запускается — причина ниже.', 'dsh was found but does not run — see the reason below.')
+      : tr('dsh всё ещё не найден — установите его командой выше, затем проверьте снова.', 'dsh is still not found — install it with the command above, then check again.'), true);
   } catch (e) {
     console.error('[launcher] onInstallRecheck:', e.message);
     showInstallPage(() => tr('Ошибка проверки: ' + e.message, 'Check failed: ' + e.message), true);

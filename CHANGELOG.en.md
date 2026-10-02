@@ -23,6 +23,11 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
   it without sudo, and otherwise explains which command to run.
 - After installing dsh from the window, an “ERR_ABORTED” error could be
   shown instead of the UI: two page loads interrupted each other.
+- Node.js too old (e.g. 18 from apt on Ubuntu 24.04): npm installed dsh
+  without any warning, then dsh did not run and the window was confusing
+  (“not found” plus a stack trace tail). The window now says up front that
+  Node.js vX was found while 22+ is required, and does not offer the
+  “Install” button; for a dsh that fails to run, the actual error is shown.
 
 ## [1.1.0] — 2026-10-03
 
