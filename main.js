@@ -15,17 +15,47 @@
  */
 
 const { app, BrowserWindow, Menu, protocol, net: electronNet, shell, clipboard } = require('electron');
-const { spawn, execFileSync } = require('child_process');
+const { spawn, execFile, execFileSync } = require('child_process');
+const { promisify } = require('util');
 const nodeNet = require('net');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const execFileAsync = promisify(execFile);
+
+// Разбор строки аргументов как в shell: пробелы разделяют, '…' и "…"
+// группируют, \ экранирует следующий символ (внутри '…' — нет).
+function splitArgs(str) {
+  const out = [];
+  let cur = '';
+  let has = false; // был ли токен (в т.ч. пустой '' / "")
+  let quote = null;
+  for (let i = 0; i < str.length; i++) {
+    const c = str[i];
+    if (quote) {
+      if (c === quote) quote = null;
+      else if (c === '\\' && quote === '"' && i + 1 < str.length) cur += str[++i];
+      else cur += c;
+    } else if (c === "'" || c === '"') {
+      quote = c; has = true;
+    } else if (c === '\\' && i + 1 < str.length) {
+      cur += str[++i]; has = true;
+    } else if (/\s/.test(c)) {
+      if (has) { out.push(cur); cur = ''; has = false; }
+    } else {
+      cur += c; has = true;
+    }
+  }
+  if (has) out.push(cur);
+  return out;
+}
+
 /* ========================= настройки ========================= */
 
 let DSH_BIN = process.env.DSH_BIN || '/usr/bin/dsh'; // путь к бинарнику dsh (let: после установки из окна обновляется, если npm prefix не /usr)
 const DSH_ARGS = process.env.DSH_ARGS
-  ? process.env.DSH_ARGS.split(' ').filter(Boolean)
+  ? splitArgs(process.env.DSH_ARGS)
   : ['--profile', 'web', '--no-open'];
 const CWD = process.env.DSH_CWD || os.homedir(); // рабочая директория для dsh
 const HOST = '127.0.0.1';
@@ -190,10 +220,11 @@ async function waitForAuthUrl(timeoutMs = 20000) {
 // Проверяем не только наличие файла, но и что бинарник реально запускается:
 // битый symlink, несовместимый Node или отсутствующий npm дадут ошибку здесь,
 // а не загадочным ENOENT в момент старта. dsh --version занимает ~60 мс.
-function dshInstallCheck() {
+// Асинхронно: при медленной системе синхронный вызов замораживал бы окно.
+async function dshInstallCheck() {
   if (!DSH_BIN || !fs.existsSync(DSH_BIN)) return { ok: false, reason: 'missing' };
   try {
-    const out = execFileSync(DSH_BIN, ['--version'], { encoding: 'utf8', timeout: 8000 });
+    const { stdout: out } = await execFileAsync(DSH_BIN, ['--version'], { encoding: 'utf8', timeout: 8000 });
     return { ok: true, version: (out.trim().split('\n').pop() || '').trim() };
   } catch (e) {
     const detail = String(e.stderr || e.message || '').trim().split('\n').slice(-3).join(' ').slice(0, 300);
@@ -204,9 +235,9 @@ function dshInstallCheck() {
 // Есть ли npm и доступен ли глобальный prefix без sudo — от этого зависит,
 // можно ли ставить dsh кнопкой прямо из окна.
 const INSTALL_CMD = 'npm install -g @deepseek-ai/dsh';
-function npmInstallInfo() {
+async function npmInstallInfo() {
   try {
-    const prefix = execFileSync('npm', ['prefix', '-g'], { encoding: 'utf8', timeout: 10000 }).trim();
+    const prefix = (await execFileAsync('npm', ['prefix', '-g'], { encoding: 'utf8', timeout: 10000 })).stdout.trim();
     fs.accessSync(path.join(prefix, 'lib', 'node_modules'), fs.constants.W_OK);
     return { hasNpm: true, canAuto: true, prefix, command: INSTALL_CMD };
   } catch (e) {
@@ -230,6 +261,7 @@ function startDsh() {
   } catch { /* файла ещё нет — ротировать нечего */ }
   fs.mkdirSync(LOG_DIR, { recursive: true });
   const logStream = fs.createWriteStream(LOG_FILE, { flags: 'a' });
+  authUrl = null; // токен прошлого процесса недействителен — ждём новый
   console.log(`[launcher] starting: ${DSH_BIN} ${DSH_ARGS.join(' ')} (cwd=${CWD}, log=${LOG_FILE})`);
   dshProc = spawn(DSH_BIN, DSH_ARGS, {
     cwd: CWD,
@@ -238,6 +270,7 @@ function startDsh() {
     detached: true, // dsh становится лидером своей процесс-группы — можно убить всё дерево
   });
   weStartedDsh = true;
+  dshFatal = false;
   dshProc.stdout.on('data', (d) => {
     for (const line of d.toString().split('\n')) {
       if (!line.trim()) continue;
@@ -414,18 +447,20 @@ function showPastePage() {
  * инструкцию: команда установки, «Скопировать», (если глобальный npm prefix
  * доступен без sudo) «Установить» с живым логом, и «Проверить ещё раз».
  * Состояние кэшируем: во время установки страница перерисовывается каждые
- * 800 мс, и execFileSync в каждом рендере забивал бы main-процесс.
+ * 800 мс, и запускать проверки в каждом рендере незачем.
  */
 let installState = { check: null, npmInfo: null, running: false, log: [], timer: null, proc: null };
 
-function refreshInstallState() {
-  installState.check = dshInstallCheck();
-  installState.npmInfo = npmInstallInfo();
+async function refreshInstallState() {
+  [installState.check, installState.npmInfo] = await Promise.all([dshInstallCheck(), npmInstallInfo()]);
 }
 
-function showInstallPage(note, noteIsError = false) {
+async function showInstallPage(note, noteIsError = false) {
   if (!win || win.isDestroyed()) return;
-  if (!installState.running) refreshInstallState();
+  if (!installState.running) {
+    try { await refreshInstallState(); } catch (e) { console.error('[launcher] refreshInstallState:', e.message); }
+    if (!win || win.isDestroyed() || !installState.check) return;
+  }
   const check = installState.check;
   const npmInfo = installState.npmInfo;
   const installing = installState.running;
@@ -457,7 +492,29 @@ function showInstallPage(note, noteIsError = false) {
 
 /* ---------------- запуск dsh и доведение окна до GUI ---------------- */
 
+// Защита от повторного запуска: двойной клик «Проверить ещё раз» или
+// «Установить» вызвал бы launchDsh дважды — второй spawn перезаписал бы
+// dshProc, и первый процесс остался бы без присмотра (не убит при закрытии).
+let launching = false;
+
+function ourDshAlive() {
+  return weStartedDsh && dshProc && dshProc.exitCode === null && !dshFatal;
+}
+
 async function launchDsh() {
+  if (launching || ourDshAlive()) {
+    console.log('[launcher] запуск dsh уже идёт — повторный вызов пропущен');
+    return;
+  }
+  launching = true;
+  try {
+    await launchDshInner();
+  } finally {
+    launching = false;
+  }
+}
+
+async function launchDshInner() {
   showStatus('Запуск DeepSeek Harness…',
     `<p>Запускаю <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>.<br>Жду, пока сервис поднимется…</p>`);
   startDsh();
@@ -591,7 +648,7 @@ async function onRetryRequest() {
       } else {
         // Бинарник мог исчезнуть (разустановка, другой DSH_BIN) — тогда
         // совет запускать его в терминале бессмысленен.
-        if (!dshInstallCheck().ok) {
+        if (!(await dshInstallCheck()).ok) {
           showInstallPage('dsh не найден — установите его (команда на странице).');
         } else {
           showStatus('dsh не запущен',
@@ -615,12 +672,12 @@ function blankResponse() {
 }
 
 // «Скопировать команду» на странице установки dsh.
-function onInstallCopy() {
+async function onInstallCopy() {
   try {
-    if (!installState.npmInfo) refreshInstallState();
+    if (!installState.npmInfo) await refreshInstallState();
     clipboard.writeText(installState.npmInfo.command);
     console.log('[launcher] команда установки скопирована в буфер обмена');
-    showInstallPage('Команда скопирована в буфер обмена — вставьте её в терминал.');
+    await showInstallPage('Команда скопирована в буфер обмена — вставьте её в терминал.');
   } catch (e) {
     console.error('[launcher] onInstallCopy:', e.message);
     showInstallPage('Не удалось скопировать команду: ' + e.message, true);
@@ -632,7 +689,7 @@ function onInstallCopy() {
 async function onInstallRecheck() {
   try {
     if (installState.running) return blankResponse(); // установка идёт — страница обновится сама
-    refreshInstallState();
+    await refreshInstallState();
     if (installState.check.ok) {
       console.log(`[launcher] dsh найден (${installState.check.version}) — начинаю запуск`);
       await launchDsh();
@@ -651,7 +708,8 @@ async function onInstallRecheck() {
 async function onInstallRun() {
   try {
     if (installState.running || !win || win.isDestroyed() || stopping) return blankResponse();
-    refreshInstallState();
+    await refreshInstallState();
+    if (installState.running) return blankResponse(); // пока проверяли, установку уже запустили
     const npmInfo = installState.npmInfo;
     if (!npmInfo.canAuto) {
       showInstallPage('Кнопка «Установить» недоступна: глобальный npm prefix требует sudo — выполните команду в терминале.', true);
@@ -839,7 +897,7 @@ async function onReady() {
 
   // Порт закрыт — будем запускать dsh сами. Сначала проверяем, что он вообще
   // установлен: иначе вместо понятной страницы — ENOENT после попытки старта.
-  const installCheck = dshInstallCheck();
+  const installCheck = await dshInstallCheck();
   if (!installCheck.ok) {
     console.log(
       `[launcher] dsh не найден (${installCheck.reason}` +
