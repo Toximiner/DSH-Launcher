@@ -67,14 +67,14 @@ const START_TIMEOUT = Number(process.env.DSH_START_TIMEOUT_MS || 120000); // с�
 const LOG_DIR = process.env.DSH_LOG_DIR || path.join(__dirname, 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'dsh.log');
 
-// Язык окон лаунчера: DSH_LAUNCHER_LANG=ru|en, иначе по локали системы
-// (LC_ALL / LC_MESSAGES / LANG): ru* — русский, всё остальное — английский.
-const UI_LANG = (() => {
-  const forced = String(process.env.DSH_LAUNCHER_LANG || '').toLowerCase();
-  if (forced === 'ru' || forced === 'en') return forced;
-  const loc = process.env.LC_ALL || process.env.LC_MESSAGES || process.env.LANG || '';
-  return /^ru/i.test(loc) ? 'ru' : 'en';
+// Язык окон лаунчера: DSH_LAUNCHER_LANG=ru|en, иначе выбор переключателем
+// RU | EN в окне (userData/ui-lang.json, подхватывается в onReady), иначе по
+// локали системы (LC_ALL / LC_MESSAGES / LANG): ru* — русский, иначе английский.
+const LANG_FORCED = (() => {
+  const v = String(process.env.DSH_LAUNCHER_LANG || '').toLowerCase();
+  return v === 'ru' || v === 'en' ? v : null;
 })();
+let UI_LANG = LANG_FORCED || (/^ru/i.test(process.env.LC_ALL || process.env.LC_MESSAGES || process.env.LANG || '') ? 'ru' : 'en');
 const tr = (ru, en) => (UI_LANG === 'ru' ? ru : en);
 
 /* ============================================================== */
@@ -357,11 +357,11 @@ async function handleDshExit(code, signal) {
   if (adoptionCheck) return; // на всякий случай: один цикл проверки
   adoptionCheck = true;
   try {
-    showStatus(tr('dsh перезапускается…', 'dsh is restarting…'), tr(
+    showPage(() => showStatus(tr('dsh перезапускается…', 'dsh is restarting…'), tr(
       `<p>Процесс <code>dsh</code> завершился (code=${code}).<br>
          Проверяю, не запустился ли новый процесс…</p>`,
       `<p>The <code>dsh</code> process exited (code=${code}).<br>
-         Checking whether a new process has started…</p>`), false);
+         Checking whether a new process has started…</p>`), false));
     const deadline = Date.now() + 8000;
     let up = await portOpen();
     while (!up && Date.now() < deadline) { await sleep(500); up = await portOpen(); }
@@ -378,11 +378,11 @@ async function handleDshExit(code, signal) {
     adoptionCheck = false;
   }
   if (win && !win.isDestroyed() && !stopping) {
-    showStatus(tr('dsh остановился', 'dsh has stopped'), tr(
+    showPage(() => showStatus(tr('dsh остановился', 'dsh has stopped'), tr(
       `<p>Процесс DeepSeek Harness завершился, и за 8 секунд новый процесс
          не запустился.</p>`,
       `<p>The DeepSeek Harness process exited, and no new process started
-         within 8 seconds.</p>`) + retryButton() + stderrBlock(), true);
+         within 8 seconds.</p>`) + retryButton() + stderrBlock(), true));
   }
 }
 
@@ -414,10 +414,17 @@ const PAGE_CSS = `
   button:hover{background:#2f6fd8}
   .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#3fb950;margin-right:9px}
   .err .dot{background:#f85149}
+  .lang{position:fixed;top:14px;right:18px;font-size:13px;color:#4b5567;user-select:none}
+  .lang a{color:#6b7689;text-decoration:none;padding:2px 4px;border-radius:5px}
+  .lang a:hover{color:#d7dce3}
+  .lang a.on{color:#d7dce3;font-weight:600;pointer-events:none}
 `;
 
 function pageHtml(title, body, isError) {
-  const html = `<!doctype html><html lang="${UI_LANG}"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PAGE_CSS}</style></head><body><div class="wrap${isError ? ' err' : ''}"><h1><span class="dot"></span>${esc(title)}</h1>${body}</div></body></html>`;
+  const langLink = (code, label) =>
+    `<a href="dshlauncher://lang/${code}/"${UI_LANG === code ? ' class="on"' : ''}>${label}</a>`;
+  const langSwitch = `<div class="lang">${langLink('ru', 'RU')} | ${langLink('en', 'EN')}</div>`;
+  const html = `<!doctype html><html lang="${UI_LANG}"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PAGE_CSS}</style></head><body>${langSwitch}<div class="wrap${isError ? ' err' : ''}"><h1><span class="dot"></span>${esc(title)}</h1>${body}</div></body></html>`;
   return 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
 }
 
@@ -425,11 +432,45 @@ function stderrBlock() {
   return `<pre>${esc(stderrTail.slice(-50).join('\n') || tr('нет данных журнала', 'no log data'))}</pre>`;
 }
 
+// Текущая служебная страница как функция отрисовки: переключатель RU | EN
+// перерисовывает её на новом языке. Каждая show*-страница регистрирует себя
+// сама; разовые showStatus оборачиваются в showPage.
+let currentPage = null;
+
+function showPage(render) {
+  currentPage = render;
+  render();
+}
+
+const langPrefFile = () => path.join(app.getPath('userData'), 'ui-lang.json');
+
+function loadLangPref() {
+  if (LANG_FORCED) return;
+  try {
+    const v = JSON.parse(fs.readFileSync(langPrefFile(), 'utf8')).lang;
+    if (v === 'ru' || v === 'en') UI_LANG = v;
+  } catch { /* выбора ещё не было — остаётся язык локали */ }
+}
+
+function onLangSwitch(lang) {
+  if ((lang === 'ru' || lang === 'en') && lang !== UI_LANG) {
+    UI_LANG = lang;
+    try {
+      fs.mkdirSync(path.dirname(langPrefFile()), { recursive: true });
+      fs.writeFileSync(langPrefFile(), JSON.stringify({ lang }));
+    } catch (e) { console.error('[launcher] ui-lang.json:', e.message); }
+    console.log(`[launcher] язык окна: ${lang}`);
+  }
+  if (currentPage) currentPage();
+  return blankResponse();
+}
+
 function showStatus(title, body, isError) {
   if (win && !win.isDestroyed()) win.loadURL(pageHtml(title, body, !!isError));
 }
 
 function showPastePage() {
+  currentPage = showPastePage;
   const body = `
     ${tr(`<p>Похоже, <code>dsh</code> уже запущен, но у окна нет валидного сессионного куки
        (он мог истечь или dsh был перезапущен с другим секретом).</p>
@@ -480,6 +521,8 @@ async function refreshInstallState() {
 
 async function showInstallPage(note, noteIsError = false) {
   if (!win || win.isDestroyed()) return;
+  currentPage = () => showInstallPage(note, noteIsError);
+  if (typeof note === 'function') note = note();
   if (!installState.running) {
     try { await refreshInstallState(); } catch (e) { console.error('[launcher] refreshInstallState:', e.message); }
     if (!win || win.isDestroyed() || !installState.check) return;
@@ -569,6 +612,8 @@ function marketCommand() {
 }
 
 function showMarketPage(note, noteIsError = false) {
+  currentPage = () => showMarketPage(note, noteIsError);
+  if (typeof note === 'function') note = note();
   const installing = marketState.running;
   const noteHtml = note
     ? `<p style="color:${noteIsError ? '#f85149' : '#3fb950'}">${esc(note)}</p>`
@@ -674,7 +719,7 @@ async function offerMarketIfMissing() {
       return;
     }
     console.error(`[launcher] установка ${MARKET_PKG} не удалась (код ${code})`);
-    note = tr(`Установка не удалась (код ${code}). Можно повторить или продолжить без маркета.`,
+    note = () => tr(`Установка не удалась (код ${code}). Можно повторить или продолжить без маркета.`,
       `Installation failed (code ${code}). You can retry or continue without the marketplace.`);
     noteIsError = true;
   }
@@ -707,14 +752,14 @@ async function launchDsh() {
 }
 
 async function launchDshInner() {
-  showStatus(tr('Запуск DeepSeek Harness…', 'Starting DeepSeek Harness…'), tr(
+  showPage(() => showStatus(tr('Запуск DeepSeek Harness…', 'Starting DeepSeek Harness…'), tr(
     `<p>Запускаю <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>.<br>Жду, пока сервис поднимется…</p>`,
-    `<p>Running <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>.<br>Waiting for the service to come up…</p>`));
+    `<p>Running <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>.<br>Waiting for the service to come up…</p>`)));
   startDsh();
 
   const up = await waitForPort();
   if (!up) {
-    showStatus(tr('Не удалось запустить dsh', 'Failed to start dsh'), tr(
+    showPage(() => showStatus(tr('Не удалось запустить dsh', 'Failed to start dsh'), tr(
       `<p>Процесс не поднял сервис на <code>${PLAIN_URL}</code>.<br>
          Проверьте, что команда запускается в терминале:
          <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>.<br>
@@ -722,7 +767,7 @@ async function launchDshInner() {
       `<p>The process did not bring up the service at <code>${PLAIN_URL}</code>.<br>
          Check that the command runs in a terminal:
          <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>.<br>
-         Latest log lines:</p>`) + stderrBlock(), true);
+         Latest log lines:</p>`) + stderrBlock(), true));
     startWatchdog(); // если dsh запустят вручную — окно оживёт само
     return;
   }
@@ -853,10 +898,10 @@ async function onRetryRequest() {
         // Бинарник мог исчезнуть (разустановка, другой DSH_BIN) — тогда
         // совет запускать его в терминале бессмысленен.
         if (!(await dshInstallCheck()).ok) {
-          showInstallPage(tr('dsh не найден — установите его (команда на странице).',
+          showInstallPage(() => tr('dsh не найден — установите его (команда на странице).',
             'dsh not found — install it (the command is on this page).'));
         } else {
-          showStatus(tr('dsh не запущен', 'dsh is not running'), tr(
+          showPage(() => showStatus(tr('dsh не запущен', 'dsh is not running'), tr(
             `<p>Порт ${PORT} закрыт — <code>dsh</code> не запущен.</p>
                <p>Запустите его в терминале: <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>
                и нажмите «Проверить снова». Либо закройте окно и запустите
@@ -864,7 +909,7 @@ async function onRetryRequest() {
             `<p>Port ${PORT} is closed — <code>dsh</code> is not running.</p>
                <p>Start it in a terminal: <code>${esc(DSH_BIN)} ${esc(DSH_ARGS.join(' '))}</code>
                and click “Check again”. Or close this window and start
-               dsh-launcher again.</p>`) + retryButton(), false);
+               dsh-launcher again.</p>`) + retryButton(), false));
         }
       }
     }
@@ -886,10 +931,10 @@ async function onInstallCopy() {
     if (!installState.npmInfo) await refreshInstallState();
     clipboard.writeText(installState.npmInfo.command);
     console.log('[launcher] команда установки скопирована в буфер обмена');
-    await showInstallPage(tr('Команда скопирована в буфер обмена — вставьте её в терминал.', 'Command copied to the clipboard — paste it into a terminal.'));
+    await showInstallPage(() => tr('Команда скопирована в буфер обмена — вставьте её в терминал.', 'Command copied to the clipboard — paste it into a terminal.'));
   } catch (e) {
     console.error('[launcher] onInstallCopy:', e.message);
-    showInstallPage(tr('Не удалось скопировать команду: ' + e.message, 'Failed to copy the command: ' + e.message), true);
+    showInstallPage(() => tr('Не удалось скопировать команду: ' + e.message, 'Failed to copy the command: ' + e.message), true);
   }
   return blankResponse();
 }
@@ -905,10 +950,10 @@ async function onInstallRecheck() {
       return blankResponse();
     }
     console.log(`[launcher] повторная проверка: dsh всё ещё не найден (${installState.check.reason})`);
-    showInstallPage(tr('dsh всё ещё не найден — установите его командой выше, затем проверьте снова.', 'dsh is still not found — install it with the command above, then check again.'), true);
+    showInstallPage(() => tr('dsh всё ещё не найден — установите его командой выше, затем проверьте снова.', 'dsh is still not found — install it with the command above, then check again.'), true);
   } catch (e) {
     console.error('[launcher] onInstallRecheck:', e.message);
-    showInstallPage(tr('Ошибка проверки: ' + e.message, 'Check failed: ' + e.message), true);
+    showInstallPage(() => tr('Ошибка проверки: ' + e.message, 'Check failed: ' + e.message), true);
   }
   return blankResponse();
 }
@@ -921,7 +966,7 @@ async function onInstallRun() {
     if (installState.running) return blankResponse(); // пока проверяли, установку уже запустили
     const npmInfo = installState.npmInfo;
     if (!npmInfo.canAuto) {
-      showInstallPage(tr('Кнопка «Установить» недоступна: глобальный npm prefix требует sudo — выполните команду в терминале.', '“Install” is unavailable: the global npm prefix requires sudo — run the command in a terminal.'), true);
+      showInstallPage(() => tr('Кнопка «Установить» недоступна: глобальный npm prefix требует sudo — выполните команду в терминале.', '“Install” is unavailable: the global npm prefix requires sudo — run the command in a terminal.'), true);
       return blankResponse();
     }
     installState.running = true;
@@ -962,13 +1007,13 @@ async function onInstallRun() {
       await launchDsh();
     } else {
       console.error(`[launcher] установка dsh завершилась с кодом ${code}`);
-      showInstallPage(tr(`Установка завершилась с кодом ${code} (строки выше) — повторите в терминале.`, `Installation exited with code ${code} (see output above) — retry in a terminal.`), true);
+      showInstallPage(() => tr(`Установка завершилась с кодом ${code} (строки выше) — повторите в терминале.`, `Installation exited with code ${code} (see output above) — retry in a terminal.`), true);
     }
   } catch (e) {
     console.error('[launcher] onInstallRun:', e.message);
     installState.running = false;
     try { clearInterval(installState.timer); } catch { /* noop */ }
-    showInstallPage(tr('Не удалось запустить установку: ' + e.message, 'Failed to start the installation: ' + e.message), true);
+    showInstallPage(() => tr('Не удалось запустить установку: ' + e.message, 'Failed to start the installation: ' + e.message), true);
   }
   return blankResponse();
 }
@@ -987,10 +1032,12 @@ if (!app.requestSingleInstanceLock()) {
 
 async function onReady() {
   Menu.setApplicationMenu(null);
+  loadLangPref();
   protocol.handle('dshlauncher', (request) => {
     try {
       const route = launcherRoute(request.url);
       if (route.startsWith('/retry/')) return onRetryRequest();
+      if (route.startsWith('/lang/')) return onLangSwitch(route.split('/')[2]);
       if (route.startsWith('/install/copy/')) return onInstallCopy();
       if (route.startsWith('/install/run/')) return onInstallRun();
       if (route.startsWith('/install/recheck/')) return onInstallRecheck();
@@ -1094,9 +1141,9 @@ async function onReady() {
   const alreadyRunning = await portOpen();
   if (alreadyRunning) {
     console.log('[launcher] port already open — attaching to running dsh');
-    showStatus(tr('Подключение…', 'Connecting…'), tr(
+    showPage(() => showStatus(tr('Подключение…', 'Connecting…'), tr(
       `<p><code>dsh</code> уже запущен на порту ${PORT}. Подключаюсь…</p>`,
-      `<p><code>dsh</code> is already running on port ${PORT}. Connecting…</p>`));
+      `<p><code>dsh</code> is already running on port ${PORT}. Connecting…</p>`)));
     if (await plainUrlIsAuthed()) {
       console.log('[launcher] валидный куки есть — открываю GUI');
       await win.loadURL(PLAIN_URL);

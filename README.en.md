@@ -50,12 +50,15 @@ Constants at the very top of `main.js`, or environment variables:
 | `DSH_CWD`               | home directory            | dsh working directory         |
 | `DSH_PORT`              | `3080`                    | web UI port                   |
 | `DSH_START_TIMEOUT_MS`  | `120000`                  | how long to wait for startup, ms |
-| `DSH_LAUNCHER_LANG`     | system locale             | launcher window language: `ru` or `en` |
+| `DSH_LAUNCHER_LANG`     | in-window choice / locale | launcher window language: `ru` or `en` |
 
 The language of the launcher's own screens (startup, dsh installation,
-marketplace prompt, errors) follows the system locale (`LC_ALL` /
-`LC_MESSAGES` / `LANG`): `ru*` means Russian, anything else English. To
-force it: `DSH_LAUNCHER_LANG=en`.
+marketplace prompt, errors) can be switched right in the window — **RU | EN**
+in the top-right corner; the choice is saved to
+`~/.config/dsh-launcher/ui-lang.json`. Until a choice is made, the system
+locale is used (`LC_ALL` / `LC_MESSAGES` / `LANG`): `ru*` means Russian,
+anything else English. `DSH_LAUNCHER_LANG=ru|en` forces the language and
+overrides the saved choice.
 
 The dsh process log is written to `logs/dsh.log`.
 
