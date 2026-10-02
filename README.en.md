@@ -31,6 +31,35 @@ A small Electron app: a window that opens **DeepSeek Harness**
   SIGKILL after 4 s) — but **only if the launcher started that process**.
   A dsh started by someone else (manually in a terminal) is left alone.
 
+## System requirements
+
+Tested on **Ubuntu 26.04** (desktop, Wayland) and on clean **Ubuntu 26.04**
+and **Ubuntu 24.04** (amd64) in a container: the package installs via `apt`
+with all dependencies, and the dsh installation scenarios go all the way to
+the UI.
+
+The launcher itself does not need Node.js — Electron is bundled in the
+package. But **DeepSeek Harness** is an npm package, and it needs:
+
+- **Node.js 22 or newer** and npm;
+- **pnpm** — to install plugins (including the marketplace).
+
+The launcher window tells you what is missing. How to get Node.js:
+
+| System | Node.js from apt | What to do |
+|---|---|---|
+| Ubuntu 26.04 | 22 — fine | `sudo apt install nodejs npm`, then `sudo npm install -g @deepseek-ai/dsh pnpm` (system npm installs into `/usr/local`, needs sudo) |
+| Ubuntu 24.04 | 18 — **too old**, dsh will not run on it | Node.js 22+ via nvm (below) or NodeSource packages |
+| any | — | **nvm**, no sudo — then the launcher installs dsh, pnpm and the marketplace itself with the “Install” button |
+
+Installing nvm and Node.js:
+
+```sh
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
+# open a new terminal
+nvm install 22
+```
+
 ## Running from a terminal
 
 From the project directory:
@@ -113,7 +142,7 @@ cp dsh.desktop ~/Desktop/ && chmod +x ~/Desktop/dsh.desktop   # desktop icon
 # GNOME: right-click the desktop icon → “Allow Launching”
 ```
 
-## Package for Ubuntu 26.04 (.deb)
+## Package for Ubuntu 26.04 / 24.04 (.deb)
 
 Ready-made packages are published in the repository's GitHub **Releases** —
 the easiest way is to download the latest `.deb` from there and install it.
@@ -123,9 +152,9 @@ What changed in each version is in [CHANGELOG.en.md](CHANGELOG.en.md).
 
 Required (on the **build machine** only): Ubuntu/Debian amd64 with `dpkg-deb`
 (the `dpkg-dev` package), Node.js 22.12+ (required by Electron 44) and
-internet access (the ~290 MB Electron binary is downloaded). The target
-machine does **not** need node/npm — the package is self-contained and
-bundles Electron.
+internet access (the ~290 MB Electron binary is downloaded). The package
+itself does **not** need node/npm on the target machine — Electron is
+bundled (Node.js 22+ is needed only for dsh, see “System requirements”).
 
 ```sh
 git clone https://github.com/Toximiner/DSH-Launcher.git
