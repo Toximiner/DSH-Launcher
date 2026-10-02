@@ -235,14 +235,13 @@ async function waitForAuthUrl(timeoutMs = 20000) {
 // `#!/usr/bin/env node`-скрипт; установленный через nvm, он должен получить
 // node из того же каталога, а при запуске с ярлыка nvm в PATH нет.
 function dshEnv(extra) {
-  return { ...process.env, PATH: path.dirname(DSH_BIN) + path.delimiter + (process.env.PATH || ''), ...extra };
+  return envWithBinDir(DSH_BIN, extra);
 }
 
 async function probeDsh(bin) {
   if (!bin || !fs.existsSync(bin)) return { ok: false, reason: 'missing' };
   try {
-    const env = { ...process.env, PATH: path.dirname(bin) + path.delimiter + (process.env.PATH || '') };
-    const { stdout: out } = await execFileAsync(bin, ['--version'], { encoding: 'utf8', timeout: 8000, env });
+    const { stdout: out } = await execFileAsync(bin, ['--version'], { encoding: 'utf8', timeout: 8000, env: envWithBinDir(bin) });
     return { ok: true, version: (out.trim().split('\n').pop() || '').trim() };
   } catch (e) {
     const detail = String(e.stderr || e.message || '').trim().split('\n').slice(-3).join(' ').slice(0, 300);
@@ -251,6 +250,34 @@ async function probeDsh(bin) {
 }
 
 const dshBinPrefFile = () => path.join(app.getPath('userData'), 'dsh-bin.json');
+
+// bin-каталоги всех версий node из nvm, свежие первыми.
+function nvmBinDirs() {
+  const nvmDir = process.env.NVM_DIR || path.join(os.homedir(), '.nvm');
+  try {
+    return fs.readdirSync(path.join(nvmDir, 'versions', 'node'))
+      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+      .map((v) => path.join(nvmDir, 'versions', 'node', v, 'bin'));
+  } catch { return []; } // nvm нет
+}
+
+// Окружение с каталогом бинарника первым в PATH (для `#!/usr/bin/env node`-скриптов).
+function envWithBinDir(bin, extra) {
+  return { ...process.env, PATH: path.dirname(bin) + path.delimiter + (process.env.PATH || ''), ...extra };
+}
+
+// Исполняемый файл: рядом с dsh, в PATH, иначе в nvm (при запуске с ярлыка
+// nvm в PATH нет).
+function findBin(name) {
+  const dirs = [path.dirname(DSH_BIN)]
+    .concat(String(process.env.PATH || '').split(path.delimiter).filter(Boolean), nvmBinDirs());
+  for (const dir of dirs) {
+    const bin = path.join(dir, name);
+    try { fs.accessSync(bin, fs.constants.X_OK); return bin; } catch { /* дальше */ }
+  }
+  return null;
+}
+const findNpm = () => findBin('npm');
 
 // Где искать dsh, если DSH_BIN не задан: запомненный путь, /usr/bin/dsh,
 // PATH, типичные каталоги пользовательских npm-установок, все версии nvm
@@ -262,12 +289,7 @@ function dshCandidates() {
   list.push(DSH_BIN_DEFAULT);
   for (const dir of String(process.env.PATH || '').split(path.delimiter)) if (dir) list.push(path.join(dir, 'dsh'));
   list.push(path.join(home, '.npm-global', 'bin', 'dsh'), path.join(home, '.local', 'bin', 'dsh'), '/usr/local/bin/dsh');
-  const nvmDir = process.env.NVM_DIR || path.join(home, '.nvm');
-  try {
-    const vers = fs.readdirSync(path.join(nvmDir, 'versions', 'node'))
-      .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-    for (const v of vers) list.push(path.join(nvmDir, 'versions', 'node', v, 'bin', 'dsh'));
-  } catch { /* nvm нет */ }
+  for (const dir of nvmBinDirs()) list.push(path.join(dir, 'dsh'));
   return [...new Set(list.filter(Boolean))];
 }
 
@@ -298,11 +320,14 @@ async function dshInstallCheck() {
     const r = await tryBin(bin);
     if (r) return r;
   }
-  try {
-    const prefix = (await execFileAsync('npm', ['prefix', '-g'], { encoding: 'utf8', timeout: 10000 })).stdout.trim();
-    const r = await tryBin(path.join(prefix, 'bin', 'dsh'));
-    if (r) return r;
-  } catch { /* npm нет */ }
+  const npm = findNpm();
+  if (npm) {
+    try {
+      const prefix = (await execFileAsync(npm, ['prefix', '-g'], { encoding: 'utf8', timeout: 10000, env: envWithBinDir(npm) })).stdout.trim();
+      const r = await tryBin(path.join(prefix, 'bin', 'dsh'));
+      if (r) return r;
+    } catch { /* npm не отвечает */ }
+  }
   if (firstBroken) {
     DSH_BIN = firstBroken.bin; // показываем на странице тот, что сломан
     return { ok: false, reason: 'broken', detail: firstBroken.detail };
@@ -314,14 +339,25 @@ async function dshInstallCheck() {
 // Есть ли npm и доступен ли глобальный prefix без sudo — от этого зависит,
 // можно ли ставить dsh кнопкой прямо из окна.
 const INSTALL_CMD = 'npm install -g @deepseek-ai/dsh';
+// Право записи проверяем у ближайшего существующего каталога: на чистой
+// системе <prefix>/lib/node_modules ещё нет (появится при первой глобальной
+// установке), и ENOENT от него раньше ошибочно означал «npm нет».
+function writableOrCreatable(dir) {
+  while (!fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
+  try { fs.accessSync(dir, fs.constants.W_OK); return true; } catch { return false; }
+}
+
 async function npmInstallInfo() {
+  const npm = findNpm();
+  if (!npm) return { hasNpm: false, canAuto: false, command: INSTALL_CMD };
   try {
-    const prefix = (await execFileAsync('npm', ['prefix', '-g'], { encoding: 'utf8', timeout: 10000 })).stdout.trim();
-    fs.accessSync(path.join(prefix, 'lib', 'node_modules'), fs.constants.W_OK);
-    return { hasNpm: true, canAuto: true, prefix, command: INSTALL_CMD };
+    const prefix = (await execFileAsync(npm, ['prefix', '-g'], { encoding: 'utf8', timeout: 10000, env: envWithBinDir(npm) })).stdout.trim();
+    const canAuto = writableOrCreatable(path.join(prefix, 'lib', 'node_modules')) &&
+      writableOrCreatable(path.join(prefix, 'bin'));
+    return { hasNpm: true, canAuto, npm, prefix, command: canAuto ? INSTALL_CMD : 'sudo ' + INSTALL_CMD };
   } catch (e) {
-    const noNpm = /ENOENT/.test(String(e.code || e.message || ''));
-    return { hasNpm: !noNpm, canAuto: false, command: noNpm ? INSTALL_CMD : 'sudo ' + INSTALL_CMD };
+    console.error('[launcher] npm prefix -g:', e.message);
+    return { hasNpm: true, canAuto: false, npm, command: 'sudo ' + INSTALL_CMD };
   }
 }
 
@@ -534,8 +570,23 @@ function onLangSwitch(lang) {
   return blankResponse();
 }
 
+// Загрузка в окно. ERR_ABORTED (-3) — не ошибка: эту навигацию сменила
+// более новая (статус-страница, watchdog), окно уже показывает её.
+async function loadInWin(url) {
+  if (!win || win.isDestroyed()) return;
+  try {
+    await win.loadURL(url);
+  } catch (e) {
+    if (e.code === 'ERR_ABORTED' || e.errno === -3) {
+      console.log(`[launcher] загрузка ${String(url).slice(0, 40)}… прервана более новой навигацией`);
+    } else {
+      throw e;
+    }
+  }
+}
+
 function showStatus(title, body, isError) {
-  if (win && !win.isDestroyed()) win.loadURL(pageHtml(title, body, !!isError));
+  loadInWin(pageHtml(title, body, !!isError)).catch((e) => console.error('[launcher] showStatus:', e.message));
 }
 
 function showPastePage() {
@@ -677,7 +728,7 @@ function marketPromptDisabled() {
   catch { return false; }
 }
 
-let marketState = { resolve: null, running: false, log: [], timer: null, proc: null };
+let marketState = { resolve: null, running: false, log: [], timer: null, proc: null, cmdLine: null };
 
 function marketCommand() {
   return `${DSH_BIN} plugin --profile ${DSH_PROFILE} add ${MARKET_PKG}`;
@@ -691,7 +742,7 @@ function showMarketPage(note, noteIsError = false) {
     ? `<p style="color:${noteIsError ? '#f85149' : '#3fb950'}">${esc(note)}</p>`
     : '';
   const body = installing
-    ? `<p>${tr('Выполняю', 'Running')} <code>${esc(marketCommand())}</code></p>
+    ? `<p>${tr('Выполняю', 'Running')} <code>${esc(marketState.cmdLine || marketCommand())}</code></p>
        <p>${tr('Последние строки установки:', 'Latest install output:')}</p>
        <pre>${esc(marketState.log.slice(-40).join('\n') || '…')}</pre>`
     : `${noteHtml}
@@ -727,13 +778,22 @@ function onMarketChoice(choice) {
   return blankResponse();
 }
 
-async function runMarketInstall() {
+// dsh plugin add вызывает pnpm — его каталог тоже должен быть в PATH.
+function marketEnv() {
+  const env = dshEnv();
+  const pnpm = findBin('pnpm');
+  if (pnpm) env.PATH = path.dirname(pnpm) + path.delimiter + env.PATH;
+  return env;
+}
+
+// Запуск шага установки (pnpm или сам маркет) с живым логом на странице.
+async function runMarketInstall(cmd, args, env) {
   marketState.running = true;
   marketState.log = [];
-  console.log(`[launcher] установка плагина маркета: ${marketCommand()}`);
+  marketState.cmdLine = [cmd, ...args].join(' ');
+  console.log(`[launcher] установка: ${marketState.cmdLine}`);
   try {
-    const p = spawn(DSH_BIN, ['plugin', '--profile', DSH_PROFILE, 'add', MARKET_PKG],
-      { cwd: CWD, env: dshEnv(), stdio: ['ignore', 'pipe', 'pipe'] });
+    const p = spawn(cmd, args, { cwd: CWD, env, stdio: ['ignore', 'pipe', 'pipe'] });
     marketState.proc = p;
     const onData = (d) => {
       for (const line of d.toString().split('\n')) {
@@ -784,7 +844,31 @@ async function offerMarketIfMissing() {
       console.log('[launcher] установка маркета отложена (не сейчас)');
       return;
     }
-    const code = await runMarketInstall();
+    // dsh plugin add требует pnpm: на чистой системе его нет (код 127).
+    if (!findBin('pnpm')) {
+      const npmInfo = await npmInstallInfo();
+      if (stopping) return;
+      if (!npmInfo.canAuto) {
+        const cmd = npmInfo.hasNpm ? 'sudo npm install -g pnpm' : 'npm install -g pnpm';
+        console.log(`[launcher] pnpm нет, поставить сами не можем — прошу «${cmd}»`);
+        marketState.log = [];
+        note = () => tr(`Для плагинов dsh нужен pnpm, а его в системе нет. Выполните в терминале «${cmd}» и нажмите «Установить» ещё раз.`,
+          `dsh plugins need pnpm, which is not installed. Run “${cmd}” in a terminal and click “Install” again.`);
+        noteIsError = true;
+        continue;
+      }
+      console.log('[launcher] pnpm нет — ставлю через npm');
+      const pc = await runMarketInstall(npmInfo.npm, ['install', '-g', 'pnpm'], envWithBinDir(npmInfo.npm));
+      if (stopping) return;
+      if (pc !== 0 || !findBin('pnpm')) {
+        console.error(`[launcher] установка pnpm не удалась (код ${pc})`);
+        note = () => tr(`Не удалось установить pnpm (код ${pc}). Можно повторить или продолжить без маркета.`,
+          `Failed to install pnpm (code ${pc}). You can retry or continue without the marketplace.`);
+        noteIsError = true;
+        continue;
+      }
+    }
+    const code = await runMarketInstall(DSH_BIN, ['plugin', '--profile', DSH_PROFILE, 'add', MARKET_PKG], marketEnv());
     if (stopping) return;
     if (code === 0 && marketInstalled()) {
       console.log(`[launcher] ${MARKET_PKG} установлен`);
@@ -846,9 +930,9 @@ async function launchDshInner() {
 
   const url = authUrl || (await waitForAuthUrl());
   if (url) {
-    await win.loadURL(url); // обмен токена на куки, затем редирект на чистый URL
+    await loadInWin(url); // обмен токена на куки, затем редирект на чистый URL
   } else if (await plainUrlIsAuthed()) {
-    await win.loadURL(PLAIN_URL); // старое куки ещё валидно
+    await loadInWin(PLAIN_URL); // старое куки ещё валидно
   } else {
     showPastePage();
   }
@@ -894,9 +978,9 @@ async function recoverWindow(force = false) {
     let onDshPage = false;
     try { onDshPage = new URL(cur).origin === dshOrigin; } catch { /* data: и т.п. */ }
     if (onDshPage) {
-      await win.loadURL(PLAIN_URL);
+      await loadInWin(PLAIN_URL);
     } else if (await plainUrlIsAuthed()) {
-      await win.loadURL(PLAIN_URL); // окно на статус-странице, но куки валидны
+      await loadInWin(PLAIN_URL); // окно на статус-странице, но куки валидны
     } else {
       showPastePage(); // куки не пережили перезапуск — нужен токен нового процесса
     }
@@ -914,6 +998,10 @@ function startWatchdog() {
       if (stopping) return;
       const state = (await portOpen()) ? 'up' : 'down';
       if (state === portState) return;
+      if (state === 'up' && launching) {
+        portState = state; // окно доведёт до GUI сам launchDsh — не мешаем ему второй навигацией
+        return;
+      }
       if (state === 'up') {
         console.log(`[launcher] dsh снова отвечает на порту ${PORT} — обновляю окно`);
         portState = state;
@@ -961,7 +1049,7 @@ async function onRetryRequest() {
         portState = 'up';
         if (await plainUrlIsAuthed()) {
           console.log('[launcher] retry: dsh запущен, куки валидны — открываю GUI');
-          await win.loadURL(PLAIN_URL);
+          await loadInWin(PLAIN_URL);
         } else {
           console.log('[launcher] retry: dsh запущен, валидного куки нет — страница вставки');
           showPastePage();
@@ -1044,7 +1132,8 @@ async function onInstallRun() {
     installState.running = true;
     installState.log = [];
     console.log(`[launcher] установка dsh из окна: ${npmInfo.command}`);
-    installState.proc = spawn('npm', ['install', '-g', '@deepseek-ai/dsh'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    installState.proc = spawn(npmInfo.npm, ['install', '-g', '@deepseek-ai/dsh'],
+      { env: envWithBinDir(npmInfo.npm), stdio: ['ignore', 'pipe', 'pipe'] });
     const p = installState.proc;
     const onData = (d) => {
       for (const line of d.toString().split('\n')) {
@@ -1217,7 +1306,7 @@ async function onReady() {
       `<p><code>dsh</code> is already running on port ${PORT}. Connecting…</p>`)));
     if (await plainUrlIsAuthed()) {
       console.log('[launcher] валидный куки есть — открываю GUI');
-      await win.loadURL(PLAIN_URL);
+      await loadInWin(PLAIN_URL);
     } else {
       console.log('[launcher] валидного куки нет — показываю страницу вставки токена');
       showPastePage();

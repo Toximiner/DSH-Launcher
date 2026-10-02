@@ -14,6 +14,15 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
   button: the next launch offered installation again. dsh is now looked up
   in `PATH`, npm directories and every nvm version, the path found is
   remembered, and dsh runs with its own node even from the desktop shortcut.
+- On a clean Ubuntu 26.04 with Node.js from apt the window said “npm is not
+  installed”: the global packages directory `/usr/local/lib/node_modules`
+  does not exist yet, which was mistaken for missing npm. npm is now also
+  looked up in nvm (nvm is not in `PATH` when launched from the shortcut).
+- Installing the marketplace on a clean system failed with “code 127”: dsh
+  plugins need pnpm. The launcher now installs pnpm itself when npm allows
+  it without sudo, and otherwise explains which command to run.
+- After installing dsh from the window, an “ERR_ABORTED” error could be
+  shown instead of the UI: two page loads interrupted each other.
 
 ## [1.1.0] — 2026-10-03
 
