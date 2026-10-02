@@ -8,13 +8,16 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # Зафиксировано: ubuntu-latest 19.10.2026 переезжает на Ubuntu 26.
+    # После миграции можно сменить на ubuntu-26.04 (сборка просто копирует
+    # бинарник Electron, от версии ОС раннера она не зависит).
+    runs-on: ubuntu-24.04
     permissions:
       contents: write # создание Release при теге
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -38,7 +41,7 @@ jobs:
           fi
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: dsh-launcher-deb
           path: dsh-launcher_*_amd64.deb
