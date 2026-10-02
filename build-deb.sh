@@ -5,10 +5,16 @@ set -eu
 cd "$(dirname "$0")"
 
 NAME=dsh-launcher
-VER=1.0.0
-REV=9
 ARCH=amd64
 STAGE=build/deb
+
+# Версия пакета — единственный источник: deb/control, формат X.Y.Z-R.
+FULL=$(sed -n 's/^Version: *//p' deb/control)
+echo "$FULL" | grep -Eq '^[0-9]+(\.[0-9]+)+-[0-9]+$' || {
+  echo "В deb/control 'Version:' должен быть в формате X.Y.Z-R (напр. 1.0.0-10), сейчас: '${FULL:-<пусто>}'" >&2;
+  exit 1; }
+VER=${FULL%-*}
+REV=${FULL##*-}
 OUT="${NAME}_${VER}-${REV}_${ARCH}.deb"
 
 [ -x node_modules/electron/dist/electron ] || {

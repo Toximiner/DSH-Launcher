@@ -5,6 +5,11 @@ on:
     branches: [main]
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Тег релиза, напр. v1.0.0-10. Пусто = просто сборка без релиза'
+        required: false
+        type: string
 
 jobs:
   build:
@@ -16,6 +21,38 @@ jobs:
       contents: write # создание Release при теге
     steps:
       - uses: actions/checkout@v5
+
+      - name: Determine version
+        # Порядок источников версии: тег события -> поле Run workflow -> deb/control.
+        # Для релиза тег ПЕРЕОПРЕДЕЛЯЕТ deb/control в рабочей копии.
+        id: ver
+        env:
+          EVENT_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          DISPATCH_TAG: ${{ inputs.tag }}
+        run: |
+          if [ -n "$EVENT_TAG" ]; then
+            ver="${EVENT_TAG#v}"; releasing=true
+          elif [ -n "$DISPATCH_TAG" ]; then
+            ver="${DISPATCH_TAG#v}"; releasing=true
+          else
+            ver=$(sed -n 's/^Version: *//p' deb/control); releasing=false
+          fi
+          echo "$ver" | grep -Eq '^[0-9]+(\.[0-9]+)+-[0-9]+$' || {
+            echo "::error::Версия '$ver' не в формате X.Y.Z-R (напр. 1.0.0-10)"
+            exit 1; }
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "releasing=$releasing" >> "$GITHUB_OUTPUT"
+          if [ "$releasing" = true ]; then
+            sed -i "s/^Version: .*/Version: $ver/" deb/control
+            echo "deb/control: Version -> $ver (из тега)"
+          else
+            # Пуш в main: подсказать, какой тег сделать следующим
+            last=$(git ls-remote --tags origin 'v*' --refs | sed 's|.*refs/tags/||; s/^v//' \
+              | grep -E '^[0-9]+(\.[0-9]+)+-[0-9]+$' | sed 's/.*-//' | sort -n | tail -1 || true)
+            if [ -n "${last:-}" ]; then
+              echo "💡 Следующий релиз-тег: v${ver%-*}-$((last + 1))"
+            fi
+          fi
 
       - uses: actions/setup-node@v7
         with:
@@ -32,14 +69,6 @@ jobs:
       - name: Build .deb
         run: ./build-deb.sh
 
-      - name: Check version consistency
-        run: |
-          want=$(sed -n 's/^Version: //p' deb/control)
-          if [ ! -f "dsh-launcher_${want}_amd64.deb" ]; then
-            echo "::error::Расхождение версий: в deb/control 'Version: $want', а скрипт собрал: $(ls dsh-launcher_*_amd64.deb). Поменяйте REV в build-deb.sh и Version в deb/control синхронно."
-            exit 1
-          fi
-
       - name: Upload artifact
         # v5 всё ещё node20; node24 появился с v6, берём актуальный major
         uses: actions/upload-artifact@v7
@@ -48,9 +77,13 @@ jobs:
           path: dsh-launcher_*_amd64.deb
           if-no-files-found: error
 
-      - name: Publish GitHub Release (on tag)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+      - name: Publish GitHub Release
+        if: steps.ver.outputs.releasing == 'true'
+        uses: softprops/action-gh-release@v3
         with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          # Если тега ещё нет (кнопка Run workflow) — акция создаст его
+          # именно на собранном коммите
+          target_commitish: ${{ github.sha }}
           files: dsh-launcher_*_amd64.deb
           generate_release_notes: true
