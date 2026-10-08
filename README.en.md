@@ -36,6 +36,26 @@ A small Electron app: a window that opens **DeepSeek Harness**
   dsh the same way (a second signal or a hang longer than 8 s — SIGKILL at
   once); a direct `kill -9` to the launcher cannot be caught, and in that
   case dsh survives it.
+- **Update checks.** At startup the launcher asks GitHub for its latest
+  release (`Toximiner/DSH-Launcher`) and npm for the latest
+  `@deepseek-ai/dsh`. If a newer version exists and dsh is started by the
+  launcher itself, before starting dsh a window asks: “Update / Not now /
+  Don’t ask again” (remembered per version — a newer release asks again).
+  - Launcher update: downloads the release .deb (progress on screen, sha256
+    checked against the asset digest from GitHub) and installs it via
+    pkexec — polkit asks for the password in a system dialog; as root the
+    package is copied to a root-owned directory and its sha256 re-checked,
+    then `apt-get install`; on success the launcher restarts itself. No pkexec /
+    cancelled password / failure — a page with the terminal command and a
+    “Check again” button.
+  - dsh update: `npm install -g @deepseek-ai/dsh@<version>` when the global
+    npm prefix is writable without sudo, otherwise the terminal command.
+    After success dsh starts with the new version immediately.
+  - In attach mode (dsh already running) no prompts are shown.
+  - Requests are sent right at startup, in parallel with everything else;
+    before starting dsh the launcher waits for them at most ~8 s (without a
+    network they fail at once and the launcher simply doesn’t ask). Disable with
+    `DSH_LAUNCHER_NO_UPDATE_CHECK=1`.
 
 ## System requirements
 
@@ -88,9 +108,10 @@ Constants at the very top of `main.js`, or environment variables:
 | `DSH_PORT`              | `3080`                    | web UI port                   |
 | `DSH_START_TIMEOUT_MS`  | `120000`                  | how long to wait for startup, ms |
 | `DSH_LAUNCHER_LANG`     | in-window choice / locale | launcher window language: `ru` or `en` |
+| `DSH_LAUNCHER_NO_UPDATE_CHECK` | —             | `1` — skip version checks (GitHub Releases + npm) |
 
 The language of the launcher's own screens (startup, dsh installation,
-marketplace prompt, errors) can be switched right in the window — **RU | EN**
+marketplace prompt, updates, errors) can be switched right in the window — **RU | EN**
 in the top-right corner; the choice is saved to
 `~/.config/dsh-launcher/ui-lang.json`. Until a choice is made, the system
 locale is used (`LC_ALL` / `LC_MESSAGES` / `LANG`): `ru*` means Russian,

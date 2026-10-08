@@ -7,6 +7,34 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+### Added
+
+- **Update checks at startup.** The launcher asks GitHub for its latest
+  release and npm for the latest `@deepseek-ai/dsh`; if a newer version
+  exists and dsh is started by the launcher itself, a window asks before dsh
+  starts: “Update / Not now / Don’t ask again” (remembered per version — a
+  newer release asks again).
+  - Launcher update: downloads the release .deb (progress on screen, sha256
+    checked against the asset digest from GitHub) and installs it via
+    pkexec — polkit asks for the password in a system dialog; as root the
+    package is copied to a root-owned directory and its sha256 re-checked,
+    then `apt-get install`; on success — an “Update installed” screen and an
+    automatic launcher restart. No pkexec / cancelled password / failure — a
+    page with the terminal command (`sudo apt install -y <deb>`) and a
+    “Check again” button.
+  - dsh update: `npm install -g @deepseek-ai/dsh@<version>` with a live log
+    when the global npm prefix is writable without sudo; otherwise the
+    terminal command. After success dsh starts with the new version
+    immediately (if the dsh being run is still the old one — npm installed
+    into another prefix — the launcher says so).
+  - In attach mode (dsh already running) no prompts are shown.
+  - Requests are sent right at startup, in parallel with everything else;
+    before starting dsh the launcher waits for them at most ~8 s (without a
+    network they fail at once and the launcher simply doesn’t ask). Disable with
+    `DSH_LAUNCHER_NO_UPDATE_CHECK=1`.
+  - For development/testing: `DSH_LAUNCHER_FAKE_LAUNCHER_LATEST`,
+    `DSH_LAUNCHER_FAKE_DSH_LATEST`, `DSH_LAUNCHER_FAKE_INSTALLED`.
+
 ### Fixed
 
 - Closing the window no longer leaves `dsh` running when it **restarted
