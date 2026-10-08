@@ -10,7 +10,8 @@
  *  - если dsh уже запущен (например, из терминала), подключается к нему и НЕ
  *    убивает его при закрытии; если валидного куки нет, просит вставить URL
  *    с токеном из терминала, где работает dsh;
- *  - закрытие окна завершает всё дерево процессов dsh (если его запустил лаунчер):
+ *  - закрытие окна завершает всё дерево процессов dsh, которое запустил лаунчер
+ *    (и dsh, «усыновлённый» после самовозрождения — он ищется по порту):
  *    сначала SIGTERM, через 4 с — SIGKILL;
  *  - SIGTERM/SIGINT/SIGHUP самому лаунчеру: штатное закрытие (как закрытие окна);
  *    повторный сигнал или зависание дольше 8 с — SIGKILL дереву dsh. Прямой
@@ -186,6 +187,8 @@ app.on('child-process-gone', (_event, details) => {
 let win = null;
 let dshProc = null;
 let weStartedDsh = false;
+let adoptedDsh = false; // dsh «усыновлён» после самовозрождения — тоже останавливаем при закрытии
+let adoptedOldPgid = null; // группа исходного dsh до самовозрождения (могли остаться потомки)
 let dshFatal = false;
 let stopping = false;
 let authUrl = null; // URL с токеном, напечатанный dsh
@@ -406,6 +409,8 @@ function startDsh() {
     detached: true, // dsh становится лидером своей процесс-группы — можно убить всё дерево
   });
   weStartedDsh = true;
+  adoptedDsh = false; // снова собственный процесс — «усыновлённого» больше нет
+  adoptedOldPgid = null;
   dshFatal = false;
   dshProc.stdout.on('data', (d) => {
     for (const line of d.toString().split('\n')) {
@@ -473,6 +478,84 @@ async function stopDsh() {
   console.log('[launcher] dsh stopped by launcher');
 }
 
+// pid процесса, слушающего порт (Linux, чистый fs — без fuser/ss):
+// inode сокетов LISTEN берём из /proc/net/tcp{,6}, затем ищем fd
+// socket:[inode] среди /proc/[pid]/fd/*.
+/* ===== portListenerPid ===== */
+function portListenerPid(port) {
+  const hexPort = port.toString(16).toUpperCase().padStart(4, '0');
+  const inodes = new Set();
+  for (const file of ['/proc/net/tcp', '/proc/net/tcp6']) {
+    let data;
+    try { data = fs.readFileSync(file, 'utf8'); } catch { continue; }
+    for (const line of data.split('\n').slice(1)) {
+      const c = line.trim().split(/\s+/);
+      // c[1]=local(IP:PORT), c[3]=state ('0A'=LISTEN), c[9]=inode
+      if (c.length < 10 || c[3] !== '0A') continue;
+      if (!c[1].endsWith(':' + hexPort)) continue;
+      inodes.add(c[9]);
+    }
+  }
+  if (inodes.size === 0) return null;
+  let pids;
+  try { pids = fs.readdirSync('/proc').filter((n) => /^\d+$/.test(n)); } catch { return null; }
+  for (const pid of pids) {
+    let fds;
+    try { fds = fs.readdirSync(`/proc/${pid}/fd`); } catch { continue; }
+    for (const fd of fds) {
+      let link;
+      try { link = fs.readlinkSync(`/proc/${pid}/fd/${fd}`); } catch { continue; }
+      const m = /^socket:\[(\d+)\]$/.exec(link);
+      if (m && inodes.has(m[1])) return Number(pid);
+    }
+  }
+  return null;
+}
+/* ===== end portListenerPid ===== */
+
+// pgid процесса: поле 5 из /proc/<pid>/stat (comm в скобках может содержать
+// пробелы — считаем от последней «)»).
+function pgidOf(pid) {
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const pgid = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[2]);
+    return pgid > 0 ? pgid : null;
+  } catch { return null; }
+}
+
+// Что убивать у «усыновлённого» dsh (после самовозрождения). Ручки на новый
+// процесс у нас нет, поэтому:
+//  - процесс на порту: убиваем его группу по pgid — он может быть не лидером
+//    группы, и тогда kill(-pid) не сработал бы, а потомки остались бы жить;
+//  - группа исходного dsh: в ней могли остаться его потомки (лидер мёртв —
+//    только группа, без запасного варианта по pid).
+function adoptedTargets() {
+  const targets = [];
+  const pid = portListenerPid(PORT);
+  if (pid) {
+    const pgid = pgidOf(pid);
+    if (pgid && pgid !== pgidOf(process.pid)) targets.push({ id: pgid, groupOnly: true });
+    else targets.push({ id: pid, groupOnly: false }); // группа наша/неизвестна — только сам процесс
+  }
+  if (adoptedOldPgid && !targets.some((t) => t.id === adoptedOldPgid)) {
+    targets.push({ id: adoptedOldPgid, groupOnly: true });
+  }
+  return targets;
+}
+
+async function stopAdoptedDsh() {
+  const targets = adoptedTargets().filter((t) => groupAlive(t.id, t.groupOnly));
+  if (targets.length === 0) {
+    console.log('[launcher] усыновлённый dsh: живых процессов не найдено — не убиваем (порт уже закрыт?)');
+    return;
+  }
+  console.log(`[launcher] останавливаю усыновлённый dsh (${targets.map((t) => (t.groupOnly ? 'pgid=' : 'pid=') + t.id).join(', ')})`);
+  const alive = () => targets.filter((t) => groupAlive(t.id, t.groupOnly));
+  for (const t of targets) killGroup(t.id, 'SIGTERM', t.groupOnly);
+  for (let i = 0; i < 20 && alive().length; i++) await sleep(100); // до 2 с
+  for (const t of alive()) killGroup(t.id, 'SIGKILL', t.groupOnly);
+}
+
 /* ---------------- самовозрождение dsh (self-restart) ----------------
  * Менеджер плагинов dsh перезапускает сам процесс (после обновления плагина
  * уведомляет «изменения вступят в силу при следующем старте», и при
@@ -481,9 +564,10 @@ async function stopDsh() {
  * подхватывает его до выхода старого) — watchdog такой переход не видит.
  * Поэтому по exit нашего дочернего процесса проверяем порт: если он жив
  * или оживает — не показываем ошибку, а «усыновляем» запущенный dsh
- * (режим подключения: при закрытии окна его уже не убиваем) и обновляем
- * окно. Куки при этом живы — секрет подписи хранится в
- * ~/.dsh/.credentials.yaml и переживает перезапуск.
+ * (дальше работаем с ним как с подключением, но при закрытии окна всё
+ * равно останавливаем — pid ищется по порту) и обновляем окно. Куки при
+ * этом живы — секрет подписи хранится в ~/.dsh/.credentials.yaml и
+ * переживает перезапуск.
  */
 let adoptionCheck = false;
 
@@ -504,7 +588,9 @@ async function handleDshExit(code, signal) {
     while (!up && Date.now() < deadline) { await sleep(500); up = await portOpen(); }
     if (up && !stopping && win && !win.isDestroyed()) {
       console.log('[launcher] порт снова открыт — dsh перезапустился сам, перехожу в режим подключения');
-      weStartedDsh = false; // новый процесс — не наш: при закрытии окна его не убиваем
+      weStartedDsh = false; // новый процесс — не наш дочерний (ручки на него нет)
+      adoptedDsh = true;    // но это тот же dsh сессии — при закрытии окна остановим
+      if (dshProc && dshProc.pid !== undefined) adoptedOldPgid = dshProc.pid;
       dshProc = null;
       dshFatal = false;
       portState = 'up';     // синхронизация со watchdog — не давать лишней перезагрузки
@@ -1388,7 +1474,10 @@ app.on('before-quit', (e) => {
   if (marketState.proc) {
     try { marketState.proc.kill('SIGTERM'); } catch { /* noop */ }
   }
-  Promise.resolve().then(() => stopDsh()).finally(() => app.quit());
+  Promise.resolve().then(async () => {
+    await stopDsh();
+    if (adoptedDsh) await stopAdoptedDsh();
+  }).finally(() => app.quit());
 });
 
 // страховка: если before-quit почему-то не сработала — жёстко
@@ -1401,6 +1490,9 @@ app.on('will-quit', () => killDshNow());
 function killDshNow() {
   if (weStartedDsh && dshProc && dshProc.pid !== undefined && !dshFatal) {
     killGroup(dshProc.pid, 'SIGKILL', dshLeaderExited());
+  }
+  if (adoptedDsh) {
+    for (const t of adoptedTargets()) killGroup(t.id, 'SIGKILL', t.groupOnly);
   }
 }
 // По сигналу — штатное закрытие через before-quit (dsh получает SIGTERM и

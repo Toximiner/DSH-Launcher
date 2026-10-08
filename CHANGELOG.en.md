@@ -9,6 +9,11 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Fixed
 
+- Closing the window no longer leaves `dsh` running when it **restarted
+  itself** mid-session (after a plugin update): the launcher “adopted” the
+  new process and silently switched to attach mode, so nothing stopped it on
+  close. Such a process is now stopped — its pid is looked up by the
+  listening port.
 - Closing the window no longer leaves `dsh` processes behind when the tree's
   main process had already exited but live children remained in the group:
   liveness is now checked by process group, not by the main process's exit
