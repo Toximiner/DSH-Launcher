@@ -34,6 +34,16 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
     `DSH_LAUNCHER_NO_UPDATE_CHECK=1`.
   - For development/testing: `DSH_LAUNCHER_FAKE_LAUNCHER_LATEST`,
     `DSH_LAUNCHER_FAKE_DSH_LATEST`, `DSH_LAUNCHER_FAKE_INSTALLED`.
+- **Tests.**
+  - `npm test` — unit tests `test/version.js` and `test/port.js`: version
+    comparison (Debian and semver formats, CI tag rules) and looking up a
+    process pid by its listening port via /proc. They run in CI before every
+    build — a failing test blocks the package build and the release.
+  - `test/docker/run.sh` — scenarios of the installed .deb in Docker on
+    clean Ubuntu 24.04 and 26.04 (Xvfb, window driven via CDP): closing the
+    window and signals, the “adopted” dsh, updating dsh via npm and the
+    launcher itself via pkexec. In CI — a separate `docker-tests` workflow,
+    run manually.
 
 ### Fixed
 

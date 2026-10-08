@@ -1,0 +1,63 @@
+name: docker-tests
+
+# Сценарии установленного .deb в Docker на чистых Ubuntu 24.04 / 26.04
+# (test/docker/run.sh): закрытие окна и сигналы, «усыновлённый» dsh,
+# обновление dsh через npm и самого лаунчера через pkexec.
+#
+# Только ручной запуск: ~15 минут, и сценарии ходят в сеть — GitHub API
+# (без токена: 60 запросов в час на IP, у раннеров IP общие), npm,
+# nodejs.org. Если лимит GitHub API исчерпан, лаунчер не узнаёт о новом
+# релизе, и сценарии launcher_update* падают на вопросе об обновлении —
+# это не ошибка кода, перезапустите позже.
+on:
+  workflow_dispatch:
+    inputs:
+      oses:
+        description: 'Версии Ubuntu через пробел'
+        required: false
+        default: '24.04 26.04'
+        type: string
+      scenarios:
+        description: 'Сценарии через пробел (пусто = все, см. test/docker/run.sh)'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  docker-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download Electron binary
+        run: npx install-electron
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Docker scenarios
+        env:
+          OSES: ${{ inputs.oses }}
+          SCENARIOS: ${{ inputs.scenarios }}
+          JOBS: '4'
+        # $SCENARIOS без кавычек — список сценариев отдельными аргументами
+        run: test/docker/run.sh $SCENARIOS
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: docker-test-logs
+          path: test/docker/.work/results/
+          if-no-files-found: ignore

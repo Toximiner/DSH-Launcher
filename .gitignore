@@ -6,3 +6,5 @@ logs/
 .DS_Store
 # локальный ярлык для разработки (содержит абсолютные пути машины)
 dsh.desktop
+# test/docker: сборка .deb, tarball Node, логи прогонов
+test/docker/.work/

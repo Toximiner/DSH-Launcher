@@ -3,7 +3,9 @@ name: build-deb
 # Как выпустить релиз:
 #   1. Дописать раздел `## [X.Y.Z]` в CHANGELOG.md (русский) и CHANGELOG.en.md
 #      (английский) — оба станут описанием релиза.
-#   2. git tag vX.Y.Z && git push origin vX.Y.Z
+#   2. (по желанию) Actions → docker-tests → Run workflow: сценарии
+#      установленного пакета на Ubuntu 24.04 / 26.04 (~15 минут).
+#   3. git tag vX.Y.Z && git push origin vX.Y.Z
 # Тег vX.Y.Z даёт пакет X.Y.Z-1; тег vX.Y.Z-R — пакет X.Y.Z-R (перепаковка
 # той же версии). Version: в deb/control для релиза переписывается из тега.
 #
@@ -141,6 +143,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Unit tests
+        # Сравнение версий и поиск pid по порту (test/*.js). Упавший тест
+        # останавливает сборку — пакет и релиз не выйдут.
+        run: npm test
 
       - name: Download Electron binary
         # Electron 44+ не скачивает бинарник из postinstall — только вручную

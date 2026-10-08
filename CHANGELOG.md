@@ -35,6 +35,15 @@
     `DSH_LAUNCHER_NO_UPDATE_CHECK=1`.
   - Для разработки/тестов: `DSH_LAUNCHER_FAKE_LAUNCHER_LATEST`,
     `DSH_LAUNCHER_FAKE_DSH_LATEST`, `DSH_LAUNCHER_FAKE_INSTALLED`.
+- **Тесты.**
+  - `npm test` — юнит-тесты `test/version.js` и `test/port.js`: сравнение
+    версий (Debian- и semver-форматы, правила CI по тегам) и поиск pid
+    процесса по слушающему порту через /proc. Запускаются в CI перед каждой
+    сборкой — упавший тест не даёт собрать пакет и выпустить релиз.
+  - `test/docker/run.sh` — сценарии установленного .deb в Docker на чистых
+    Ubuntu 24.04 и 26.04 (Xvfb, окно через CDP): закрытие окна и сигналы,
+    «усыновлённый» dsh, обновление dsh через npm и самого лаунчера через
+    pkexec. В CI — отдельный workflow `docker-tests`, запуск вручную.
 
 ### Исправлено
 

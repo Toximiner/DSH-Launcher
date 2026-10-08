@@ -221,6 +221,25 @@ sandbox Chromium (`chown root:root` + `chmod 4755 chrome-sandbox`); в этом
 > rm ~/Desktop/dsh-launcher.desktop 2>/dev/null
 > ```
 
+### Тесты
+
+```sh
+npm test            # юнит-тесты: сравнение версий, pid по слушающему порту
+test/docker/run.sh  # сценарии установленного .deb в Docker на Ubuntu 24.04 и 26.04
+```
+
+`test/docker/run.sh` собирает `.deb` из текущего кода (версией 1.1.0-1),
+ставит его в чистые контейнеры и прогоняет сценарии под Xvfb: закрытие окна
+и сигналы, «усыновлённый» dsh, обновление dsh через npm и самого лаунчера
+(настоящий последний релиз с GitHub через pkexec). Нужны Docker, собранный
+Electron и сеть; занимает ~15 минут. Только часть сценариев:
+`test/docker/run.sh close sigterm`, только одна система: `OSES=26.04`.
+Логи — в `test/docker/.work/results/`.
+
+В CI `npm test` идёт перед каждой сборкой пакета (упавший тест не даёт
+выпустить релиз), а Docker-сценарии — отдельный workflow `docker-tests`,
+запуск вручную: Actions → docker-tests → Run workflow.
+
 ## Про `--no-sandbox`
 
 `run.sh` запускает Electron с `--no-sandbox`: на системах Ubuntu, где

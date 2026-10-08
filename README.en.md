@@ -222,6 +222,25 @@ dsh log in the installed version: `~/.local/state/dsh-launcher/dsh.log`.
 > rm ~/Desktop/dsh-launcher.desktop 2>/dev/null
 > ```
 
+### Tests
+
+```sh
+npm test            # unit tests: version comparison, pid by listening port
+test/docker/run.sh  # scenarios of the installed .deb in Docker on Ubuntu 24.04 and 26.04
+```
+
+`test/docker/run.sh` builds a `.deb` from the current code (as version
+1.1.0-1), installs it into clean containers and runs scenarios under Xvfb:
+closing the window and signals, the “adopted” dsh, updating dsh via npm and
+the launcher itself (the real latest GitHub release via pkexec). Needs
+Docker, a downloaded Electron and network access; takes ~15 minutes. Only
+some scenarios: `test/docker/run.sh close sigterm`, only one system:
+`OSES=26.04`. Logs go to `test/docker/.work/results/`.
+
+In CI `npm test` runs before every package build (a failing test blocks the
+release), and the Docker scenarios are a separate `docker-tests` workflow,
+run manually: Actions → docker-tests → Run workflow.
+
 ## About `--no-sandbox`
 
 `run.sh` starts Electron with `--no-sandbox`: on Ubuntu systems where
