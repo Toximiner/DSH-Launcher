@@ -51,9 +51,16 @@ rm -f "$WORK/results"/*
 one() {
   local os=$1 sc=$2 extra=""
   [ "$sc" = launcher_update_denied ] && extra="-e POLKIT=no"
-  timeout 900 docker run --rm --shm-size=1g --security-opt seccomp=unconfined $extra \
+  local name="dshl-test-${os//./}-$sc-$$"
+  # --init: PID 1 в контейнере — tini, и SIGTERM от timeout доходит до
+  # scenario.sh (сам он как PID 1 сигналы без обработчика не получает).
+  # Если и так не завершился — kill клиента и docker rm -f.
+  timeout -k 30 600 docker run --rm --init --name "$name" --shm-size=1g \
+    --security-opt seccomp=unconfined $extra \
     dshl-test:$os /opt/t/scenario.sh "$sc" >"$WORK/results/$os-$sc.log" 2>&1
   local rc=$?
+  docker rm -f "$name" >/dev/null 2>&1 || true
+  [ $rc -eq 124 ] || [ $rc -eq 137 ] && echo "  [FAIL] сценарий не уложился в 10 минут" >>"$WORK/results/$os-$sc.log"
   echo "$([ $rc -eq 0 ] && echo PASS || echo "FAIL") $os $sc"
 }
 export -f one; export WORK

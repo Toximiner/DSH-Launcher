@@ -9,7 +9,7 @@ const CDP = 'http://127.0.0.1:9222';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function page() {
-  const list = await (await fetch(`${CDP}/json/list`)).json();
+  const list = await (await fetch(`${CDP}/json/list`, { signal: AbortSignal.timeout(5000) })).json();
   return list.find((t) => t.type === 'page') || null;
 }
 
@@ -28,7 +28,13 @@ async function current() {
 async function evalJs(expr) {
   const p = await page();
   const ws = new WebSocket(p.webSocketDebuggerUrl);
-  await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
+  // Страница может как раз перезагружаться — тогда соединение не открывается
+  // и не падает; не ждём его вечно.
+  await new Promise((res, rej) => {
+    ws.onopen = res;
+    ws.onerror = rej;
+    setTimeout(() => rej(new Error('CDP: WebSocket не открылся за 5 с')), 5000);
+  });
   ws.send(JSON.stringify({ id: 1, method: 'Runtime.evaluate', params: { expression: expr, returnByValue: true } }));
   const r = await new Promise((res) => {
     ws.onmessage = (m) => { const d = JSON.parse(m.data); if (d.id === 1) res(d); };
@@ -53,6 +59,9 @@ async function waitFor(get, re, sec) {
 
 (async () => {
   const [cmd, a, b] = process.argv.slice(2);
+  // Страховка от любого зависания: команда не живёт дольше своего таймаута + 20 с.
+  const limit = (cmd === 'wait-text' || cmd === 'wait-url' ? Number(b || 30) : 10) + 20;
+  setTimeout(() => { console.error(`driver: команда ${cmd} зависла (> ${limit} с)`); process.exit(1); }, limit * 1000).unref();
   if (cmd === 'text') console.log(pageText(await current()));
   else if (cmd === 'url') console.log(await current());
   else if (cmd === 'wait-text') await waitFor(async () => pageText(await current()), a, Number(b || 30));
