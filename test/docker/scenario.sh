@@ -12,6 +12,11 @@ OUT=/tmp/launcher.out
 FAILS=0
 NVM_BIN=$(ls -d /home/tester/.nvm/versions/node/*/bin | head -1)
 UPD=/home/tester/.config/dsh-launcher/updates
+# Последний релиз лаунчера на GitHub (передаёт run.sh): тег vX.Y.Z → пакет X.Y.Z-1.
+LATEST=${LATEST:?LATEST не задан — запускайте через run.sh}
+LATEST_PKG=$(case "$LATEST" in *-*) echo "$LATEST" ;; *) echo "$LATEST-1" ;; esac)
+LATEST_RE=$(printf '%s' "$LATEST" | sed 's/\./\\./g')
+DEB_RE="dsh-launcher_$(printf '%s' "$LATEST_PKG" | sed 's/\./\\./g')_amd64\\.deb"
 
 ok()   { echo "  [ OK ] $*"; }
 bad()  { echo "  [FAIL] $*"; FAILS=$((FAILS + 1)); }
@@ -157,14 +162,14 @@ dsh_update_root_prefix)
 
 launcher_update)
   start_launcher $FAKE || exit 1
-  step "вопрос об обновлении лаунчера (1.1.0-1 → 1.1.1)" drv wait-text 'Update DSH Launcher.*Version 1\.1\.1 is available \(installed: 1\.1\.0-1\s*\)' 60
+  step "вопрос об обновлении лаунчера (1.1.0-1 → $LATEST)" drv wait-text "Update DSH Launcher.*Version $LATEST_RE is available \\(installed: 1\\.1\\.0-1\\s*\\)" 60
   drv eval "document.querySelector('a[target=_blank]').click()" >/dev/null; sleep 1.5
   step "клик по ссылке релиза не уводит окно со страницы вопроса" drv wait-text 'Update DSH Launcher' 3
   drv eval "location.href='dshlauncher://update/install/'" >/dev/null
-  step "скачано и установлено через pkexec" wait_log 'dsh-launcher 1.1.1 установлен' 400
+  step "скачано и установлено через pkexec" wait_log "dsh-launcher $LATEST установлен" 400
   grep -E 'скачал|шаг обновления' "$OUT" | sed 's/^/         /'
   check "sha256 совпал с digest релиза" grep -q 'совпадает с релизом' "$OUT"
-  check "dpkg: установлен 1.1.1-1" sh -c "dpkg-query -Wf '\${Version}' dsh-launcher | grep -qx 1.1.1-1"
+  check "dpkg: установлен $LATEST_PKG" sh -c "dpkg-query -Wf '\${Version}' dsh-launcher | grep -qx $LATEST_PKG"
   step "старый экземпляр завершился" wait_exit "$LPID" 20
   sleep 3
   NEW=$(launcher_pids | head -1)
@@ -179,11 +184,11 @@ launcher_update_denied)
   start_launcher $FAKE || exit 1
   step "вопрос об обновлении лаунчера" drv wait-text 'Update DSH Launcher' 60
   drv eval "location.href='dshlauncher://update/install/'" >/dev/null
-  step "polkit отказал — страница с командой для терминала" drv wait-text "Update manually.*Installation failed \(code 127\).*sudo apt install -y $UPD/dsh-launcher_1\.1\.1-1_amd64\.deb" 400
+  step "polkit отказал — страница с командой для терминала" drv wait-text "Update manually.*Installation failed \(code 127\).*sudo apt install -y $UPD/$DEB_RE" 400
   check "dpkg: всё ещё 1.1.0-1" sh -c "dpkg-query -Wf '\${Version}' dsh-launcher | grep -qx 1.1.0-1"
-  step "пользователь ставит пакет в терминале" apt-get install -y "$UPD/dsh-launcher_1.1.1-1_amd64.deb"
+  step "пользователь ставит пакет в терминале" apt-get install -y "$UPD/dsh-launcher_${LATEST_PKG}_amd64.deb"
   drv eval "location.href='dshlauncher://update/recheck/'" >/dev/null
-  step "«Проверить ещё раз» — «Update installed»" wait_log 'обновлён до 1.1.1-1 (вручную)' 30
+  step "«Проверить ещё раз» — «Update installed»" wait_log "обновлён до $LATEST_PKG (вручную)" 30
   step "старый экземпляр завершился" wait_exit "$LPID" 20
   sleep 3
   NEW=$(launcher_pids | head -1)
@@ -198,7 +203,7 @@ launcher_update_nopkexec)
   start_launcher $FAKE || exit 1
   step "вопрос об обновлении лаунчера" drv wait-text 'Update DSH Launcher' 60
   drv eval "location.href='dshlauncher://update/install/'" >/dev/null
-  step "нет pkexec — страница с командой" drv wait-text "pkexec was not found.*sudo apt install -y $UPD/dsh-launcher_1\.1\.1-1_amd64\.deb" 400
+  step "нет pkexec — страница с командой" drv wait-text "pkexec was not found.*sudo apt install -y $UPD/$DEB_RE" 400
   drv eval "location.href='dshlauncher://update/later/'" >/dev/null
   step "«Не сейчас» — dsh запускается" wait_port 60
   kill -TERM "$LPID"; wait_exit "$LPID" 15 >/dev/null

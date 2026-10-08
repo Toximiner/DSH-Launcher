@@ -51,6 +51,8 @@ jobs:
           OSES: ${{ inputs.oses }}
           SCENARIOS: ${{ inputs.scenarios }}
           JOBS: '4'
+          # run.sh узнаёт последний релиз через GitHub API — с токеном без лимита 60/ч
+          GITHUB_TOKEN: ${{ github.token }}
         # $SCENARIOS без кавычек — список сценариев отдельными аргументами
         run: test/docker/run.sh $SCENARIOS
 

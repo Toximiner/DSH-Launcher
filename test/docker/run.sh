@@ -33,6 +33,13 @@ sed -i 's/^Version: .*/Version: 1.1.0-1/' "$WORK/src/deb/control"
 (cd "$WORK/src" && sh build-deb.sh >/dev/null)
 cp -f "$WORK/src/dsh-launcher_1.1.0-1_amd64.deb" "$WORK/ctx/"
 
+# Последний релиз лаунчера — на него сценарии launcher_update* и обновляются.
+AUTH=(); [ -n "${GITHUB_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")
+LATEST=$(curl -fsSL "${AUTH[@]}" https://api.github.com/repos/Toximiner/DSH-Launcher/releases/latest \
+  | sed -n 's/.*"tag_name": *"v\{0,1\}\([^"]*\)".*/\1/p' | head -1)
+[ -n "$LATEST" ] || { echo "не удалось узнать последний релиз (GitHub API)" >&2; exit 1; }
+echo ">> последний релиз на GitHub: $LATEST"
+
 TARBALL=node-$NODE_VER-linux-x64.tar.xz
 if [ ! -f "$WORK/ctx/$TARBALL" ]; then
   echo ">> скачиваю $TARBALL"
@@ -51,6 +58,7 @@ rm -f "$WORK/results"/*
 one() {
   local os=$1 sc=$2 extra=""
   [ "$sc" = launcher_update_denied ] && extra="-e POLKIT=no"
+  extra="$extra -e LATEST=$LATEST"
   local name="dshl-test-${os//./}-$sc-$$"
   # --init: PID 1 в контейнере — tini, и SIGTERM от timeout доходит до
   # scenario.sh (сам он как PID 1 сигналы без обработчика не получает).
@@ -63,7 +71,7 @@ one() {
   [ $rc -eq 124 ] || [ $rc -eq 137 ] && echo "  [FAIL] сценарий не уложился в 10 минут" >>"$WORK/results/$os-$sc.log"
   echo "$([ $rc -eq 0 ] && echo PASS || echo "FAIL") $os $sc"
 }
-export -f one; export WORK
+export -f one; export WORK LATEST
 echo ">> сценарии (параллельно: $JOBS)"
 for os in $OSES; do for sc in $SCENARIOS; do echo "$os $sc"; done; done \
   | xargs -P "$JOBS" -L 1 bash -c 'one $0 $1' | tee "$WORK/results/summary.txt"
