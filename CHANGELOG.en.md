@@ -5,6 +5,23 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- Closing the window no longer leaves `dsh` processes behind when the tree's
+  main process had already exited but live children remained in the group:
+  liveness is now checked by process group, not by the main process's exit
+  code.
+- A **second SIGTERM/SIGINT/SIGHUP** to the launcher (pkill twice, session
+  end) killed it instantly: Chromium handles only the first signal (graceful
+  quit) and then restores the default handler — and a `dsh` that had not
+  exited by then was left orphaned. The launcher now handles the signals
+  itself: the first one — graceful quit (dsh gets SIGTERM, SIGKILL after
+  4 s), a second one or a hang longer than 8 s — SIGKILL to the tree and
+  exit. (A direct `kill -9` to the launcher cannot be caught — in that
+  case `dsh` survives it.)
+
 ## [1.1.1] — 2026-10-03
 
 ### Fixed

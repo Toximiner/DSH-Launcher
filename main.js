@@ -11,7 +11,10 @@
  *    убивает его при закрытии; если валидного куки нет, просит вставить URL
  *    с токеном из терминала, где работает dsh;
  *  - закрытие окна завершает всё дерево процессов dsh (если его запустил лаунчер):
- *    сначала SIGTERM, через 4 с — SIGKILL.
+ *    сначала SIGTERM, через 4 с — SIGKILL;
+ *  - SIGTERM/SIGINT/SIGHUP самому лаунчеру: штатное закрытие (как закрытие окна);
+ *    повторный сигнал или зависание дольше 8 с — SIGKILL дереву dsh. Прямой
+ *    SIGKILL лаунчеру перехватить нельзя — тот случай остаётся незакрытым.
  */
 
 const { app, BrowserWindow, Menu, protocol, net: electronNet, shell, clipboard } = require('electron');
@@ -435,24 +438,35 @@ function startDsh() {
 
 /* ---------------- остановка дерева процессов ---------------- */
 
-function killGroup(pid, signal) {
+// groupOnly: главный процесс уже завершился — его pid мог занять чужой
+// процесс, поэтому без запасного варианта «просто pid», только группа (-pid).
+function killGroup(pid, signal, groupOnly = false) {
   try { process.kill(-pid, signal); } catch {
+    if (groupOnly) return;
     try { process.kill(pid, signal); } catch { /* noop */ }
   }
 }
 
-function groupAlive(pid) {
+function groupAlive(pid, groupOnly = false) {
   try { process.kill(-pid, 0); return true; } catch { /* noop */ }
+  if (groupOnly) return false;
   try { process.kill(pid, 0); return true; } catch { return false; }
+}
+
+// Главный процесс dsh завершился (по коду или по сигналу).
+function dshLeaderExited() {
+  return dshProc.exitCode !== null || dshProc.signalCode !== null;
 }
 
 async function stopDsh() {
   if (!weStartedDsh || !dshProc || dshProc.pid === undefined) return;
   const pid = dshProc.pid;
-  if (dshProc.exitCode !== null || dshFatal) return;
-  killGroup(pid, 'SIGTERM');
-  for (let i = 0; i < 40 && groupAlive(pid); i++) await sleep(100); // до 4 с
-  if (groupAlive(pid)) {
+  if (dshFatal) return; // spawn не удался — процесса не было
+  const groupOnly = dshLeaderExited();
+  if (!groupAlive(pid, groupOnly)) return; // группа уже мёртва — нечего убивать
+  killGroup(pid, 'SIGTERM', groupOnly);
+  for (let i = 0; i < 40 && groupAlive(pid, groupOnly); i++) await sleep(100); // до 4 с
+  if (groupAlive(pid, groupOnly)) {
     killGroup(pid, 'SIGKILL');
     for (let i = 0; i < 20 && groupAlive(pid); i++) await sleep(100);
   }
@@ -1219,6 +1233,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 async function onReady() {
+  installSignalHandlers();
   Menu.setApplicationMenu(null);
   loadLangPref();
   protocol.handle('dshlauncher', (request) => {
@@ -1377,8 +1392,44 @@ app.on('before-quit', (e) => {
 });
 
 // страховка: если before-quit почему-то не сработала — жёстко
-app.on('will-quit', () => {
-  if (weStartedDsh && dshProc && dshProc.pid !== undefined && dshProc.exitCode === null && !dshFatal) {
-    killGroup(dshProc.pid, 'SIGKILL');
+app.on('will-quit', () => killDshNow());
+
+// страховка на «жёсткое» завершение самого лаунчера: SIGTERM/SIGINT/SIGHUP (pkill,
+// завершение сессии) и exit процесса. Поймать SIGKILL, отправленный самому
+// лаунчеру, нельзя — в том случае dsh переживёт его (это ограничение
+// отделимого процесса, лечится только системно — cgroup/supervisor).
+function killDshNow() {
+  if (weStartedDsh && dshProc && dshProc.pid !== undefined && !dshFatal) {
+    killGroup(dshProc.pid, 'SIGKILL', dshLeaderExited());
   }
-});
+}
+// По сигналу — штатное закрытие через before-quit (dsh получает SIGTERM и
+// успевает сохраниться, через 4 с — SIGKILL). Жёстко (SIGKILL дереву и
+// выход) — по повторному сигналу, если приложение ещё не готово или если
+// штатное закрытие не уложилось в 8 с.
+let termSignalSeen = false;
+function onTermSignal(name, exitCode) {
+  console.log(`[launcher] ${name} — останавливаю dsh`);
+  if (termSignalSeen || !app.isReady()) {
+    killDshNow();
+    process.exit(exitCode);
+  }
+  termSignalSeen = true;
+  setTimeout(() => {
+    console.error('[launcher] штатное закрытие зависло — останавливаю dsh жёстко');
+    killDshNow();
+    process.exit(exitCode);
+  }, 8000);
+  app.quit();
+}
+// Ставить — после ready: Chromium при старте ставит свой обработчик
+// SIGTERM/SIGINT/SIGHUP поверх раннего process.on (тот так и не вызывается),
+// а после первого сигнала возвращает обработчик по умолчанию — повторный
+// сигнал убивал лаунчер мгновенно, и медленно завершающийся dsh оставался
+// сиротой. Поставленный позже, наш обработчик заменяет chromium-овский.
+function installSignalHandlers() {
+  process.on('SIGINT', () => onTermSignal('SIGINT', 130));
+  process.on('SIGTERM', () => onTermSignal('SIGTERM', 143));
+  process.on('SIGHUP', () => onTermSignal('SIGHUP', 129));
+}
+process.on('exit', killDshNow);

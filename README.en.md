@@ -29,7 +29,11 @@ A small Electron app: a window that opens **DeepSeek Harness**
   question back. No question is asked when attaching to an already running dsh.
 - **Closing the window** stops the whole dsh process tree (SIGTERM,
   SIGKILL after 4 s) — but **only if the launcher started that process**.
-  A dsh started by someone else (manually in a terminal) is left alone.
+  A dsh started by someone else (manually in a terminal) is left alone. If
+  the launcher itself receives SIGTERM/SIGINT/SIGHUP (pkill, session end),
+  it quits gracefully and stops dsh the same way (a second signal or a hang
+  longer than 8 s — SIGKILL at once); a direct `kill -9` to the launcher
+  cannot be caught, and in that case dsh survives it.
 
 ## System requirements
 
