@@ -5,7 +5,7 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
-## [Unreleased]
+## [1.5.1] — 2026-10-10
 
 ### Fixed
 
