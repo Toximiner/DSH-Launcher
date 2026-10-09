@@ -5,6 +5,28 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Added
+
+- **“What’s new” in the launcher update prompt** and in “Help → Check for
+  updates…”: changes of every version newer than the installed one, newest
+  first, in the window language.
+- **“What’s new” after an update:** on the first start of a new version — a
+  window with the changes between the previous and the new version (once).
+- **“Help → dsh log”:** the latest lines of `dsh.log` in a window — with
+  “Refresh” and “Copy”; the login token and key-like strings are hidden
+  (`***`).
+
+### Changed
+
+- **The “About” / “Check for updates” window is bigger** (760×580) and
+  resizable; buttons are at the bottom.
+- **Gentler on the GitHub API limit** (60 requests per hour per IP without
+  auth): the release list is remembered; at startup it is checked at most
+  once an hour, and repeated requests carry an ETag (a “not modified” reply
+  does not count against the limit).
+
 ## [1.5.1] — 2026-10-10
 
 ### Fixed

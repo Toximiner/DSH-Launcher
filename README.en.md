@@ -40,7 +40,11 @@ A small Electron app: a window that opens **DeepSeek Harness**
   release (`Toximiner/DSH-Launcher`) and npm for the latest
   `@deepseek-ai/dsh`. If a newer version exists and dsh is started by the
   launcher itself, before starting dsh a window asks: “Update / Not now /
-  Don’t ask again” (remembered per version — a newer release asks again).
+  Don’t ask again” (remembered per version — a newer release asks again). The
+  launcher update prompt includes “What’s new” — the changes of every
+  version newer than the installed one; after the update, the first start
+  of the new version shows them once more. The release list is remembered:
+  at startup GitHub is asked at most once an hour.
   - Launcher update: downloads the release .deb (progress on screen, sha256
     checked against the asset digest from GitHub) and installs it via
     pkexec — polkit asks for the password in a system dialog; as root the
@@ -69,7 +73,9 @@ A small Electron app: a window that opens **DeepSeek Harness**
     screen (F11).
   - “Help” — “Check for updates…” (the latest release on GitHub and the
     latest `@deepseek-ai/dsh` on npm, shown per component; no auto-install —
-    updating still happens through the startup prompt), “Open logs folder”,
+    updating still happens through the startup prompt) — with a “What’s
+    new” block for each newer version, “dsh log” (the latest lines of
+    `dsh.log`, tokens and keys hidden), “Open logs folder”,
     “About” (the launcher and dsh backend versions, the dsh path, Node.js,
     OS, GPU acceleration, the logs path; one click copies the whole block to
     the clipboard for a bug report).

@@ -23,7 +23,7 @@ JOBS=${JOBS:-4}
 ALL="close sigterm sigterm_ignored sigterm_double adopt_samegroup adopt_detached
      dsh_update_auto dsh_update_other_prefix dsh_update_root_prefix
      launcher_update launcher_update_denied launcher_update_nopkexec menu_about context_menu
-     find restart_dsh proxy window_state"
+     find restart_dsh proxy window_state whats_new dsh_log"
 SCENARIOS=${*:-$ALL}
 
 mkdir -p "$WORK/src" "$WORK/ctx" "$WORK/results"

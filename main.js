@@ -683,7 +683,19 @@ const PAGE_CSS = `
   .lang a{color:#6b7689;text-decoration:none;padding:2px 4px;border-radius:5px}
   .lang a:hover{color:#d7dce3}
   .lang a.on{color:#d7dce3;font-weight:600;pointer-events:none}
-  .dlg .wrap{max-width:none;padding:20px 24px}
+  .notes{max-height:34vh;overflow:auto;background:#151a23;border:1px solid #232b3a;border-radius:10px;
+    padding:4px 16px 8px;margin-bottom:14px}
+  .notes .ver{margin:12px 0 2px}
+  .notes h4{margin:10px 0 4px;font-size:13px;color:#9aa4b2;font-weight:600}
+  .notes ul{margin:4px 0 8px;padding-left:20px}
+  .notes li{line-height:1.5;color:#c7cedb;margin:3px 0}
+  .notes p{margin:4px 0 8px}
+  .notes a{color:#7aa2f7}
+  .dlg .wrap{max-width:none;padding:20px 24px;height:100%;box-sizing:border-box;
+    display:flex;flex-direction:column}
+  .dlg .notes{flex:1 1 auto;max-height:none;min-height:80px;margin-bottom:0}
+  .dlg pre.log{flex:1 1 auto;max-height:none;min-height:80px;margin:0;white-space:pre-wrap}
+  .dlg .actions{margin-top:auto;padding-top:14px;display:flex;gap:10px;flex-wrap:wrap}
   .dlg h1{font-size:18px}
   .dlg button{padding:9px 18px}
 `;
@@ -1272,22 +1284,149 @@ async function httpJson(url, headers, what) {
   return JSON.parse(body);
 }
 
-async function fetchLauncherLatest() {
-  const j = await httpJson(`https://api.github.com/repos/${UPDATE_GITHUB_REPO}/releases/latest`,
-    { 'User-Agent': 'dsh-launcher', 'Accept': 'application/vnd.github+json' }, 'GitHub API');
+/* ===== releasesCacheMode (чистая функция, тест test/notes.js) =====
+   Как получить список релизов GitHub: 'cache' — взять запомненный без
+   запроса (проверяли меньше maxAgeMs назад; ручная проверка — force —
+   так не делает), 'revalidate' — спросить с If-None-Match (ответ 304
+   «не изменилось» не расходует лимит 60/ч), 'fetch' — обычный запрос. */
+function releasesCacheMode(entry, now, maxAgeMs, force) {
+  const ok = entry && typeof entry === 'object' && Array.isArray(entry.list);
+  if (!ok) return 'fetch';
+  if (!force && Number.isFinite(entry.fetchedAt) && now - entry.fetchedAt >= 0 && now - entry.fetchedAt < maxAgeMs) return 'cache';
+  return entry.etag ? 'revalidate' : 'fetch';
+}
+/* ===== end releasesCacheMode ===== */
+
+const RELEASES_MAX_AGE_MS = 60 * 60 * 1000; // при запуске — не чаще раза в час
+const releasesCacheFile = () => path.join(app.getPath('userData'), 'releases-cache.json');
+
+// Список релизов GitHub с учётом кэша (см. releasesCacheMode).
+async function githubReleases({ force = false } = {}) {
+  let entry = null;
+  try { entry = JSON.parse(fs.readFileSync(releasesCacheFile(), 'utf8')); } catch { /* кэша нет */ }
+  const mode = releasesCacheMode(entry, Date.now(), RELEASES_MAX_AGE_MS, force);
+  if (mode === 'cache') return entry.list;
+  const headers = { 'User-Agent': 'dsh-launcher', 'Accept': 'application/vnd.github+json' };
+  if (mode === 'revalidate') headers['If-None-Match'] = entry.etag;
+  const res = await httpGet(`https://api.github.com/repos/${UPDATE_GITHUB_REPO}/releases?per_page=20`, { headers });
+  let body = '';
+  res.setEncoding('utf8');
+  for await (const c of res) body += c;
+  let list;
+  if (res.statusCode === 304 && entry) {
+    list = entry.list; // не изменилось — лимит не потрачен
+  } else if (res.statusCode === 200) {
+    list = JSON.parse(body);
+    entry = { etag: res.headers.etag || null, list };
+  } else {
+    throw new Error(`GitHub API: HTTP ${res.statusCode}`);
+  }
+  try {
+    fs.mkdirSync(path.dirname(releasesCacheFile()), { recursive: true });
+    fs.writeFileSync(releasesCacheFile(), JSON.stringify({ ...entry, fetchedAt: Date.now() }));
+  } catch { /* кэш — не обязателен */ }
+  return list;
+}
+
+// Список релизов (одним запросом): последний — наибольшая версия среди
+// опубликованных (не черновик, не prerelease); описания остальных — для
+// «Что нового» (изменения между установленной и новой версией).
+async function fetchLauncherLatest({ force = false } = {}) {
+  const list = await githubReleases({ force });
+  const rels = (Array.isArray(list) ? list : []).filter((r) => r && !r.draft && !r.prerelease && r.tag_name);
+  if (!rels.length) throw new Error('GitHub API: нет опубликованных релизов');
+  const ver = (r) => String(r.tag_name).replace(/^v/, '');
+  const j = rels.reduce((a, b) => (compareDebianVer(tagToPackageVersion(ver(b)), tagToPackageVersion(ver(a))) > 0 ? b : a));
   const asset = (j.assets || []).find((a) => String(a.name).endsWith('.deb'));
   const meta = {
-    version: String(j.tag_name || '').replace(/^v/, ''),
+    version: ver(j),
     htmlUrl: j.html_url || null,
     assetUrl: asset ? asset.browser_download_url : null,
     // GitHub отдаёт digest ассета вида «sha256:<hex>» (у старых релизов может не быть)
     assetSha256: asset && /^sha256:[0-9a-f]{64}$/i.test(String(asset.digest || ''))
       ? String(asset.digest).slice(7).toLowerCase()
       : null,
+    releases: rels.map((r) => ({ version: ver(r), body: String(r.body || '') })),
   };
   const fake = process.env.DSH_LAUNCHER_FAKE_LAUNCHER_LATEST; // разработка/тесты
   if (fake) meta.version = String(fake);
   return meta;
+}
+
+/* ===== releaseNotesLang (чистая функция, тест test/notes.js) =====
+   Описание релиза (собирается из CHANGELOG: «## Русский … --- ## English …
+   **Full Changelog**: …») → часть на языке окна. Нет разметки языков —
+   всё описание; строка «Full Changelog» отбрасывается. */
+function releaseNotesLang(body, lang) {
+  const text = String(body || '').replace(/\r\n/g, '\n');
+  const ru = text.match(/^##\s*Русский\s*$([\s\S]*?)(?=^---\s*$|^##\s*English\s*$|$(?![\s\S]))/m);
+  const en = text.match(/^##\s*English\s*$([\s\S]*)/m);
+  let part = text;
+  if (lang === 'ru' && ru) part = ru[1];
+  else if (lang !== 'ru' && en) part = en[1];
+  else if (ru) part = ru[1];
+  return part.replace(/^\*\*Full Changelog\*\*.*$/gm, '').replace(/^---\s*$/gm, '').trim();
+}
+/* ===== end releaseNotesLang ===== */
+
+/* ===== notesBetween (чистая функция, тест test/notes.js) =====
+   Релизы новее установленной версии и не новее предлагаемой — новые
+   сверху. scheme — как в updateStatus: 'deb' (пакет: 1.5.1-1) или
+   'semver' (сборка из исходников: 1.5.1). Установленная неизвестна —
+   только предлагаемая версия. */
+function notesBetween(releases, installed, latest, scheme) {
+  const key = (v) => (scheme === 'deb' ? tagToPackageVersion(v) : String(v).replace(/^v/, ''));
+  const cmp = (a, b) => (scheme === 'deb' ? compareDebianVer(a, b) : compareSemVer(a, b));
+  const top = key(latest);
+  return (releases || [])
+    .filter((r) => r && r.version && cmp(key(r.version), top) <= 0 &&
+      (installed ? cmp(key(r.version), installed) > 0 : cmp(key(r.version), top) === 0))
+    .sort((a, b) => cmp(key(b.version), key(a.version)));
+}
+/* ===== end notesBetween ===== */
+
+/* ===== mdToHtml (чистая функция, тест test/notes.js) =====
+   Маленький markdown для описаний релизов: заголовки (##, ###), списки «- »
+   (с переносом строк внутри пункта), абзацы, **жирный**, `код`, ссылки
+   [текст](https://…). Текст из сети: сначала всё экранируется, HTML из
+   описания в страницу не попадает; ссылки — только http(s). */
+function mdToHtml(md) {
+  const inline = (t) => esc(t)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_m, t2, u) => `<a href="${u}" target="_blank">${t2}</a>`);
+  const out = [];
+  let list = null;  // пункты текущего списка
+  let para = null;  // строки текущего абзаца
+  const flush = () => {
+    if (list) { out.push('<ul>' + list.map((li) => `<li>${inline(li)}</li>`).join('') + '</ul>'); list = null; }
+    if (para) { out.push(`<p>${inline(para.join(' '))}</p>`); para = null; }
+  };
+  for (const raw of String(md || '').split('\n')) {
+    const line = raw.replace(/\s+$/, '');
+    const h = line.match(/^#{2,4}\s+(.*)$/);
+    const li = line.match(/^\s*[-*]\s+(.*)$/);
+    if (!line.trim()) { flush(); continue; }
+    if (h) { flush(); out.push(`<h4>${inline(h[1])}</h4>`); continue; }
+    if (li) { if (para) flush(); list = list || []; list.push(li[1]); continue; }
+    if (list && /^\s+\S/.test(raw)) { list[list.length - 1] += ' ' + line.trim(); continue; } // перенос внутри пункта
+    if (list) flush();
+    para = para || [];
+    para.push(line.trim());
+  }
+  flush();
+  return out.join('');
+}
+/* ===== end mdToHtml ===== */
+
+// Блок «Что нового» — версии от новой к старой; пусто — ''.
+function notesBlockHtml(items) {
+  const parts = (items || [])
+    .map((r) => ({ v: r.version, html: mdToHtml(releaseNotesLang(r.body, UI_LANG)) }))
+    .filter((r) => r.html);
+  if (!parts.length) return '';
+  return `<p style="margin:14px 0 6px; color:#d7dce3">${tr('Что нового:', 'What’s new:')}</p>
+    <div class="notes">${parts.map((r) => `<div class="ver"><code>${esc(r.v)}</code></div>${r.html}`).join('')}</div>`;
 }
 
 async function fetchDshLatest() {
@@ -1330,6 +1469,7 @@ let updateState = {
   latest: null,        // новая версия (текст вопроса)
   installed: null,     // текущая версия
   htmlUrl: null,       // страница релиза (у dsh — страница пакета npm)
+  notes: [],           // «Что нового»: релизы между установленной и новой версией (лаунчер)
   debPath: null,       // скачанный .deb
   manualCmd: null,     // команда для терминала (режим manual)
   restartTimer: null,
@@ -1422,6 +1562,7 @@ function showUpdatePage(note, noteIsError = false) {
       <p>${tr(
         `Доступна версия <code>${esc(updateState.latest)}</code> (установлена: <code>${esc(updateState.installed)}</code>). Обновиться?`,
         `Version <code>${esc(updateState.latest)}</code> is available (installed: <code>${esc(updateState.installed)}</code>). Update?`)}</p>
+      ${kind === 'launcher' ? notesBlockHtml(updateState.notes) : ''}
       <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap">
         <button onclick="location.href='dshlauncher://update/install/'">${tr('Обновить', 'Update')}</button>
         <button onclick="location.href='dshlauncher://update/later/'">${tr('Не сейчас', 'Not now')}</button>
@@ -1647,6 +1788,7 @@ async function offerLauncherUpdate() {
   updateState.latest = latest.version;
   updateState.installed = installed;
   updateState.htmlUrl = latest.htmlUrl;
+  updateState.notes = notesBetween(latest.releases, installed, latest.version, 'deb');
   updateState.mode = 'ask';
   updateState.debPath = null;
   updateState.manualCmd = null;
@@ -1744,6 +1886,7 @@ async function offerDshUpdate() {
   }
   console.log(`[launcher] новый ${DSH_NPM_PKG}: ${latest.version} (установлен ${dshInstalledVersion})`);
   updateState.kind = 'dsh';
+  updateState.notes = []; // у npm нет описаний версий — только ссылка на пакет
   updateState.latest = latest.version;
   updateState.installed = dshInstalledVersion;
   updateState.htmlUrl = latest.htmlUrl;
@@ -1890,6 +2033,7 @@ function appMenuTemplate() {
       label: tr('Справка', 'Help'),
       submenu: [
         { label: tr('Проверить обновления…', 'Check for updates…'), click: () => { void showUpdateCheckDialog(); } },
+        { label: tr('Журнал dsh…', 'dsh log…'), click: () => showLogDialog() },
         { label: tr('Открыть папку логов', 'Open logs folder'), click: () => { void openLogsFolder(); } },
         { type: 'separator' },
         { label: tr('О программе', 'About'), click: () => { void showAboutDialog(); } },
@@ -2315,6 +2459,113 @@ function onDialogGpuEnable() {
   return noContentResponse();
 }
 
+/* ---------------- журнал dsh ---------------- */
+
+// «Справка → Журнал dsh»: хвост dsh.log в окне-диалоге. В логе есть токен
+// входа в GUI («dsh web: …?token=…») — его и похожее на ключи при показе и
+// копировании заменяем на ***.
+
+/* ===== redactLog (чистая функция, тест test/notes.js) ===== */
+function redactLog(text) {
+  return String(text || '')
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '') // ANSI-цвета
+    .replace(/([?&](?:token|access_token|key|api_key)=)[^\s&#"'<>]+/gi, '$1***')
+    .replace(/(\bBearer\s+)[A-Za-z0-9._~+/=-]{8,}/g, '$1***')
+    .replace(/\b(sk|pk|rk)-[A-Za-z0-9_-]{16,}/g, '$1-***')
+    .replace(/\b(gh[pousr]_)[A-Za-z0-9]{20,}/g, '$1***')
+    .replace(/((?:api[_-]?key|apikey|secret|password|passwd|access[_-]?token|auth[_-]?token)["']?\s*[:=]\s*["']?)[^\s"'&,;]+/gi, '$1***');
+}
+/* ===== end redactLog ===== */
+
+// Последние строки файла (читаем только хвост — лог бывает большим).
+function logTail(file, maxLines = 300, maxBytes = 256 * 1024) {
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+    const size = fs.fstatSync(fd).size;
+    const len = Math.min(size, maxBytes);
+    const buf = Buffer.alloc(len);
+    fs.readSync(fd, buf, 0, len, size - len);
+    let text = buf.toString('utf8');
+    if (len < size) text = text.slice(text.indexOf('\n') + 1); // первая строка — обрывок
+    return text.split('\n').slice(-maxLines).join('\n').replace(/\s+$/, '');
+  } catch { return null; } finally { if (fd !== undefined) try { fs.closeSync(fd); } catch { /* noop */ } }
+}
+
+function showLogDialog() {
+  const title = tr('Журнал dsh', 'dsh log');
+  const gen = openDialog(title);
+  if (gen === null) return;
+  const render = (copied) => {
+    const raw = logTail(LOG_FILE);
+    const text = raw === null ? null : redactLog(raw);
+    dialogCopyText = text || '';
+    const body = `
+      <p style="margin:0 0 8px"><code>${esc(LOG_FILE)}</code> — ${tr('последние строки; токены и ключи скрыты (***)', 'latest lines; tokens and keys are hidden (***)')}</p>
+      ${text === null
+        ? `<p>${tr('Журнала ещё нет — dsh не запускался лаунчером.', 'No log yet — dsh has not been started by the launcher.')}</p>`
+        : `<pre class="log">${esc(text || '…')}</pre>`}
+      <div class="actions">
+        <button onclick="location.href='dshlauncher://dialog/log-refresh/'">${tr('Обновить', 'Refresh')}</button>
+        ${text ? '<button onclick="location.href=\'dshlauncher://dialog/copy/\'">' + (copied ? tr('Скопировано', 'Copied') : tr('Скопировать', 'Copy')) + '</button>' : ''}
+        <button onclick="location.href='dshlauncher://dialog/logs/'">${tr('Папка логов', 'Logs folder')}</button>
+        ${dialogCloseButton()}
+      </div>
+      <script>const l = document.querySelector('pre.log'); if (l) l.scrollTop = l.scrollHeight;</script>`;
+    dialogPage(title, body);
+  };
+  dialogShow(gen, render);
+}
+
+/* ---------------- «Что нового» после обновления ---------------- */
+
+// Версия, с которой лаунчер запускался в прошлый раз. Стала выше — после
+// загрузки GUI один раз показываем изменения между ними. Первый запуск —
+// просто запоминаем. Нет ответа GitHub — версию не запоминаем: покажем при
+// следующем запуске.
+const lastVersionFile = () => path.join(app.getPath('userData'), 'last-version.json');
+let whatsNewChecked = false;
+
+/* ===== shouldShowWhatsNew (чистая функция, тест test/notes.js) ===== */
+function shouldShowWhatsNew(last, current, scheme) {
+  if (!last || !current) return false;
+  return (scheme === 'deb' ? compareDebianVer(current, last) : compareSemVer(current, last)) > 0;
+}
+/* ===== end shouldShowWhatsNew ===== */
+
+function saveLastVersion(v) {
+  try {
+    fs.mkdirSync(path.dirname(lastVersionFile()), { recursive: true });
+    fs.writeFileSync(lastVersionFile(), JSON.stringify({ version: v }));
+  } catch (e) { console.error('[launcher] last-version.json:', e.message); }
+}
+
+async function maybeShowWhatsNew() {
+  if (whatsNewChecked) return;
+  whatsNewChecked = true;
+  const current = await launcherVersionRaw();
+  if (!current) return;
+  let last = null;
+  try { last = JSON.parse(fs.readFileSync(lastVersionFile(), 'utf8')).version || null; } catch { /* первый запуск */ }
+  const scheme = process.execPath.startsWith('/opt/dsh-launcher/') ? 'deb' : 'semver';
+  if (!shouldShowWhatsNew(last, current, scheme)) { saveLastVersion(current); return; }
+  if (NO_UPDATE_CHECK) { saveLastVersion(current); return; } // в сеть ходить нельзя — молча
+  const latest = await updateChecks.launcher;
+  if (!latest || !latest.releases) return; // нет ответа GitHub — покажем в следующий раз
+  const items = notesBetween(latest.releases, last, current, scheme);
+  console.log(`[launcher] обновлён ${last} → ${current} — показываю «Что нового» (${items.length})`);
+  saveLastVersion(current);
+  const title = tr('Что нового', 'What’s new');
+  const gen = openDialog(title);
+  if (gen === null) return;
+  dialogCopyText = '';
+  const link = `https://github.com/${UPDATE_GITHUB_REPO}/releases`;
+  dialogShow(gen, () => dialogPage(title, `
+    <p style="margin:0 0 4px">${tr('DSH Launcher обновлён:', 'DSH Launcher was updated:')} <code>${esc(last)}</code> → <code>${esc(current)}</code></p>
+    ${notesBlockHtml(items) || `<p>${tr('Подробности — на', 'Details are on the')} <a href="${esc(link)}" target="_blank">${tr('странице релизов', 'releases page')}</a>.</p>`}
+    <div class="actions">${dialogCloseButton()}</div>`));
+}
+
 /* ---------------- окно-диалог: «О программе», «Проверить обновления» ---------------- */
 
 // Небольшое модальное окно поверх основного. GUI dsh под ним никуда не
@@ -2355,9 +2606,11 @@ function openDialog(title) {
   const d = new BrowserWindow({
     parent: win,
     modal: true,
-    width: 600,
-    height: 440,
-    resizable: false,
+    width: 760,
+    height: 580,
+    minWidth: 520,
+    minHeight: 360,
+    resizable: true, // длинный «Что нового» можно растянуть
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
@@ -2445,7 +2698,7 @@ async function showAboutDialog() {
         <a href="https://github.com/Toximiner/DSH-Launcher" target="_blank">${tr('Репозиторий лаунчера (GitHub)', 'Launcher repository (GitHub)')}</a> ·
         <a href="https://www.npmjs.com/package/@deepseek-ai/dsh" target="_blank">@deepseek-ai/dsh</a>
       </p>
-      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
+      <div class="actions">
         ${ver.loaded ? '<button onclick="location.href=\'dshlauncher://dialog/copy/\'">' + (copied ? tr('Скопировано', 'Copied') : tr('Скопировать для отчёта', 'Copy for report')) + '</button>' : ''}
         <button onclick="location.href='dshlauncher://dialog/logs/'">${tr('Папка логов', 'Logs folder')}</button>
         ${gpu.marker ? '<button onclick="location.href=\'dshlauncher://dialog/gpu-enable/\'">' + tr('Включить GPU снова', 'Re-enable GPU') + '</button>' : ''}
@@ -2467,9 +2720,9 @@ async function showUpdateCheckDialog() {
   dialogCopyText = '';
   dialogShow(gen, () => dialogPage(title,
     '<p>' + tr('Проверяю…', 'Checking…') + '</p>' +
-    '<div style="margin-top:14px">' + dialogCloseButton() + '</div>'));
+    '<div class="actions">' + dialogCloseButton() + '</div>'));
   const [latestL, latestD] = await Promise.all([
-    timedCheck(fetchLauncherLatest(), UPDATE_CHECK_TIMEOUT),
+    timedCheck(fetchLauncherLatest({ force: true }), UPDATE_CHECK_TIMEOUT),
     timedCheck(fetchDshLatest(), UPDATE_CHECK_TIMEOUT),
   ]);
   const [lver, dver] = await Promise.all([launcherVersionRaw(), dshVersionRaw()]);
@@ -2498,7 +2751,8 @@ async function showUpdateCheckDialog() {
         ${row('DSH Launcher', lver, lStatus)}
         ${row(tr('бэкенд dsh', 'dsh backend'), dver, dStatus)}
       </table>
-      <div style="display:flex; gap:10px; flex-wrap:wrap">${dialogCloseButton()}</div>`;
+      ${lSt === 'available' ? notesBlockHtml(notesBetween(latestL.releases, lver, latestL.version, isSrc ? 'semver' : 'deb')) : ''}
+      <div class="actions">${dialogCloseButton()}</div>`;
     dialogPage(title, body);
   });
 }
@@ -2862,6 +3116,8 @@ async function onReady() {
       if (route.startsWith('/menu/check/')) { void showUpdateCheckDialog(); return noContentResponse(); }
       if (route.startsWith('/find/')) return onFindRequest(route, request.url);
       if (route.startsWith('/dialog/logs/')) { void openLogsFolder(); return noContentResponse(); }
+      if (route.startsWith('/dialog/log-refresh/')) { if (dialogRender) dialogRender(false); return noContentResponse(); }
+      if (route.startsWith('/menu/log/')) { showLogDialog(); return noContentResponse(); }
       if (route.startsWith('/dialog/gpu-enable/')) return onDialogGpuEnable();
       if (route.startsWith('/menu/restart-dsh/')) { void restartDsh({ confirm: false }); return noContentResponse(); }
       if (route.startsWith('/dialog/close/')) return onDialogClose();
@@ -2908,6 +3164,8 @@ async function onReady() {
     }
   }, 8000);
   win.webContents.on('did-finish-load', () => {
+    // первая загрузка GUI dsh — показать «Что нового», если лаунчер обновился
+    try { if (new URL(win.webContents.getURL()).origin === new URL(PLAIN_URL).origin) void maybeShowWhatsNew(); } catch { /* data: */ }
     // перезагрузка под открытым диалогом (watchdog) сбрасывает затемнение
     if (dialogWin && !dialogWin.isDestroyed()) { dimKey = null; void dimMain(true); }
     try { console.log('[launcher] страница загружена:', win.webContents.getURL().slice(0, 120)); } catch { /* noop */ }

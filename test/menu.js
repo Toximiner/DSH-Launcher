@@ -129,13 +129,14 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
     openLogsFolder: () => calls.push('logs'),
     restartDsh: () => calls.push('restart'),
     setSpellcheck: (on) => calls.push('spell:' + on),
+    showLogDialog: () => calls.push('log'),
   })();
   const ru = mk((r) => r);
   const en = mk((r, e) => e);
   assert.deepStrictEqual(ru.map((m) => m.label), ['Файл', 'Правка', 'Вид', 'Справка'], 'пункты строки меню (RU)');
   assert.deepStrictEqual(en.map((m) => m.label), ['File', 'Edit', 'View', 'Help'], 'пункты строки меню (EN)');
   const item = (menu, label) => menu.submenu.find((i) => i.label === label);
-  const labels = (menu) => menu.submenu.map((i) => (i.type ? '|' : i.label));
+  const labels = (menu) => menu.submenu.map((i) => (i.type === 'separator' ? '|' : i.label));
 
   // «Файл»: перезапуск dsh и выход
   assert.deepStrictEqual(labels(ru[0]), ['Перезапустить dsh…', '|', 'Выйти'], '«Файл»');
@@ -145,9 +146,9 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
   assert.strictEqual(item(ru[0], 'Выйти').role, 'quit', '«Выйти» — штатный quit');
 
   // «Справка»: обновления, логи, «О программе» — последним пунктом
-  assert.deepStrictEqual(labels(ru[3]), ['Проверить обновления…', 'Открыть папку логов', '|', 'О программе'], '«Справка»');
-  assert.deepStrictEqual(labels(en[3]), ['Check for updates…', 'Open logs folder', '|', 'About'], '«Help»');
-  for (const [label, call] of [['Проверить обновления…', 'check'], ['Открыть папку логов', 'logs'], ['О программе', 'about']]) {
+  assert.deepStrictEqual(labels(ru[3]), ['Проверить обновления…', 'Журнал dsh…', 'Открыть папку логов', '|', 'О программе'], '«Справка»');
+  assert.deepStrictEqual(labels(en[3]), ['Check for updates…', 'dsh log…', 'Open logs folder', '|', 'About'], '«Help»');
+  for (const [label, call] of [['Проверить обновления…', 'check'], ['Журнал dsh…', 'log'], ['Открыть папку логов', 'logs'], ['О программе', 'about']]) {
     calls.length = 0;
     item(ru[3], label).click();
     assert.deepStrictEqual(calls, [call], `«${label}» → ${call}`);

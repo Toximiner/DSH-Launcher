@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node test/version.js && node test/port.js && node test/menu.js && node test/pages.js && node test/parsing.js && node test/fs-helpers.js && node test/kill-targets.js && node test/http.js",
+    "test": "node test/version.js && node test/port.js && node test/menu.js && node test/pages.js && node test/parsing.js && node test/fs-helpers.js && node test/kill-targets.js && node test/http.js && node test/notes.js",
     "icon": "node make-icon.js",
     "banner": "electron make-banner.js --no-sandbox"
   },

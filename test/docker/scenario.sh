@@ -163,6 +163,9 @@ dsh_update_root_prefix)
 launcher_update)
   start_launcher $FAKE || exit 1
   step "вопрос об обновлении лаунчера (1.1.0-1 → $LATEST)" drv wait-text "Update DSH Launcher.*Version $LATEST_RE is available \\(installed: 1\\.1\\.0-1\\s*\\)" 60
+  # «Что нового»: описания релизов от установленной 1.1.0-1 до последней,
+  # новые сверху — последняя версия первой, 1.1.1 (первая после 1.1.0) — тоже есть.
+  step "«Что нового»: изменения от $LATEST вниз до 1.1.1" drv wait-text "What.s new: $LATEST_RE .*1\\.1\\.1 " 5
   drv eval "document.querySelector('a[target=_blank]').click()" >/dev/null; sleep 1.5
   step "клик по ссылке релиза не уводит окно со страницы вопроса" drv wait-text 'Update DSH Launcher' 3
   drv eval "location.href='dshlauncher://update/install/'" >/dev/null
@@ -369,6 +372,42 @@ window_state)
   drv eval 'window.close()' >/dev/null
   step "лаунчер завершился" wait_exit "$LPID" 15
   check "размер записан при закрытии" grep -q '"width":' "$WS"
+  ;;
+
+whats_new)
+  # «Что нового» после обновления: в прошлый раз запускалась 1.0.0-1, сейчас
+  # установлена 1.1.0-1 — после загрузки GUI окно с изменениями 1.1.0;
+  # версия запоминается, при повторном запуске окна нет. «Последние» версии
+  # подменены — без вопроса об обновлении.
+  LV=/home/tester/.config/dsh-launcher/last-version.json
+  runuser -u tester -- sh -c "mkdir -p ~/.config/dsh-launcher && echo '{\"version\":\"1.0.0-1\"}' > $LV"
+  ENVS="DSH_LAUNCHER_FAKE_LAUNCHER_LATEST=1.0.0 DSH_LAUNCHER_FAKE_DSH_LATEST=0.0.1"
+  start_launcher $FAKE $ENVS || exit 1
+  step "окно дошло до GUI dsh" drv wait-url '^http://127.0.0.1:3080/' 60
+  step "окно «What’s new»: 1.0.0-1 → 1.1.0-1 и изменения 1.1.0" \
+    drv --page '^What.s new$' wait-text 'updated: 1\.0\.0-1 → 1\.1\.0-1 .*What.s new: 1\.1\.0 ' 30
+  check "версия 1.1.0-1 запомнена" grep -q '"1.1.0-1"' "$LV"
+  drv --page '^What.s new$' eval "(() => { location.href = 'dshlauncher://dialog/close/'; return 1; })()" >/dev/null
+  kill -TERM "$LPID"; wait_exit "$LPID" 15 >/dev/null
+  start_launcher $FAKE $ENVS || exit 1
+  step "повторный запуск: окно дошло до GUI dsh" drv wait-url '^http://127.0.0.1:3080/' 60
+  sleep 5
+  check "повторный запуск: окна «What’s new» нет" sh -c "! $DRV pages | grep -q '^What.s new |'"
+  kill -TERM "$LPID"; wait_exit "$LPID" 15 >/dev/null
+  ;;
+
+dsh_log)
+  # «Справка → Журнал dsh» (по маршруту): хвост dsh.log в окне-диалоге;
+  # токен входа из строки «dsh web: …?token=…» скрыт.
+  start_launcher $FAKE $NOUPD || exit 1
+  step "окно дошло до GUI dsh" drv wait-url '^http://127.0.0.1:3080/' 60
+  drv eval "location.href = 'dshlauncher://menu/log/'" >/dev/null
+  step "окно «dsh log»: строка входа со скрытым токеном" \
+    drv --page '^dsh log$' wait-text 'dsh web: http://127\.0\.0\.1:3080/\?token=\*\*\*' 15
+  check "настоящего токена в окне нет" sh -c "! $DRV --page '^dsh log\$' text | grep -q 'token=abc'"
+  drv --page '^dsh log$' eval "(() => { location.href = 'dshlauncher://dialog/close/'; return 1; })()" >/dev/null
+  check "лаунчер жив" kill -0 "$LPID"
+  kill -TERM "$LPID"; wait_exit "$LPID" 15 >/dev/null
   ;;
 
 *) echo "неизвестный сценарий"; exit 2 ;;
