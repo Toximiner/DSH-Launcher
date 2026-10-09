@@ -50,7 +50,7 @@ if [ ! -f "$WORK/ctx/$TARBALL" ]; then
   curl -fsSL "https://nodejs.org/dist/$NODE_VER/SHASUMS256.txt" | grep " $TARBALL\$" \
     | (cd "$WORK/ctx" && sha256sum -c --quiet -) || { rm -f "$WORK/ctx/$TARBALL"; exit 1; }
 fi
-cp -f "$HERE/Dockerfile" "$HERE/fakedsh.js" "$HERE/driver.js" "$HERE/proxy.js" "$HERE/scenario.sh" "$WORK/ctx/"
+cp -f "$HERE/Dockerfile" "$HERE/fakedsh.js" "$HERE/proxy.js" "$HERE"/*.py "$WORK/ctx/"
 
 # На CI (GITHUB_ACTIONS) ошибки дублируются аннотациями — их видно на
 # странице прогона без раскрытия логов (и через публичный API).
@@ -99,11 +99,12 @@ one() {
   extra="$extra -e LATEST=$LATEST"
   local name="dshl-test-${os//./}-$sc-$$"
   # --init: PID 1 в контейнере — tini, и SIGTERM от timeout доходит до
-  # scenario.sh (сам он как PID 1 сигналы без обработчика не получает).
+  # pytest (сам он как PID 1 сигналы без обработчика не получает).
   # Если и так не завершился — kill клиента и docker rm -f.
   timeout -k 30 600 docker run --rm --init --name "$name" --shm-size=1g \
     --security-opt seccomp=unconfined $extra \
-    dshl-test:$os /opt/t/scenario.sh "$sc" >"$WORK/results/$os-$sc.log" 2>&1
+    dshl-test:$os python3 -m pytest -p no:cacheprovider -q -rf --tb=short --color=no \
+    "/opt/t/test_scenarios.py::test_$sc" >"$WORK/results/$os-$sc.log" 2>&1
   local rc=$?
   docker rm -f "$name" >/dev/null 2>&1 || true
   [ $rc -eq 124 ] || [ $rc -eq 137 ] && echo "  [FAIL] сценарий не уложился в 10 минут" >>"$WORK/results/$os-$sc.log"
@@ -118,7 +119,8 @@ FAILED=$(grep -c '^FAIL' "$WORK/results/summary.txt" || true)
 TOTAL=$(wc -l < "$WORK/results/summary.txt")
 echo ">> итог: $((TOTAL - FAILED))/$TOTAL прошли"
 for f in $(grep '^FAIL' "$WORK/results/summary.txt" | awk '{print $2"-"$3}'); do
-  fails=$(grep -E '^\s+\[FAIL\]|TIMEOUT' "$WORK/results/$f.log" || tail -20 "$WORK/results/$f.log")
+  fails=$(grep -E '^E  |^(FAILED|ERROR) ' "$WORK/results/$f.log" | head -20 || true)
+  [ -n "$fails" ] || fails=$(tail -20 "$WORK/results/$f.log")
   echo "---- $f"; echo "$fails"
   annotate "Docker: $f" "$fails"
 done
