@@ -1,6 +1,6 @@
 {
   "name": "dsh-launcher",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Desktop launcher (Electron) for DeepSeek Harness: opens dsh web in a window, stops dsh on exit",
   "main": "main.js",
   "scripts": {
