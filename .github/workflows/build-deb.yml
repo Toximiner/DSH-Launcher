@@ -4,7 +4,7 @@ name: build-deb
 #   1. Дописать раздел `## [X.Y.Z]` в CHANGELOG.md (русский) и CHANGELOG.en.md
 #      (английский) — оба станут описанием релиза.
 #   2. (по желанию) Actions → docker-tests → Run workflow: сценарии
-#      установленного пакета на Ubuntu 24.04 / 26.04 (~15 минут).
+#      установленного пакета на Ubuntu 24.04 / 26.04 и Debian 13 (~15 минут).
 #   3. git tag vX.Y.Z && git push origin vX.Y.Z
 # Тег vX.Y.Z даёт пакет X.Y.Z-1; тег vX.Y.Z-R — пакет X.Y.Z-R (перепаковка
 # той же версии). Version: в deb/control для релиза переписывается из тега.

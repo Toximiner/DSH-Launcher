@@ -1,21 +1,24 @@
 name: docker-tests
 
-# Сценарии установленного .deb в Docker на чистых Ubuntu 24.04 / 26.04
-# (test/docker/run.sh): закрытие окна и сигналы, «усыновлённый» dsh,
-# обновление dsh через npm и самого лаунчера через pkexec.
+# Сценарии установленного .deb в Docker на чистых Ubuntu 24.04 / 26.04 и
+# Debian 13 (test/docker/run.sh): закрытие окна и сигналы, «усыновлённый»
+# dsh, обновление dsh через npm и самого лаунчера через pkexec, меню,
+# поиск, прокси и т. д.
 #
-# Только ручной запуск: ~15 минут, и сценарии ходят в сеть — GitHub API
-# (без токена: 60 запросов в час на IP, у раннеров IP общие), npm,
-# nodejs.org. Если лимит GitHub API исчерпан, лаунчер не узнаёт о новом
+# Каждая система — отдельная задача на своей машине (матрица), все
+# параллельно: прогон ~10–15 минут. Юнит-тесты — один раз, в задаче plan.
+#
+# Только ручной запуск, и сценарии ходят в сеть — GitHub API (без токена:
+# 60 запросов в час на IP, у раннеров IP общие), npm, nodejs.org. Если лимит GitHub API исчерпан, лаунчер не узнаёт о новом
 # релизе, и сценарии launcher_update* падают на вопросе об обновлении —
 # это не ошибка кода, перезапустите позже.
 on:
   workflow_dispatch:
     inputs:
       oses:
-        description: 'Версии Ubuntu через пробел'
+        description: 'Системы через пробел: версия Ubuntu (24.04) или debian-<версия> (debian-13)'
         required: false
-        default: '24.04 26.04'
+        default: '24.04 26.04 debian-13'
         type: string
       scenarios:
         description: 'Сценарии через пробел (пусто = все, см. test/docker/run.sh)'
@@ -24,11 +27,51 @@ on:
         type: string
 
 jobs:
-  docker-tests:
+  # Юнит-тесты и список систем для матрицы: строка «24.04 26.04 debian-13»
+  # → JSON-массив.
+  plan:
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 15
     permissions:
       contents: read
+    outputs:
+      oses: ${{ steps.oses.outputs.oses }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Systems
+        id: oses
+        env:
+          OSES: ${{ inputs.oses }}
+        run: |
+          set -eu
+          json=$(printf '%s' "$OSES" | jq -R -c 'split(" ") | map(select(length > 0))')
+          [ "$json" != "[]" ] || { echo "::error::Список систем пуст"; exit 1; }
+          echo "oses=$json" >> "$GITHUB_OUTPUT"
+          echo "Системы: $json"
+
+  docker:
+    needs: plan
+    name: docker (${{ matrix.os }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false # падение на одной системе не останавливает остальные
+      matrix:
+        os: ${{ fromJSON(needs.plan.outputs.oses) }}
     steps:
       - uses: actions/checkout@v5
 
@@ -43,12 +86,9 @@ jobs:
       - name: Download Electron binary
         run: npx install-electron
 
-      - name: Unit tests
-        run: npm test
-
       - name: Docker scenarios
         env:
-          OSES: ${{ inputs.oses }}
+          OSES: ${{ matrix.os }}
           SCENARIOS: ${{ inputs.scenarios }}
           JOBS: '4'
           # run.sh узнаёт последний релиз через GitHub API — с токеном без лимита 60/ч
@@ -60,6 +100,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: docker-test-logs
+          name: docker-test-logs-${{ matrix.os }}
           path: test/docker/.work/results/
           if-no-files-found: ignore

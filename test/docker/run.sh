@@ -1,9 +1,10 @@
 #!/bin/bash
-# Сценарии установленного лаунчера в Docker на чистых Ubuntu 24.04 и 26.04:
+# Сценарии установленного лаунчера в Docker на чистых Ubuntu 24.04, 26.04 и
+# Debian 13:
 # закрытие окна и сигналы, «усыновлённый» dsh, обновление dsh (npm) и самого
 # лаунчера (настоящий последний релиз с GitHub через pkexec).
 #
-#   test/docker/run.sh                 — все сценарии на обеих системах
+#   test/docker/run.sh                 — все сценарии на всех трёх системах
 #   test/docker/run.sh close sigterm   — только указанные
 #   OSES="26.04" JOBS=2 test/docker/run.sh
 #   OSES="debian-13" test/docker/run.sh   — Debian (debian:13)
@@ -17,7 +18,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
 WORK=$HERE/.work
 NODE_VER=v22.23.3
-OSES=${OSES:-"24.04 26.04"}
+OSES=${OSES:-"24.04 26.04 debian-13"}
 JOBS=${JOBS:-4}
 ALL="close sigterm sigterm_ignored sigterm_double adopt_samegroup adopt_detached
      dsh_update_auto dsh_update_other_prefix dsh_update_root_prefix
