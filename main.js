@@ -1808,6 +1808,62 @@ function buildAppMenu() {
   Menu.setApplicationMenu(menu);
 }
 
+/* ===== contextMenuItems (чистая функция, тест test/menu.js) =====
+   Контекстное меню по правому клику — по params события context-menu:
+   в поле ввода — Вырезать / Копировать / Вставить / Выделить всё (доступность
+   по editFlags); вне поля — Копировать (если есть выделение) и Выделить всё;
+   на ссылке — ещё «Копировать адрес ссылки». Пункты — { action, label,
+   enabled }, группы разделены { type: 'separator' }. */
+function contextMenuItems(params) {
+  const f = params.editFlags || {};
+  const groups = [];
+  if (params.linkURL) {
+    groups.push([{ action: 'copyLink', label: tr('Копировать адрес ссылки', 'Copy link address'), enabled: true }]);
+  }
+  if (params.isEditable) {
+    groups.push([
+      { action: 'cut', label: tr('Вырезать', 'Cut'), enabled: Boolean(f.canCut) },
+      { action: 'copy', label: tr('Копировать', 'Copy'), enabled: Boolean(f.canCopy) },
+      { action: 'paste', label: tr('Вставить', 'Paste'), enabled: Boolean(f.canPaste) },
+    ]);
+    groups.push([{ action: 'selectAll', label: tr('Выделить всё', 'Select all'), enabled: Boolean(f.canSelectAll) }]);
+  } else {
+    if (String(params.selectionText || '').trim()) {
+      groups.push([{ action: 'copy', label: tr('Копировать', 'Copy'), enabled: true }]);
+    }
+    groups.push([{ action: 'selectAll', label: tr('Выделить всё', 'Select all'), enabled: true }]);
+  }
+  const items = [];
+  for (const g of groups) {
+    if (items.length) items.push({ type: 'separator' });
+    items.push(...g);
+  }
+  return items;
+}
+/* ===== end contextMenuItems ===== */
+
+/* ===== showContextMenu (тест test/menu.js, с подставными win/Menu/clipboard) ===== */
+function showContextMenu(params) {
+  if (!win || win.isDestroyed()) return;
+  const wc = win.webContents;
+  const run = {
+    cut: () => wc.cut(),
+    copy: () => wc.copy(),
+    paste: () => wc.paste(),
+    selectAll: () => wc.selectAll(),
+    copyLink: () => clipboard.writeText(params.linkURL),
+  };
+  const items = contextMenuItems(params);
+  // В лог — что показали (Docker-сценарий context_menu проверяет по нему:
+  // кликнуть по нативному меню driver не может).
+  console.log('[launcher] контекстное меню: ' +
+    items.map((i) => (i.type ? '|' : i.label + (i.enabled ? '' : ' (off)'))).join(', '));
+  const template = items.map((i) =>
+    i.type ? i : { label: i.label, enabled: i.enabled, click: run[i.action] });
+  Menu.buildFromTemplate(template).popup({ window: win });
+}
+/* ===== end showContextMenu ===== */
+
 // Версия лаунчера: пакетная установка — dpkg; сборка из исходников —
 // package.json (теперь синхронизирован с релизом, 1.2.0+).
 async function launcherVersionRaw() {
@@ -2353,6 +2409,9 @@ async function onReady() {
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
+  // Правый клик — контекстное меню (копировать / вставить …): своего у
+  // Electron нет. И в GUI dsh, и на служебных страницах лаунчера.
+  win.webContents.on('context-menu', (_e, params) => showContextMenu(params));
   // диагностика: из лога должно быть видно, что окно показало и что загрузилось
   win.once('ready-to-show', () => { win.show(); console.log('[launcher] окно показано'); });
   // Страховка: на нативном Wayland ready-to-show может прийти с большим

@@ -233,6 +233,41 @@ menu_about)
   kill -TERM "$LPID"; wait_exit "$LPID" 15 >/dev/null
   ;;
 
+context_menu)
+  # Правый клик настоящим событием мыши (CDP) → нативное контекстное меню.
+  # Кликнуть по пунктам driver не может; что показано — сверяем по строке
+  # «контекстное меню: …» в логе лаунчера. Главное — лаунчер не падает.
+  start_launcher $FAKE $NOUPD || exit 1
+  step "окно дошло до GUI dsh" drv wait-url '^http://127.0.0.1:3080/' 60
+  # Абзац, поле ввода и ссылка в известных координатах (CSS px = координаты клика).
+  drv eval "document.body.innerHTML = '<p id=t style=\"position:absolute;left:20px;top:20px;margin:0;font-size:20px\">Hello context menu</p>' +
+    '<input id=i value=\"some input text\" style=\"position:absolute;left:20px;top:80px;width:300px;height:30px\">' +
+    '<a id=l href=\"https://example.com/\" style=\"position:absolute;left:20px;top:140px;font-size:20px\">a link</a>'; 'ok'" >/dev/null
+  step "на странице поле ввода, текст и ссылка" drv eval "Boolean(document.getElementById('i') && document.getElementById('l'))"
+  ctx() { # x y <regexp последней строки «контекстное меню: …»>
+    local n; n=$(grep -c 'контекстное меню:' "$OUT")
+    drv rclick "$1" "$2" || return 1
+    for _ in $(seq 1 20); do [ "$(grep -c 'контекстное меню:' "$OUT")" -gt "$n" ] && break; sleep 0.25; done
+    local last; last=$(grep 'контекстное меню:' "$OUT" | tail -1)
+    echo "$last" | grep -Eq -- "$3" || { echo "${last:-меню не показано}"; return 1; }
+  }
+  drv eval "getSelection().removeAllRanges(); 'ok'" >/dev/null
+  step "пустое место — только «Select all»" ctx 600 400 'меню: Select all$'
+  check "лаунчер жив" kill -0 "$LPID"
+  drv eval "const r = document.createRange(); r.selectNodeContents(document.getElementById('t')); getSelection().removeAllRanges(); getSelection().addRange(r); 'ok'" >/dev/null
+  step "выделенный текст — «Copy»" ctx 60 30 'меню: Copy, \|, Select all$'
+  check "лаунчер жив" kill -0 "$LPID"
+  drv eval "const i = document.getElementById('i'); i.focus(); i.select(); 'ok'" >/dev/null
+  step "поле ввода с выделением — Cut / Copy / Paste" ctx 100 95 'меню: Cut, Copy, Paste( \(off\))?, \|, Select all$'
+  check "лаунчер жив" kill -0 "$LPID"
+  drv eval "getSelection().removeAllRanges(); document.activeElement.blur(); 'ok'" >/dev/null
+  step "ссылка — «Copy link address»" ctx 40 150 'меню: Copy link address, \|, Select all$'
+  check "лаунчер жив" kill -0 "$LPID"
+  kill -TERM "$LPID"
+  step "лаунчер штатно завершился после контекстных меню" wait_exit "$LPID" 15
+  check "дерево dsh остановлено" tree_gone
+  ;;
+
 *) echo "неизвестный сценарий"; exit 2 ;;
 esac
 

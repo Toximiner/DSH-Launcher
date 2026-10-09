@@ -5,6 +5,15 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Added
+
+- **Right-click context menu** — in the dsh GUI and on the launcher's own
+  pages: “Cut” / “Copy” / “Paste” / “Select all” in text fields, “Copy” on
+  selected text, “Copy link address” on links. Labels follow the window
+  language (RU|EN).
+
 ## [1.3.1] — 2026-10-09
 
 ### Fixed

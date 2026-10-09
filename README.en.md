@@ -68,6 +68,11 @@ A small Electron app: a window that opens **DeepSeek Harness**
   - “Quit” — standard shutdown (stops the dsh the launcher started).
   Menu labels follow the window language (RU|EN).
 
+- **Right-click context menu** — both in the dsh GUI and on the launcher's
+  own pages: in a text field “Cut”, “Copy”, “Paste”, “Select all”; on
+  selected text — “Copy”; on a link — “Copy link address”. Labels follow the
+  window language.
+
 ## System requirements
 
 Tested on **Ubuntu 26.04** (desktop, Wayland) and on clean **Ubuntu 26.04**
