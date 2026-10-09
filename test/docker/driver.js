@@ -6,12 +6,22 @@
 //   driver.js wait-url <re> <sec>      — ждать URL страницы по regexp
 //   driver.js eval <js>                — выполнить JS на странице
 //   driver.js rclick <x> <y>           — правый клик мышью в точке окна (контекстное меню)
+//   driver.js --page <re> <команда …>  — в окне, чей заголовок или URL подходит под <re>
+//                                        (без --page — первое окно в списке CDP)
+//   driver.js pages                    — окна: заголовок | URL
 const CDP = 'http://127.0.0.1:9222';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function page() {
+let PAGE_RE = null; // --page <re>: окно по заголовку или URL
+
+async function pages() {
   const list = await (await fetch(`${CDP}/json/list`, { signal: AbortSignal.timeout(5000) })).json();
-  return list.find((t) => t.type === 'page') || null;
+  return list.filter((t) => t.type === 'page');
+}
+
+async function page() {
+  const list = await pages();
+  return (PAGE_RE ? list.find((t) => PAGE_RE.test(t.title) || PAGE_RE.test(t.url)) : list[0]) || null;
 }
 
 function pageText(url) {
@@ -78,7 +88,9 @@ async function waitFor(get, re, sec) {
 }
 
 (async () => {
-  const [cmd, a, b] = process.argv.slice(2);
+  let args = process.argv.slice(2);
+  if (args[0] === '--page') { PAGE_RE = new RegExp(args[1]); args = args.slice(2); }
+  const [cmd, a, b] = args;
   // Страховка от любого зависания: команда не живёт дольше своего таймаута + 20 с.
   const limit = (cmd === 'wait-text' || cmd === 'wait-url' ? Number(b || 30) : 10) + 20;
   setTimeout(() => { console.error(`driver: команда ${cmd} зависла (> ${limit} с)`); process.exit(1); }, limit * 1000).unref();
@@ -88,5 +100,6 @@ async function waitFor(get, re, sec) {
   else if (cmd === 'wait-url') await waitFor(current, a, Number(b || 30));
   else if (cmd === 'eval') console.log(await evalJs(a));
   else if (cmd === 'rclick') await rightClick(Number(a), Number(b));
+  else if (cmd === 'pages') for (const t of await pages()) console.log(`${t.title} | ${t.url.slice(0, 80)}`);
   else { console.error('unknown command'); process.exit(2); }
 })().catch((e) => { console.error('driver error:', e.message); process.exit(1); });

@@ -1,30 +1,11 @@
 #!/usr/bin/env node
-// Юнит-тест чистого помощника menuBackTarget (main.js, между маркерами
-// «===== menuBackTarget … =====»). main.js целиком не загружается (electron).
+// Юнит-тесты меню (main.js): contextMenuItems — какие пункты контекстного
+// меню показать, showContextMenu — что делает каждый пункт (на подставных
+// окне, Menu и буфере обмена), appMenuTemplate — строка меню окна.
+// main.js целиком не загружается (electron).
 'use strict';
 const assert = require('assert');
 const { extract } = require('./_extract');
-
-const menuBackTarget = extract('menuBackTarget');
-const page = function fakePage() {};
-
-// GUI dsh (тот же origin, что PLAIN_URL) → null = вернуться в GUI
-assert.strictEqual(menuBackTarget('http://127.0.0.1:3080/?token=abc', 'http://127.0.0.1:3080', page), null, 'GUI с токеном → null');
-assert.strictEqual(menuBackTarget('http://127.0.0.1:3080/chat/xyz', 'http://127.0.0.1:3080', page), null, 'маршрут внутри GUI → null');
-assert.strictEqual(menuBackTarget('http://127.0.0.1:3080', 'http://127.0.0.1:3080', page), null, 'корень GUI → null');
-
-// Служебная страница (data:) → её рендер-функция
-assert.strictEqual(menuBackTarget('data:text/html;charset=utf-8,hello', 'http://127.0.0.1:3080', page), page, 'data: URL → currentPage');
-
-// about:blank / мусор → currentPage (new URL бросит или origin не совпадёт)
-assert.strictEqual(menuBackTarget('about:blank', 'http://127.0.0.1:3080', page), page, 'about:blank → currentPage');
-assert.strictEqual(menuBackTarget('not a url', 'http://127.0.0.1:3080', page), page, 'мусор → currentPage');
-
-// Другой порт — это не GUI dsh
-assert.strictEqual(menuBackTarget('http://127.0.0.1:3181/?token=x', 'http://127.0.0.1:3080', page), page, 'чужой порт → currentPage');
-
-// currentPage == null (окно ещё на about:blank) → null в любом случае
-assert.strictEqual(menuBackTarget('data:text/html,hi', 'http://127.0.0.1:3080', null), null, 'currentPage null → null');
 
 // ---- contextMenuItems: пункты контекстного меню по правому клику ----
 const ctx = extract('contextMenuItems', { tr: (ru) => ru });
@@ -112,6 +93,17 @@ const byLabel = (env, label) => env.template.find((i) => i.label === label);
   assert.deepStrictEqual(env.calls, ['clipboard:https://example.com/a?b=1'], 'адрес ссылки в буфере');
 }
 {
+  // Окно передано явно (диалог «О программе»): меню и действия — в нём
+  const env = fakeEnv();
+  const calls2 = [];
+  const dlg = { isDestroyed: () => false, webContents: { cut() {}, copy: () => calls2.push('dlg.copy'), paste() {}, selectAll() {} } };
+  env.show({ isEditable: false, selectionText: 'v1.4.0' }, dlg);
+  assert.strictEqual(env.popupOpts.window, dlg, 'меню показывается в окне-диалоге');
+  byLabel(env, 'Копировать').click();
+  assert.deepStrictEqual(calls2, ['dlg.copy'], '«Копировать» — в диалоге');
+  assert.deepStrictEqual(env.calls.filter((c) => c.startsWith('wc.')), [], 'главное окно не тронуто');
+}
+{
   // Окно закрыто — меню не строится и не показывается
   const env = fakeEnv({ destroyed: true });
   env.show({ isEditable: true, editFlags: all });
@@ -124,4 +116,40 @@ const { mainSrc } = require('./_extract');
 assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContextMenu\(params\)\)/.test(mainSrc),
   'main.js: context-menu → showContextMenu');
 
-console.log('OK: menuBackTarget, contextMenuItems, showContextMenu — все проверки прошли');
+// ---- appMenuTemplate: строка меню окна ----
+{
+  const calls = [];
+  const mk = (tr) => extract('appMenuTemplate', {
+    tr,
+    showAboutDialog: () => calls.push('about'),
+    showUpdateCheckDialog: () => calls.push('check'),
+  })();
+  const ru = mk((r) => r);
+  const en = mk((r, e) => e);
+  assert.deepStrictEqual(ru.map((m) => m.label), ['Приложение', 'Правка'], 'пункты строки меню (RU)');
+  assert.deepStrictEqual(en.map((m) => m.label), ['Application', 'Edit'], 'пункты строки меню (EN)');
+
+  const app = ru[0].submenu;
+  app.find((i) => i.label === 'О программе…').click();
+  app.find((i) => i.label === 'Проверить обновления…').click();
+  assert.deepStrictEqual(calls, ['about', 'check'], '«О программе» и «Проверить обновления» открывают свои окна');
+  assert.strictEqual(app.find((i) => i.label === 'Выйти').role, 'quit', '«Выйти» — штатный quit');
+
+  // «Правка» — те же действия, что в контекстном меню, стандартными ролями
+  const edit = (t) => t[1].submenu.map((i) => (i.type ? '|' : `${i.label}:${i.role}:${i.accelerator}`));
+  assert.deepStrictEqual(edit(ru),
+    ['Вырезать:cut:CmdOrCtrl+X', 'Копировать:copy:CmdOrCtrl+C', 'Вставить:paste:CmdOrCtrl+V', '|', 'Выделить всё:selectAll:CmdOrCtrl+A'],
+    '«Правка» (RU)');
+  assert.deepStrictEqual(edit(en),
+    ['Cut:cut:CmdOrCtrl+X', 'Copy:copy:CmdOrCtrl+C', 'Paste:paste:CmdOrCtrl+V', '|', 'Select all:selectAll:CmdOrCtrl+A'],
+    '«Правка» (EN)');
+  // те же подписи, что у контекстного меню
+  const ctxLabels = ctx({ isEditable: true, editFlags: all }).filter((i) => !i.type).map((i) => i.label);
+  assert.deepStrictEqual(ru[1].submenu.filter((i) => !i.type).map((i) => i.label), ctxLabels, 'подписи совпадают с контекстным меню');
+  // сочетания — только подсказкой: не перехватывать горячие клавиши GUI dsh
+  for (const i of ru[1].submenu.filter((x) => !x.type)) {
+    assert.strictEqual(i.registerAccelerator, false, `«${i.label}»: registerAccelerator: false`);
+  }
+}
+
+console.log('OK: contextMenuItems, showContextMenu, appMenuTemplate — все проверки прошли');

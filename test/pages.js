@@ -34,6 +34,13 @@ const { extract } = require('./_extract');
   assert.ok(html.includes('dshlauncher://lang/ru/') && html.includes('class="on"'), 'активный язык помечен');
   assert.ok(html.includes('<p>тело</p>'), 'body не экранируется (доверенный HTML)');
 
+  // Режим окна-диалога: без переключателя языка, класс dlg на body
+  const dlg = htmlOf(pageHtml('About', '<p>x</p>', false, { dialog: true }));
+  assert.ok(dlg.includes('<body class="dlg">'), 'диалог: class="dlg"');
+  assert.ok(!dlg.includes('dshlauncher://lang/'), 'диалог: без переключателя RU | EN');
+  assert.ok(dlg.includes('<title>About</title>') && dlg.includes('<p>x</p>'), 'диалог: заголовок и тело');
+  assert.ok(html.includes('<body><div class="lang">'), 'обычная страница: body без класса');
+
   const bad = htmlOf(pageHtml('a<b', '', true));
   assert.ok(bad.includes('<div class="wrap err">'), 'ошибка → err-класс');
   assert.ok(bad.includes('a&lt;b'), 'title экранируется');

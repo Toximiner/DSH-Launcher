@@ -57,8 +57,10 @@ A small Electron app: a window that opens **DeepSeek Harness**
     network they fail at once and the launcher simply doesn’t ask). Disable with
     `DSH_LAUNCHER_NO_UPDATE_CHECK=1`.
 
-- **Window menu “Application”.** The menu bar is always visible; the
-  “Application” menu has three items:
+- **Window menu.** The menu bar is always visible:
+  “Edit” — “Cut”, “Copy”, “Paste”, “Select all” (same as the context menu;
+  Ctrl+X / C / V / A work without the menu too);
+  “Application” has three items:
   - “About” — the launcher and dsh backend versions, the dsh path, Node.js
     and OS; one click copies the whole block to the clipboard for pasting
     into a bug report.
@@ -66,6 +68,10 @@ A small Electron app: a window that opens **DeepSeek Harness**
     and the latest `@deepseek-ai/dsh` on npm, shown per component (no
     auto-install — updating still happens through the startup prompt).
   - “Quit” — standard shutdown (stops the dsh the launcher started).
+
+  “About” and “Check for updates” open in a small window over the launcher:
+  the dsh GUI underneath is dimmed but not reloaded. Close with “Close”, Esc
+  or the window's close button.
   Menu labels follow the window language (RU|EN).
 
 - **Right-click context menu** — both in the dsh GUI and on the launcher's

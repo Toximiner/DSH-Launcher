@@ -677,14 +677,18 @@ const PAGE_CSS = `
   .lang a{color:#6b7689;text-decoration:none;padding:2px 4px;border-radius:5px}
   .lang a:hover{color:#d7dce3}
   .lang a.on{color:#d7dce3;font-weight:600;pointer-events:none}
+  .dlg .wrap{max-width:none;padding:20px 24px}
+  .dlg h1{font-size:18px}
+  .dlg button{padding:9px 18px}
 `;
 
 /* ===== pageHtml (чистая функция, тест test/pages.js) ===== */
-function pageHtml(title, body, isError) {
+// opts.dialog — для окна-диалога: без переключателя языка, компактно.
+function pageHtml(title, body, isError, opts = {}) {
   const langLink = (code, label) =>
     `<a href="dshlauncher://lang/${code}/"${UI_LANG === code ? ' class="on"' : ''}>${label}</a>`;
-  const langSwitch = `<div class="lang">${langLink('ru', 'RU')} | ${langLink('en', 'EN')}</div>`;
-  const html = `<!doctype html><html lang="${UI_LANG}"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PAGE_CSS}</style></head><body>${langSwitch}<div class="wrap${isError ? ' err' : ''}"><h1><span class="dot"></span>${esc(title)}</h1>${body}</div></body></html>`;
+  const langSwitch = opts.dialog ? '' : `<div class="lang">${langLink('ru', 'RU')} | ${langLink('en', 'EN')}</div>`;
+  const html = `<!doctype html><html lang="${UI_LANG}"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PAGE_CSS}</style></head><body${opts.dialog ? ' class="dlg"' : ''}>${langSwitch}<div class="wrap${isError ? ' err' : ''}"><h1><span class="dot"></span>${esc(title)}</h1>${body}</div></body></html>`;
   return 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
 }
 /* ===== end pageHtml ===== */
@@ -1774,12 +1778,13 @@ async function offerDshUpdate() {
 
 /* ---------------- меню окна: «О программе», «Проверить обновления» ---------------- */
 
-// Строка меню сверху окна всегда видна (autoHideMenuBar: false), один пункт
-// «Приложение»:
-//   «О программе…»        — версии лаунчера и бэкенда dsh, путь dsh, Node.js и
-//                           ОС; собранный блок одной кнопкой копируется в
-//                           буфер — его можно вставить в отчёт о проблеме;
-//   «Проверить обновления…» — по требованию сверяет последний релиз на GitHub
+// Строка меню сверху окна всегда видна (autoHideMenuBar: false). Пункты:
+// «Правка» — Вырезать / Копировать / Вставить / Выделить всё (см.
+// appMenuTemplate); «Приложение»:
+//   «О программе…»        — (окно-диалог) версии лаунчера и бэкенда dsh, путь
+//                           dsh, Node.js и ОС; собранный блок одной кнопкой
+//                           копируется в буфер — для отчёта о проблеме;
+//   «Проверить обновления…» — (окно-диалог) сверяет последний релиз на GitHub
 //                           и последнюю версию @deepseek-ai/dsh на npm и
 //                           показывает результат (авто-обновления здесь нет:
 //                           установка — через штатный вопрос при старте);
@@ -1787,25 +1792,40 @@ async function offerDshUpdate() {
 // Подписи следуют за языком окна — при переключении RU|EN меню собирается
 // заново (onLangSwitch → buildAppMenu).
 
-let menuReturnTo = null; // рендер-функция служебной страницы, откуда зашли,
-                         // или null — были на GUI dsh
-let onMenuPage = false;
-let menuPageGen = 0; // счётчик поколений: late-результат async-проверки не перезахватит окно
-let aboutCopyText = '';
-
-function buildAppMenu() {
-  const menu = Menu.buildFromTemplate([
+/* ===== appMenuTemplate (чистая функция, тест test/menu.js) =====
+   «Правка» — те же действия, что в контекстном меню, через стандартные роли
+   (действуют на окно в фокусе — главное или диалог). Сочетания клавиш —
+   только подсказкой (registerAccelerator: false): Ctrl+X/C/V/A Chromium
+   обрабатывает сам, а перехват меню перебивал бы горячие клавиши GUI dsh. */
+function appMenuTemplate() {
+  const edit = (role, ru, en, key) =>
+    ({ role, label: tr(ru, en), accelerator: 'CmdOrCtrl+' + key, registerAccelerator: false });
+  return [
     {
       label: tr('Приложение', 'Application'),
       submenu: [
-        { label: tr('О программе…', 'About…'), click: () => { void showAboutPage(); } },
-        { label: tr('Проверить обновления…', 'Check for updates…'), click: () => { void showUpdateCheckPage(); } },
+        { label: tr('О программе…', 'About…'), click: () => { void showAboutDialog(); } },
+        { label: tr('Проверить обновления…', 'Check for updates…'), click: () => { void showUpdateCheckDialog(); } },
         { type: 'separator' },
         { label: tr('Выйти', 'Quit'), role: 'quit' },
       ],
     },
-  ]);
-  Menu.setApplicationMenu(menu);
+    {
+      label: tr('Правка', 'Edit'),
+      submenu: [
+        edit('cut', 'Вырезать', 'Cut', 'X'),
+        edit('copy', 'Копировать', 'Copy', 'C'),
+        edit('paste', 'Вставить', 'Paste', 'V'),
+        { type: 'separator' },
+        edit('selectAll', 'Выделить всё', 'Select all', 'A'),
+      ],
+    },
+  ];
+}
+/* ===== end appMenuTemplate ===== */
+
+function buildAppMenu() {
+  Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate()));
 }
 
 /* ===== contextMenuItems (чистая функция, тест test/menu.js) =====
@@ -1843,9 +1863,9 @@ function contextMenuItems(params) {
 /* ===== end contextMenuItems ===== */
 
 /* ===== showContextMenu (тест test/menu.js, с подставными win/Menu/clipboard) ===== */
-function showContextMenu(params) {
-  if (!win || win.isDestroyed()) return;
-  const wc = win.webContents;
+function showContextMenu(params, w = win) {
+  if (!w || w.isDestroyed()) return;
+  const wc = w.webContents;
   const run = {
     cut: () => wc.cut(),
     copy: () => wc.copy(),
@@ -1860,7 +1880,7 @@ function showContextMenu(params) {
     items.map((i) => (i.type ? '|' : i.label + (i.enabled ? '' : ' (off)'))).join(', '));
   const template = items.map((i) =>
     i.type ? i : { label: i.label, enabled: i.enabled, click: run[i.action] });
-  Menu.buildFromTemplate(template).popup({ window: win });
+  Menu.buildFromTemplate(template).popup({ window: w });
 }
 /* ===== end showContextMenu ===== */
 
@@ -1881,67 +1901,111 @@ async function dshVersionRaw() {
   return dshInstalledVersion;
 }
 
-/* ===== menuBackTarget (чистая функция, тест test/menu.js) ===== */
-// Если открыто GUI dsh (URL окна на origin PLAIN_URL — с токеном, с
-// любыми маршрутами внутри GUI) — возвращаемся в GUI (null); если служебная
-// страница (data:) — в её рендер-функцию. openMenuPage уже перехватывает
-// GUI-кейс до вызова, но проверка здесь остаётся: функция чистая и
-// тестируется независимо.
-function menuBackTarget(currentUrl, plainUrl, currentPage) {
-  let onDshGui = false;
-  try { onDshGui = new URL(currentUrl).origin === new URL(plainUrl).origin; } catch { /* data: / about:blank */ }
-  return onDshGui ? null : currentPage;
-}
-/* ===== end menuBackTarget ===== */
+/* ---------------- окно-диалог: «О программе», «Проверить обновления» ---------------- */
 
-// Переход на страницу меню: запоминаем, куда возвращаться. Сначала смотрим
-// URL: если окно на GUI dsh — это ВСЕГДА новый вход (флаг onMenuPage мог
-// устареть: GUI загружается в нескольких местах — recoverWindow,
-// launchDshInner, onRetryRequest, attach-at-startup). Если окно на data:-странице
-// и мы уже в меню — стек: «Назад» сначала ведёт на предыдущую страницу
-// меню, а дальше — по ней. menuPageGen инкрементируется при каждом
-// входе/выходе — late async-результат видит, что пользователь уже ушёл.
-function openMenuPage(render) {
-  if (!win || win.isDestroyed() || stopping) return;
-  menuPageGen++;
+// Небольшое модальное окно поверх основного. GUI dsh под ним никуда не
+// уходит — не перезагружается и не теряет состояние. Одно окно на оба
+// пункта: повторный вызов меняет содержимое. Закрыть — кнопкой, Esc или
+// крестиком окна. Кнопки — переходы на dshlauncher://dialog/… (ответ 204:
+// страница остаётся, обработчик делает своё).
+let dialogWin = null;
+let dialogRender = null; // перерисовка текущего содержимого: (copied) => void
+let dialogGen = 0;       // поколение: поздний async-результат не попадёт в закрытый или сменившийся диалог
+let dialogCopyText = '';
+let dimKey = null;       // ключ insertCSS затемнения главного окна
+
+// Затемнение содержимого главного окна, пока открыт диалог: слой поверх
+// страницы (только CSS, разметку GUI dsh не трогаем). Клики под ним и так
+// не проходят — диалог модальный.
+const DIM_CSS = `
+  @keyframes dshl-dim { from { opacity: 0 } to { opacity: 1 } }
+  html::after { content: ''; position: fixed; inset: 0; z-index: 2147483647;
+    background: rgba(0, 0, 0, 0.55); pointer-events: none;
+    animation: dshl-dim .15s ease-out; }`;
+
+async function dimMain(on) {
+  if (!win || win.isDestroyed()) return;
+  const wc = win.webContents;
   try {
-    if (new URL(win.webContents.getURL()).origin === new URL(PLAIN_URL).origin) {
-      // Окно на GUI dsh → новый вход, возврат в GUI
-      menuReturnTo = null;
-      onMenuPage = true;
-      showPage(render);
-      return;
-    }
-  } catch { /* about:blank / data: — продолжаем */ }
-  if (!onMenuPage) {
-    menuReturnTo = menuBackTarget(win.webContents.getURL(), PLAIN_URL, currentPage);
-    onMenuPage = true;
-  } else if (currentPage) {
-    menuReturnTo = currentPage;
-  }
-  showPage(render);
+    if (on && !dimKey) dimKey = await wc.insertCSS(DIM_CSS);
+    else if (!on && dimKey) { const k = dimKey; dimKey = null; await wc.removeInsertedCSS(k); }
+  } catch (e) { console.error('[launcher] затемнение:', e.message); }
 }
 
-async function onMenuBack() {
-  const back = menuReturnTo;
-  menuReturnTo = null;
-  onMenuPage = false;
-  menuPageGen++;
-  if (back) { currentPage = back; back(); }
-  else await recoverWindow(true); // были на GUI dsh — перечитываем его
-  return blankResponse();
+// Открыть диалог (или переиспользовать открытый) — поколение нового содержимого,
+// null — окна нет / идёт выход.
+function openDialog(title) {
+  if (!win || win.isDestroyed() || stopping) return null;
+  dialogGen++;
+  if (dialogWin && !dialogWin.isDestroyed()) { dialogWin.focus(); return dialogGen; }
+  const d = new BrowserWindow({
+    parent: win,
+    modal: true,
+    width: 580,
+    height: 360,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    title,
+    backgroundColor: '#0f1115',
+    show: false,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: false },
+  });
+  dialogWin = d;
+  d.setMenu(null);
+  d.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  d.webContents.on('context-menu', (_e, params) => showContextMenu(params, d));
+  d.webContents.on('before-input-event', (e, input) => {
+    if (input.type === 'keyDown' && input.key === 'Escape') { e.preventDefault(); d.close(); }
+  });
+  void dimMain(true);
+  d.once('ready-to-show', () => d.show());
+  // Wayland: ready-to-show может опоздать (как у главного окна) — показываем сами.
+  setTimeout(() => { if (!d.isDestroyed() && !d.isVisible()) d.show(); }, 3000);
+  d.on('closed', () => {
+    if (dialogWin === d) { dialogWin = null; dialogRender = null; dialogGen++; }
+    void dimMain(false);
+  });
+  return dialogGen;
 }
 
-function onMenuCopy() {
-  if (aboutCopyText) clipboard.writeText(aboutCopyText);
-  if (onMenuPage && currentPage) currentPage(true); // перерисовка: «Скопировано»
-  return blankResponse();
+// Показать содержимое, если диалог того же поколения ещё открыт.
+function dialogShow(gen, render) {
+  if (gen !== dialogGen || !dialogWin || dialogWin.isDestroyed()) return;
+  dialogRender = render;
+  render(false);
 }
 
-async function showAboutPage() {
-  if (!win || win.isDestroyed() || stopping) return;
+function dialogPage(title, body) {
+  if (!dialogWin || dialogWin.isDestroyed()) return;
+  dialogWin.loadURL(pageHtml(title, body, false, { dialog: true }))
+    .catch((e) => { if (e.code !== 'ERR_ABORTED') console.error('[launcher] диалог:', e.message); });
+}
+
+const dialogCloseButton = () =>
+  `<button onclick="location.href='dshlauncher://dialog/close/'">${tr('Закрыть', 'Close')}</button>`;
+
+function onDialogClose() {
+  if (dialogWin && !dialogWin.isDestroyed()) dialogWin.close();
+  return noContentResponse();
+}
+
+function onDialogCopy() {
+  if (dialogCopyText) clipboard.writeText(dialogCopyText);
+  if (dialogRender) dialogRender(true); // перерисовка: «Скопировано»
+  return noContentResponse();
+}
+
+async function showAboutDialog() {
+  const title = tr('О программе', 'About');
+  const gen = openDialog(title);
+  if (gen === null) return;
   const ver = { lver: null, dver: null, loaded: false };
-  openMenuPage((copied) => {
+  const render = (copied) => {
     const fromSrc = !process.execPath.startsWith('/opt/dsh-launcher/');
     const lLabel = fromSrc ? tr(' (сборка из исходников)', ' (built from source)') : '';
     const lDisp = ver.loaded ? (ver.lver || tr('неизвестно', 'unknown')) : tr('загружаю…', 'loading…');
@@ -1953,9 +2017,7 @@ async function showAboutPage() {
       ['Node.js', 'v' + process.versions.node],
       [tr('ОС', 'OS'), os.platform() + ' ' + os.release() + ' (' + os.arch() + ')'],
     ];
-    aboutCopyText = ver.loaded
-      ? rows.map(([k, v]) => k + ': ' + v).join('\n')
-      : tr('Версии ещё загружаются…', 'Versions still loading…');
+    dialogCopyText = ver.loaded ? rows.map(([k, v]) => k + ': ' + v).join('\n') : '';
     const body = `
       <table style="border-collapse:collapse; margin-bottom:4px">
         ${rows.map(([k, v]) =>
@@ -1966,47 +2028,37 @@ async function showAboutPage() {
         <a href="https://github.com/Toximiner/DSH-Launcher" target="_blank">${tr('Репозиторий лаунчера (GitHub)', 'Launcher repository (GitHub)')}</a> ·
         <a href="https://www.npmjs.com/package/@deepseek-ai/dsh" target="_blank">@deepseek-ai/dsh</a>
       </p>
-      <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap">
-        <button onclick="location.href='dshlauncher://menu/back/'">${tr('Вернуться', 'Back')}</button>
-        ${ver.loaded ? '<button onclick="location.href=\'dshlauncher://menu/copy/\'">' + (copied ? tr('Скопировано', 'Copied') : tr('Скопировать для отчёта', 'Copy for report')) + '</button>' : ''}
+      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
+        ${ver.loaded ? '<button onclick="location.href=\'dshlauncher://dialog/copy/\'">' + (copied ? tr('Скопировано', 'Copied') : tr('Скопировать для отчёта', 'Copy for report')) + '</button>' : ''}
+        ${dialogCloseButton()}
       </div>`;
-    showStatus(tr('О программе', 'About'), body, false);
-  });
+    dialogPage(title, body);
+  };
+  dialogShow(gen, render);
   // Версии подставим, когда придут (dsh --version может занять до 8 с)
   const [lver, dver] = await Promise.all([launcherVersionRaw(), dshVersionRaw()]);
-  if (!win || win.isDestroyed()) return;
-  ver.lver = lver; ver.dver = dver; ver.loaded = true;
-  if (onMenuPage && currentPage) currentPage(); // перерисовка с реальными версиями
+  Object.assign(ver, { lver, dver, loaded: true });
+  dialogShow(gen, render);
 }
 
-async function showUpdateCheckPage() {
-  if (!win || win.isDestroyed() || stopping) return;
-  const stale = { val: false }; // per-invocation: ответ A не портит страницу B
-  openMenuPage(() => {
-    const msg = stale.val
-      ? tr('Проверка отменена (страница была покинута до завершения)', 'Check cancelled (page was left before completion)')
-      : tr('Проверяю…', 'Checking…');
-    const body =
-      '<p>' + msg + '</p>' +
-      '<div style="margin-top:12px"><button onclick="location.href=\'dshlauncher://menu/back/\'">' + tr('Вернуться', 'Back') + '</button></div>';
-    showStatus(tr('Проверка обновлений', 'Update check'), body, false);
-  });
-  const gen = menuPageGen; // поколение до async — late-результат не перезахватит окно
+async function showUpdateCheckDialog() {
+  const title = tr('Проверка обновлений', 'Update check');
+  const gen = openDialog(title);
+  if (gen === null) return;
+  dialogCopyText = '';
+  dialogShow(gen, () => dialogPage(title,
+    '<p>' + tr('Проверяю…', 'Checking…') + '</p>' +
+    '<div style="margin-top:14px">' + dialogCloseButton() + '</div>'));
   const [latestL, latestD] = await Promise.all([
     timedCheck(fetchLauncherLatest(), UPDATE_CHECK_TIMEOUT),
     timedCheck(fetchDshLatest(), UPDATE_CHECK_TIMEOUT),
   ]);
   const [lver, dver] = await Promise.all([launcherVersionRaw(), dshVersionRaw()]);
-  // Пользователь мог уйти («Назад» / watchdog / dsh crash) — не показываем,
-  // но помечаем страницу «отменена», если на неё вернутся.
-  if (gen !== menuPageGen || !onMenuPage || !win || win.isDestroyed()) {
-    stale.val = true;
-    return;
-  }
   const isSrc = !process.execPath.startsWith('/opt/dsh-launcher/');
   const lSt = updateStatus(latestL && latestL.version, lver, isSrc ? 'semver' : 'deb');
   const dSt = updateStatus(latestD && latestD.version, dver, 'semver');
-  showPage(() => {
+  // Диалог закрыли или открыли в нём другое — dialogShow ничего не покажет.
+  dialogShow(gen, () => {
     let lStatus;
     if (lSt === 'nocheck') lStatus = tr('не удалось проверить (нет ответа GitHub)', 'could not check (no reply from GitHub)');
     else if (lSt === 'uptodate') lStatus = tr('актуальная версия', 'up to date');
@@ -2027,10 +2079,8 @@ async function showUpdateCheckPage() {
         ${row('DSH Launcher', lver, lStatus)}
         ${row(tr('бэкенд dsh', 'dsh backend'), dver, dStatus)}
       </table>
-      <div style="display:flex; gap:10px; flex-wrap:wrap">
-        <button onclick="location.href='dshlauncher://menu/back/'">${tr('Вернуться', 'Back')}</button>
-      </div>`;
-    showStatus(tr('Проверка обновлений', 'Update check'), body, false);
+      <div style="display:flex; gap:10px; flex-wrap:wrap">${dialogCloseButton()}</div>`;
+    dialogPage(title, body);
   });
 }
 
@@ -2139,13 +2189,10 @@ async function recoverWindow(force = false) {
     try { onDshPage = new URL(cur).origin === dshOrigin; } catch { /* data: и т.п. */ }
     if (onDshPage) {
       await loadInWin(PLAIN_URL);
-      onMenuPage = false; currentPage = null; // GUI загружен — не на странице меню
     } else if (await plainUrlIsAuthed()) {
       await loadInWin(PLAIN_URL); // окно на статус-странице, но куки валидны
-      onMenuPage = false; currentPage = null;
     } else {
       showPastePage(); // куки не пережили перезапуск — нужен токен нового процесса
-      onMenuPage = false; // currentPage устанавливает сам showPastePage
     }
   } catch (e) {
     console.error('[launcher] recover:', e.message);
@@ -2248,6 +2295,11 @@ async function onRetryRequest() {
 function blankResponse() {
   return new Response('<!doctype html><html><body style="background:#0f1115;margin:0"></body></html>',
     { headers: { 'content-type': 'text/html' } });
+}
+
+// «Нет содержимого»: навигация не происходит, страница остаётся как была.
+function noContentResponse() {
+  return new Response(null, { status: 204 });
 }
 
 // «Скопировать команду» на странице установки dsh.
@@ -2386,10 +2438,11 @@ async function onReady() {
       if (route.startsWith('/update/restart/')) return onUpdateChoice('restart');
       // О программе / проверка обновлений по URL — для Docker-сценариев
       // (driver.js не умеет кликать по нативному меню); штатно — пункт меню.
-      if (route.startsWith('/menu/about/')) { void showAboutPage(); return blankResponse(); }
-      if (route.startsWith('/menu/check/')) { void showUpdateCheckPage(); return blankResponse(); }
-      if (route.startsWith('/menu/back/')) return onMenuBack();
-      if (route.startsWith('/menu/copy/')) return onMenuCopy();
+      // Ответ 204: страница, с которой перешли (GUI dsh), остаётся на месте.
+      if (route.startsWith('/menu/about/')) { void showAboutDialog(); return noContentResponse(); }
+      if (route.startsWith('/menu/check/')) { void showUpdateCheckDialog(); return noContentResponse(); }
+      if (route.startsWith('/dialog/close/')) return onDialogClose();
+      if (route.startsWith('/dialog/copy/')) return onDialogCopy();
     } catch { /* noop */ }
     return onPasteRequest(request);
   });
@@ -2426,6 +2479,8 @@ async function onReady() {
     }
   }, 8000);
   win.webContents.on('did-finish-load', () => {
+    // перезагрузка под открытым диалогом (watchdog) сбрасывает затемнение
+    if (dialogWin && !dialogWin.isDestroyed()) { dimKey = null; void dimMain(true); }
     try { console.log('[launcher] страница загружена:', win.webContents.getURL().slice(0, 120)); } catch { /* noop */ }
   });
   win.webContents.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
@@ -2436,8 +2491,8 @@ async function onReady() {
     if (launcherUpdatedOnDisk) restartLauncher(); // новые файлы на диске — старому не подняться
   });
 
-  // Управление, как в браузере: в меню только «Приложение», ускорителей
-  // там нет, поэтому стандартные (Reload и т.п.) не работают — привязываем свои.
+  // Управление, как в браузере: стандартных ускорителей (Reload и т.п.) в
+  // меню нет — привязываем свои. (Сочетания в «Правке» — только подсказки.)
   // F5 / Ctrl+R — перезагрузка страницы; Ctrl+Shift+R — без кэша.
   // Ctrl+= / Ctrl+- — шаг масштаба; Ctrl+0 — сброс.
   // Масштаб сохраняем в userData, чтобы не сбрасывался между запусками.

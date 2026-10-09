@@ -5,6 +5,20 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Added
+
+- **“Edit” menu** in the window menu bar: “Cut”, “Copy”, “Paste”, “Select
+  all” — the same actions as the context menu.
+
+### Changed
+
+- **“About” and “Check for updates” open in a small window over the
+  launcher** instead of a separate page. The dsh GUI underneath is dimmed
+  but stays as it was — no reload, typed text kept. Close with “Close”,
+  Esc or the window's close button.
+
 ## [1.4.0] — 2026-10-09
 
 ### Added
