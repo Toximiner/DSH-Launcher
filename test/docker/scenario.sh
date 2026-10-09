@@ -383,14 +383,16 @@ whats_new)
   runuser -u tester -- sh -c "mkdir -p ~/.config/dsh-launcher && echo '{\"version\":\"1.0.0-1\"}' > $LV"
   ENVS="DSH_LAUNCHER_FAKE_LAUNCHER_LATEST=1.0.0 DSH_LAUNCHER_FAKE_DSH_LATEST=0.0.1"
   start_launcher $FAKE $ENVS || exit 1
-  step "окно дошло до GUI dsh" drv wait-url '^http://127.0.0.1:3080/' 60
+  # окно «What’s new» открывается сразу после загрузки GUI и может оказаться
+  # первым в списке CDP — GUI ищем по адресу (--page)
+  step "окно дошло до GUI dsh" drv --page '^http://127\.0\.0\.1:3080/' wait-url '^http://127.0.0.1:3080/' 60
   step "окно «What’s new»: 1.0.0-1 → 1.1.0-1 и изменения 1.1.0" \
     drv --page '^What.s new$' wait-text 'updated: 1\.0\.0-1 → 1\.1\.0-1 .*What.s new: 1\.1\.0 ' 30
   check "версия 1.1.0-1 запомнена" grep -q '"1.1.0-1"' "$LV"
   drv --page '^What.s new$' eval "(() => { location.href = 'dshlauncher://dialog/close/'; return 1; })()" >/dev/null
   kill -TERM "$LPID"; wait_exit "$LPID" 15 >/dev/null
   start_launcher $FAKE $ENVS || exit 1
-  step "повторный запуск: окно дошло до GUI dsh" drv wait-url '^http://127.0.0.1:3080/' 60
+  step "повторный запуск: окно дошло до GUI dsh" drv --page '^http://127\.0\.0\.1:3080/' wait-url '^http://127.0.0.1:3080/' 60
   sleep 5
   check "повторный запуск: окна «What’s new» нет" sh -c "! $DRV pages | grep -q '^What.s new |'"
   kill -TERM "$LPID"; wait_exit "$LPID" 15 >/dev/null
