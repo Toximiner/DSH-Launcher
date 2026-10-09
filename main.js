@@ -32,6 +32,7 @@ const execFileAsync = promisify(execFile);
 
 // Разбор строки аргументов как в shell: пробелы разделяют, '…' и "…"
 // группируют, \ экранирует следующий символ (внутри '…' — нет).
+/* ===== splitArgs (чистая функция, тест test/parsing.js) ===== */
 function splitArgs(str) {
   const out = [];
   let cur = '';
@@ -56,6 +57,7 @@ function splitArgs(str) {
   if (has) out.push(cur);
   return out;
 }
+/* ===== end splitArgs ===== */
 
 /* ========================= настройки ========================= */
 
@@ -251,16 +253,24 @@ function dshEnv(extra) {
   return envWithBinDir(DSH_BIN, extra);
 }
 
+/* ===== firstErrLine (чистая функция, тест test/parsing.js) =====
+   Строка с самой ошибкой полезнее хвоста стектрейса («at …», «Node.js vX»):
+   первая строка с «error»/«ERR_», не начинающаяся с «at », иначе — последние
+   3 строки; в любом случае не длиннее 300 символов. */
+function firstErrLine(stderr) {
+  const lines = String(stderr || '').trim().split('\n').map((l) => l.trim()).filter(Boolean);
+  const errLine = lines.find((l) => !l.startsWith('at ') && /error|ERR_/i.test(l));
+  return (errLine || lines.slice(-3).join(' ')).slice(0, 300);
+}
+/* ===== end firstErrLine ===== */
+
 async function probeDsh(bin) {
   if (!bin || !fs.existsSync(bin)) return { ok: false, reason: 'missing' };
   try {
     const { stdout: out } = await execFileAsync(bin, ['--version'], { encoding: 'utf8', timeout: 8000, env: envWithBinDir(bin) });
     return { ok: true, version: (out.trim().split('\n').pop() || '').trim() };
   } catch (e) {
-    // Строка с самой ошибкой полезнее хвоста стектрейса («at …», «Node.js vX»).
-    const lines = String(e.stderr || e.message || '').trim().split('\n').map((l) => l.trim()).filter(Boolean);
-    const errLine = lines.find((l) => !l.startsWith('at ') && /error|ERR_/i.test(l));
-    const detail = (errLine || lines.slice(-3).join(' ')).slice(0, 300);
+    const detail = firstErrLine(e.stderr || e.message);
     return { ok: false, reason: 'broken', detail };
   }
 }
@@ -278,9 +288,11 @@ function nvmBinDirs() {
 }
 
 // Окружение с каталогом бинарника первым в PATH (для `#!/usr/bin/env node`-скриптов).
+/* ===== envWithBinDir (чистая функция, тест test/parsing.js) ===== */
 function envWithBinDir(bin, extra) {
   return { ...process.env, PATH: path.dirname(bin) + path.delimiter + (process.env.PATH || ''), ...extra };
 }
+/* ===== end envWithBinDir ===== */
 
 // Исполняемый файл: рядом с dsh, в PATH, иначе в nvm (при запуске с ярлыка
 // nvm в PATH нет).
@@ -358,10 +370,12 @@ const INSTALL_CMD = 'npm install -g @deepseek-ai/dsh';
 // Право записи проверяем у ближайшего существующего каталога: на чистой
 // системе <prefix>/lib/node_modules ещё нет (появится при первой глобальной
 // установке), и ENOENT от него раньше ошибочно означал «npm нет».
+/* ===== writableOrCreatable (тест test/fs-helpers.js) ===== */
 function writableOrCreatable(dir) {
   while (!fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
   try { fs.accessSync(dir, fs.constants.W_OK); return true; } catch { return false; }
 }
+/* ===== end writableOrCreatable ===== */
 
 // dsh нужен Node.js 22+. npm ставит его и на более старый Node без единого
 // предупреждения (Ubuntu 24.04: Node 18 из apt), а потом dsh не запускается.
@@ -459,11 +473,13 @@ function killGroup(pid, signal, groupOnly = false) {
   }
 }
 
+/* ===== groupAlive (тест test/pages.js) ===== */
 function groupAlive(pid, groupOnly = false) {
   try { process.kill(-pid, 0); return true; } catch { /* noop */ }
   if (groupOnly) return false;
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
+/* ===== end groupAlive ===== */
 
 // Главный процесс dsh завершился (по коду или по сигналу).
 function dshLeaderExited() {
@@ -522,6 +538,7 @@ function portListenerPid(port) {
 
 // pgid процесса: поле 5 из /proc/<pid>/stat (comm в скобках может содержать
 // пробелы — считаем от последней «)»).
+/* ===== pgidOf (тест test/fs-helpers.js) ===== */
 function pgidOf(pid) {
   try {
     const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
@@ -529,6 +546,7 @@ function pgidOf(pid) {
     return pgid > 0 ? pgid : null;
   } catch { return null; }
 }
+/* ===== end pgidOf ===== */
 
 // Что убивать у «усыновлённого» dsh (после самовозрождения). Ручки на новый
 // процесс у нас нет, поэтому:
@@ -536,18 +554,25 @@ function pgidOf(pid) {
 //    группы, и тогда kill(-pid) не сработал бы, а потомки остались бы жить;
 //  - группа исходного dsh: в ней могли остаться его потомки (лидер мёртв —
 //    только группа, без запасного варианта по pid).
-function adoptedTargets() {
+/* ===== pickKillTargets (чистая функция, тест test/kill-targets.js) =====
+   portPid — процесс на порту (или null), portPgid — его группа (или null),
+   selfPgid — группа лаунчера, oldPgid — группа исходного dsh (или null). */
+function pickKillTargets(portPid, portPgid, selfPgid, oldPgid) {
   const targets = [];
-  const pid = portListenerPid(PORT);
-  if (pid) {
-    const pgid = pgidOf(pid);
-    if (pgid && pgid !== pgidOf(process.pid)) targets.push({ id: pgid, groupOnly: true });
-    else targets.push({ id: pid, groupOnly: false }); // группа наша/неизвестна — только сам процесс
+  if (portPid) {
+    if (portPgid && portPgid !== selfPgid) targets.push({ id: portPgid, groupOnly: true });
+    else targets.push({ id: portPid, groupOnly: false }); // группа наша/неизвестна — только сам процесс
   }
-  if (adoptedOldPgid && !targets.some((t) => t.id === adoptedOldPgid)) {
-    targets.push({ id: adoptedOldPgid, groupOnly: true });
+  if (oldPgid && oldPgid !== selfPgid && !targets.some((t) => t.id === oldPgid)) {
+    targets.push({ id: oldPgid, groupOnly: true });
   }
   return targets;
+}
+/* ===== end pickKillTargets ===== */
+
+function adoptedTargets() {
+  const pid = portListenerPid(PORT);
+  return pickKillTargets(pid, pid ? pgidOf(pid) : null, pgidOf(process.pid), adoptedOldPgid);
 }
 
 async function stopAdoptedDsh() {
@@ -616,15 +641,19 @@ async function handleDshExit(code, signal) {
   }
 }
 
+/* ===== retryButton (тест test/pages.js) ===== */
 function retryButton() {
   return `<button onclick="location.href='dshlauncher://retry/'" style="margin-bottom:16px">${tr('Проверить снова', 'Check again')}</button>`;
 }
+/* ===== end retryButton ===== */
 
 /* ---------------- страницы-статусы ---------------- */
 
+/* ===== esc (чистая функция, тест test/parsing.js) ===== */
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[c]));
+/* ===== end esc ===== */
 
 const PAGE_CSS = `
   html,body{margin:0;height:100%;background:#0f1115;color:#d7dce3;
@@ -650,6 +679,7 @@ const PAGE_CSS = `
   .lang a.on{color:#d7dce3;font-weight:600;pointer-events:none}
 `;
 
+/* ===== pageHtml (чистая функция, тест test/pages.js) ===== */
 function pageHtml(title, body, isError) {
   const langLink = (code, label) =>
     `<a href="dshlauncher://lang/${code}/"${UI_LANG === code ? ' class="on"' : ''}>${label}</a>`;
@@ -657,6 +687,7 @@ function pageHtml(title, body, isError) {
   const html = `<!doctype html><html lang="${UI_LANG}"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PAGE_CSS}</style></head><body>${langSwitch}<div class="wrap${isError ? ' err' : ''}"><h1><span class="dot"></span>${esc(title)}</h1>${body}</div></body></html>`;
   return 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
 }
+/* ===== end pageHtml ===== */
 
 function stderrBlock() {
   return `<pre>${esc(stderrTail.slice(-50).join('\n') || tr('нет данных журнала', 'no log data'))}</pre>`;
@@ -691,6 +722,7 @@ function onLangSwitch(lang) {
     } catch (e) { console.error('[launcher] ui-lang.json:', e.message); }
     console.log(`[launcher] язык окна: ${lang}`);
   }
+  buildAppMenu(); // подписи меню на новом языке
   if (currentPage) currentPage();
   return blankResponse();
 }
@@ -827,6 +859,7 @@ async function showInstallPage(note, noteIsError = false) {
  */
 const MARKET_PKG = 'dshmarket';
 
+/* ===== profileFromArgs (чистая функция, тест test/parsing.js) ===== */
 function profileFromArgs(args) {
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--profile' && args[i + 1]) return args[i + 1];
@@ -834,7 +867,17 @@ function profileFromArgs(args) {
   }
   return null;
 }
+/* ===== end profileFromArgs ===== */
 const DSH_PROFILE = profileFromArgs(DSH_ARGS);
+
+/* ===== marketInPkg (чистая функция, тест test/parsing.js) =====
+   Есть ли плагин маркета в package.json профиля: в dependencies или в
+   dsh.profile.bundles. */
+function marketInPkg(pkg) {
+  const bundles = (pkg.dsh && pkg.dsh.profile && pkg.dsh.profile.bundles) || [];
+  return Boolean(pkg.dependencies && pkg.dependencies[MARKET_PKG]) || bundles.includes(MARKET_PKG);
+}
+/* ===== end marketInPkg ===== */
 
 function marketInstalled() {
   if (!DSH_PROFILE) return true; // профиль не задан — не знаем, где смотреть, не спрашиваем
@@ -842,8 +885,7 @@ function marketInstalled() {
     const dshHome = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
     const pkgFile = path.join(dshHome, 'profiles', DSH_PROFILE, 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
-    const bundles = (pkg.dsh && pkg.dsh.profile && pkg.dsh.profile.bundles) || [];
-    return Boolean(pkg.dependencies && pkg.dependencies[MARKET_PKG]) || bundles.includes(MARKET_PKG);
+    return marketInPkg(pkg);
   } catch {
     return false; // профиля ещё нет — dsh plugin add создаст его сам
   }
@@ -1113,6 +1155,21 @@ function tagToPackageVersion(tag) {
 }
 /* ===== конец сравнения версий ===== */
 
+/* ===== updateStatus (чистая функция, тест test/version.js) =====
+   Итог проверки обновлений для одного компонента: 'nocheck' (нет ответа
+   сервера), 'notinstalled' (установленная версия неизвестна), 'uptodate',
+   'available'. scheme: 'semver' — npm и сборка лаунчера из исходников
+   (package.json, без ревизии), 'deb' — пакет лаунчера (тег vX.Y.Z → X.Y.Z-1). */
+function updateStatus(latest, installed, scheme) {
+  if (!latest) return 'nocheck';
+  if (!installed) return 'notinstalled';
+  const cmp = scheme === 'deb'
+    ? compareDebianVer(tagToPackageVersion(latest), installed)
+    : compareSemVer(latest, installed);
+  return cmp <= 0 ? 'uptodate' : 'available';
+}
+/* ===== end updateStatus ===== */
+
 // Установленная версия лаунчера через dpkg (пакет .deb dsh-launcher).
 // null — не установлен через .deb (запуск из исходников) → не проверяем.
 async function launcherInstalledVersion() {
@@ -1132,6 +1189,7 @@ async function launcherInstalledVersion() {
 
 // Проверка с дедлайном: по истечении ms возвращает null — медленная сеть
 // не должна держать окно на вопросе, а вопрос — не держать старт.
+/* ===== timedCheck (тест test/pages.js) ===== */
 function timedCheck(promise, ms) {
   return new Promise((resolve) => {
     const t = setTimeout(() => resolve(null), ms);
@@ -1141,6 +1199,7 @@ function timedCheck(promise, ms) {
     );
   });
 }
+/* ===== end timedCheck ===== */
 
 async function fetchLauncherLatest() {
   const res = await electronNet.fetch(`https://api.github.com/repos/${UPDATE_GITHUB_REPO}/releases/latest`, {
@@ -1705,6 +1764,215 @@ async function offerDshUpdate() {
   }
 }
 
+/* ---------------- меню окна: «О программе», «Проверить обновления» ---------------- */
+
+// Строка меню сверху окна всегда видна (autoHideMenuBar: false), один пункт
+// «Приложение»:
+//   «О программе…»        — версии лаунчера и бэкенда dsh, путь dsh, Node.js и
+//                           ОС; собранный блок одной кнопкой копируется в
+//                           буфер — его можно вставить в отчёт о проблеме;
+//   «Проверить обновления…» — по требованию сверяет последний релиз на GitHub
+//                           и последнюю версию @deepseek-ai/dsh на npm и
+//                           показывает результат (авто-обновления здесь нет:
+//                           установка — через штатный вопрос при старте);
+//   «Выйти»               — штатное завершение (останавливает dsh).
+// Подписи следуют за языком окна — при переключении RU|EN меню собирается
+// заново (onLangSwitch → buildAppMenu).
+
+let menuReturnTo = null; // рендер-функция служебной страницы, откуда зашли,
+                         // или null — были на GUI dsh
+let onMenuPage = false;
+let menuPageGen = 0; // счётчик поколений: late-результат async-проверки не перезахватит окно
+let aboutCopyText = '';
+
+function buildAppMenu() {
+  const menu = Menu.buildFromTemplate([
+    {
+      label: tr('Приложение', 'Application'),
+      submenu: [
+        { label: tr('О программе…', 'About…'), click: () => { void showAboutPage(); } },
+        { label: tr('Проверить обновления…', 'Check for updates…'), click: () => { void showUpdateCheckPage(); } },
+        { type: 'separator' },
+        { label: tr('Выйти', 'Quit'), role: 'quit' },
+      ],
+    },
+  ]);
+  Menu.setApplicationMenu(menu);
+}
+
+// Версия лаунчера: пакетная установка — dpkg; сборка из исходников —
+// package.json (теперь синхронизирован с релизом, 1.2.0+).
+async function launcherVersionRaw() {
+  if (process.execPath.startsWith('/opt/dsh-launcher/')) return launcherInstalledVersion();
+  try { return require('./package.json').version; } catch { return null; }
+}
+
+// Версия dsh: если DSH_BIN исполняется — спрашиваем её (--version), иначе —
+// версия, найденная installCheck при старте.
+async function dshVersionRaw() {
+  if (DSH_BIN) {
+    const r = await probeDsh(DSH_BIN);
+    if (r.ok) return r.version;
+  }
+  return dshInstalledVersion;
+}
+
+/* ===== menuBackTarget (чистая функция, тест test/menu.js) ===== */
+// Если открыто GUI dsh (URL окна на origin PLAIN_URL — с токеном, с
+// любыми маршрутами внутри GUI) — возвращаемся в GUI (null); если служебная
+// страница (data:) — в её рендер-функцию. openMenuPage уже перехватывает
+// GUI-кейс до вызова, но проверка здесь остаётся: функция чистая и
+// тестируется независимо.
+function menuBackTarget(currentUrl, plainUrl, currentPage) {
+  let onDshGui = false;
+  try { onDshGui = new URL(currentUrl).origin === new URL(plainUrl).origin; } catch { /* data: / about:blank */ }
+  return onDshGui ? null : currentPage;
+}
+/* ===== end menuBackTarget ===== */
+
+// Переход на страницу меню: запоминаем, куда возвращаться. Сначала смотрим
+// URL: если окно на GUI dsh — это ВСЕГДА новый вход (флаг onMenuPage мог
+// устареть: GUI загружается в нескольких местах — recoverWindow,
+// launchDshInner, onRetryRequest, attach-at-startup). Если окно на data:-странице
+// и мы уже в меню — стек: «Назад» сначала ведёт на предыдущую страницу
+// меню, а дальше — по ней. menuPageGen инкрементируется при каждом
+// входе/выходе — late async-результат видит, что пользователь уже ушёл.
+function openMenuPage(render) {
+  if (!win || win.isDestroyed() || stopping) return;
+  menuPageGen++;
+  try {
+    if (new URL(win.webContents.getURL()).origin === new URL(PLAIN_URL).origin) {
+      // Окно на GUI dsh → новый вход, возврат в GUI
+      menuReturnTo = null;
+      onMenuPage = true;
+      showPage(render);
+      return;
+    }
+  } catch { /* about:blank / data: — продолжаем */ }
+  if (!onMenuPage) {
+    menuReturnTo = menuBackTarget(win.webContents.getURL(), PLAIN_URL, currentPage);
+    onMenuPage = true;
+  } else if (currentPage) {
+    menuReturnTo = currentPage;
+  }
+  showPage(render);
+}
+
+async function onMenuBack() {
+  const back = menuReturnTo;
+  menuReturnTo = null;
+  onMenuPage = false;
+  menuPageGen++;
+  if (back) { currentPage = back; back(); }
+  else await recoverWindow(true); // были на GUI dsh — перечитываем его
+  return blankResponse();
+}
+
+function onMenuCopy() {
+  if (aboutCopyText) clipboard.writeText(aboutCopyText);
+  if (onMenuPage && currentPage) currentPage(true); // перерисовка: «Скопировано»
+  return blankResponse();
+}
+
+async function onMenuAboutRequest() { await showAboutPage(); return blankResponse(); }
+async function onMenuCheckRequest() { await showUpdateCheckPage(); return blankResponse(); }
+
+async function showAboutPage() {
+  if (!win || win.isDestroyed() || stopping) return;
+  const ver = { lver: null, dver: null, loaded: false };
+  openMenuPage((copied) => {
+    const fromSrc = !process.execPath.startsWith('/opt/dsh-launcher/');
+    const lLabel = fromSrc ? tr(' (сборка из исходников)', ' (built from source)') : '';
+    const lDisp = ver.loaded ? (ver.lver || tr('неизвестно', 'unknown')) : tr('загружаю…', 'loading…');
+    const dDisp = ver.loaded ? (ver.dver || tr('не установлен', 'not installed')) : tr('загружаю…', 'loading…');
+    const rows = [
+      ['DSH Launcher', lDisp + lLabel],
+      [tr('бэкенд dsh', 'dsh backend'), dDisp],
+      [tr('путь к dsh', 'path to dsh'), DSH_BIN || '—'],
+      ['Node.js', 'v' + process.versions.node],
+      [tr('ОС', 'OS'), os.platform() + ' ' + os.release() + ' (' + os.arch() + ')'],
+    ];
+    aboutCopyText = ver.loaded
+      ? rows.map(([k, v]) => k + ': ' + v).join('\n')
+      : tr('Версии ещё загружаются…', 'Versions still loading…');
+    const body = `
+      <table style="border-collapse:collapse; margin-bottom:4px">
+        ${rows.map(([k, v]) =>
+          '<tr><td style="padding:3px 14px 3px 0; color:#9aa4b2; white-space:nowrap">' + esc(k) + '</td>' +
+          '<td style="padding:3px 0"><code>' + esc(v) + '</code></td></tr>').join('')}
+      </table>
+      <p style="margin-top:10px">
+        <a href="https://github.com/Toximiner/DSH-Launcher" target="_blank">${tr('Репозиторий лаунчера (GitHub)', 'Launcher repository (GitHub)')}</a> ·
+        <a href="https://www.npmjs.com/package/@deepseek-ai/dsh" target="_blank">@deepseek-ai/dsh</a>
+      </p>
+      <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap">
+        <button onclick="location.href='dshlauncher://menu/back/'">${tr('Вернуться', 'Back')}</button>
+        ${ver.loaded ? '<button onclick="location.href=\'dshlauncher://menu/copy/\'">' + (copied ? tr('Скопировано', 'Copied') : tr('Скопировать для отчёта', 'Copy for report')) + '</button>' : ''}
+      </div>`;
+    showStatus(tr('О программе', 'About'), body, false);
+  });
+  // Версии подставим, когда придут (dsh --version может занять до 8 с)
+  const [lver, dver] = await Promise.all([launcherVersionRaw(), dshVersionRaw()]);
+  if (!win || win.isDestroyed()) return;
+  ver.lver = lver; ver.dver = dver; ver.loaded = true;
+  if (onMenuPage && currentPage) currentPage(); // перерисовка с реальными версиями
+}
+
+async function showUpdateCheckPage() {
+  if (!win || win.isDestroyed() || stopping) return;
+  const stale = { val: false }; // per-invocation: ответ A не портит страницу B
+  openMenuPage(() => {
+    const msg = stale.val
+      ? tr('Проверка отменена (страница была покинута до завершения)', 'Check cancelled (page was left before completion)')
+      : tr('Проверяю…', 'Checking…');
+    const body =
+      '<p>' + msg + '</p>' +
+      '<div style="margin-top:12px"><button onclick="location.href=\'dshlauncher://menu/back/\'">' + tr('Вернуться', 'Back') + '</button></div>';
+    showStatus(tr('Проверка обновлений', 'Update check'), body, false);
+  });
+  const gen = menuPageGen; // поколение до async — late-результат не перезахватит окно
+  const [latestL, latestD] = await Promise.all([
+    timedCheck(fetchLauncherLatest(), UPDATE_CHECK_TIMEOUT),
+    timedCheck(fetchDshLatest(), UPDATE_CHECK_TIMEOUT),
+  ]);
+  const [lver, dver] = await Promise.all([launcherVersionRaw(), dshVersionRaw()]);
+  // Пользователь мог уйти («Назад» / watchdog / dsh crash) — не показываем,
+  // но помечаем страницу «отменена», если на неё вернутся.
+  if (gen !== menuPageGen || !onMenuPage || !win || win.isDestroyed()) {
+    stale.val = true;
+    return;
+  }
+  const isSrc = !process.execPath.startsWith('/opt/dsh-launcher/');
+  const lSt = updateStatus(latestL && latestL.version, lver, isSrc ? 'semver' : 'deb');
+  const dSt = updateStatus(latestD && latestD.version, dver, 'semver');
+  showPage(() => {
+    let lStatus;
+    if (lSt === 'nocheck') lStatus = tr('не удалось проверить (нет ответа GitHub)', 'could not check (no reply from GitHub)');
+    else if (lSt === 'uptodate') lStatus = tr('актуальная версия', 'up to date');
+    // 'notinstalled' (версию не узнали) — как и раньше, просто называем последнюю
+    else lStatus = tr('доступна версия <code>' + esc(latestL.version) + '</code>', 'version <code>' + esc(latestL.version) + '</code> is available');
+    let dStatus;
+    if (dSt === 'nocheck') dStatus = tr('не удалось проверить (нет ответа npm)', 'could not check (no reply from npm)');
+    else if (dSt === 'notinstalled') dStatus = tr('dsh не установлен', 'dsh is not installed');
+    else if (dSt === 'uptodate') dStatus = tr('актуальная версия', 'up to date');
+    else dStatus = tr('доступна версия <code>' + esc(latestD.version) + '</code> (будет предложено при следующем запуске)', 'version <code>' + esc(latestD.version) + '</code> is available (will be offered on next launch)');
+    const row = (name, ver, status) =>
+      '<tr><td style="padding:3px 14px 3px 0; color:#9aa4b2; white-space:nowrap">' + esc(name) + '</td>' +
+      '<td style="padding:3px 0">' +
+      (ver ? tr('установлена ', 'installed ') + '<code>' + esc(ver) + '</code>' + ' — ' + status : status) +
+      '</td></tr>';
+    const body = `
+      <table style="border-collapse:collapse; margin-bottom:14px">
+        ${row('DSH Launcher', lver, lStatus)}
+        ${row(tr('бэкенд dsh', 'dsh backend'), dver, dStatus)}
+      </table>
+      <div style="display:flex; gap:10px; flex-wrap:wrap">
+        <button onclick="location.href='dshlauncher://menu/back/'">${tr('Вернуться', 'Back')}</button>
+      </div>`;
+    showStatus(tr('Проверка обновлений', 'Update check'), body, false);
+  });
+}
+
 /* ---------------- запуск dsh и доведение окна до GUI ---------------- */
 
 // Защита от повторного запуска: двойной клик «Проверить ещё раз» или
@@ -1810,10 +2078,13 @@ async function recoverWindow(force = false) {
     try { onDshPage = new URL(cur).origin === dshOrigin; } catch { /* data: и т.п. */ }
     if (onDshPage) {
       await loadInWin(PLAIN_URL);
+      onMenuPage = false; currentPage = null; // GUI загружен — не на странице меню
     } else if (await plainUrlIsAuthed()) {
       await loadInWin(PLAIN_URL); // окно на статус-странице, но куки валидны
+      onMenuPage = false; currentPage = null;
     } else {
       showPastePage(); // куки не пережили перезапуск — нужен токен нового процесса
+      onMenuPage = false; // currentPage устанавливает сам showPastePage
     }
   } catch (e) {
     console.error('[launcher] recover:', e.message);
@@ -1848,10 +2119,12 @@ function startWatchdog() {
 // Маршрут запроса dshlauncher://…: у нестандартной схемы первый сегмент
 // (retry, install, paste, market) URL-парсер кладёт в host, а не в pathname —
 // склеиваем обратно: dshlauncher://install/run/ -> '/install/run/'.
+/* ===== launcherRoute (чистая функция, тест test/parsing.js) ===== */
 function launcherRoute(url) {
   const u = new URL(url);
   return '/' + u.host + u.pathname;
 }
+/* ===== end launcherRoute ===== */
 
 function onPasteRequest(request) {
   try {
@@ -2027,7 +2300,8 @@ if (!app.requestSingleInstanceLock()) {
 
 async function onReady() {
   installSignalHandlers();
-  Menu.setApplicationMenu(null);
+  buildAppMenu(); // меню «Приложение»: О программе / Проверить обновления / Выйти
+                  // (подписи следуют за языком окна, при RU|EN собирается заново)
   loadLangPref();
   // Проверки обновлений — параллельно всему остальному; перед стартом dsh
   // их ждём не дольше UPDATE_CHECK_TIMEOUT.
@@ -2049,6 +2323,8 @@ async function onReady() {
       if (route.startsWith('/update/recheck/')) return onUpdateChoice('recheck');
       if (route.startsWith('/update/copy/')) return onUpdateChoice('copy');
       if (route.startsWith('/update/restart/')) return onUpdateChoice('restart');
+      if (route.startsWith('/menu/back/')) return onMenuBack();
+      if (route.startsWith('/menu/copy/')) return onMenuCopy();
     } catch { /* noop */ }
     return onPasteRequest(request);
   });
@@ -2060,7 +2336,7 @@ async function onReady() {
     minHeight: 480,
     title: 'DeepSeek Harness',
     backgroundColor: '#0f1115',
-    autoHideMenuBar: true,
+    autoHideMenuBar: false, // строка меню «Приложение» всегда видна
     show: false,
     webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: false },
   });
@@ -2092,8 +2368,8 @@ async function onReady() {
     if (launcherUpdatedOnDisk) restartLauncher(); // новые файлы на диске — старому не подняться
   });
 
-  // Управление, как в браузере: меню отключено (Menu.setApplicationMenu(null)),
-  // поэтому стандартные ускорители (Reload и т.п.) не работают — привязываем свои.
+  // Управление, как в браузере: в меню только «Приложение», ускорителей
+  // там нет, поэтому стандартные (Reload и т.п.) не работают — привязываем свои.
   // F5 / Ctrl+R — перезагрузка страницы; Ctrl+Shift+R — без кэша.
   // Ctrl+= / Ctrl+- — шаг масштаба; Ctrl+0 — сброс.
   // Масштаб сохраняем в userData, чтобы не сбрасывался между запусками.

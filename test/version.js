@@ -45,4 +45,23 @@ assert.strictEqual(tagToPackageVersion('v1.1.1'), '1.1.1-1', 'tag: vX.Y.Z → X.
 assert.strictEqual(tagToPackageVersion('v1.1.1-R'), '1.1.1-R', 'tag: vX.Y.Z-R → X.Y.Z-R');
 assert.strictEqual(tagToPackageVersion('2.0.0'), '2.0.0-1', 'tag: без v');
 
+// итог проверки обновлений (меню «Проверить обновления»)
+const { extract } = require('./_extract');
+const updateStatus = extract('updateStatus', { compareDebianVer, compareSemVer, tagToPackageVersion });
+assert.strictEqual(updateStatus(null, '1.2.0', 'semver'), 'nocheck', 'status: нет ответа сервера');
+assert.strictEqual(updateStatus(null, null, 'deb'), 'nocheck', 'status: нет ответа важнее неизвестной версии');
+assert.strictEqual(updateStatus('1.2.0', null, 'semver'), 'notinstalled', 'status: версия не известна');
+// пакет лаунчера: тег 1.2.0 = пакет 1.2.0-1
+assert.strictEqual(updateStatus('1.2.0', '1.2.0-1', 'deb'), 'uptodate', 'status deb: та же версия');
+assert.strictEqual(updateStatus('1.2.0', '1.2.0-2', 'deb'), 'uptodate', 'status deb: ревизия пакета выше тега');
+assert.strictEqual(updateStatus('1.2.1', '1.2.0-1', 'deb'), 'available', 'status deb: новее');
+assert.strictEqual(updateStatus('1.2.0-2', '1.2.0-1', 'deb'), 'available', 'status deb: тег с новой ревизией');
+// сборка из исходников: package.json без ревизии (ошибка: 1.2.0 видела «доступна 1.2.0»)
+assert.strictEqual(updateStatus('1.2.0', '1.2.0', 'semver'), 'uptodate', 'status src: та же версия');
+assert.strictEqual(updateStatus('1.2.1', '1.2.0', 'semver'), 'available', 'status src: новее');
+assert.strictEqual(updateStatus('1.1.0', '1.2.0', 'semver'), 'uptodate', 'status src: локальная новее релиза');
+// dsh (npm)
+assert.strictEqual(updateStatus('0.2.0', '0.2.0-rc.2', 'semver'), 'available', 'status npm: релиз после rc');
+assert.strictEqual(updateStatus('0.2.0-rc.2', '0.2.0', 'semver'), 'uptodate', 'status npm: rc не предлагается поверх релиза');
+
 console.log('OK: сравнение версий — все проверки прошли');

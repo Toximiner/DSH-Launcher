@@ -5,6 +5,22 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Added
+
+- **Window menu “Application”.** The menu bar is now always visible, with a
+  single “Application” item:
+  - “About” — the launcher version (dpkg for packaged installs, package.json
+    for source builds — marked as such) and the dsh backend version, the dsh
+    path, Node.js and OS; a “Copy for report” button puts the whole block on
+    the clipboard.
+  - “Check for updates” — on-demand re-check of the latest release on GitHub
+    and the latest `@deepseek-ai/dsh` on npm, shown per component (no
+    auto-install — updating still happens through the startup prompt).
+  - “Quit” — standard shutdown (stops the dsh the launcher started).
+  Menu labels follow the window language (RU|EN) and are rebuilt on switch.
+
 ## [1.2.0] — 2026-10-08
 
 ### Added

@@ -57,6 +57,17 @@ A small Electron app: a window that opens **DeepSeek Harness**
     network they fail at once and the launcher simply doesn’t ask). Disable with
     `DSH_LAUNCHER_NO_UPDATE_CHECK=1`.
 
+- **Window menu “Application”.** The menu bar is always visible; the
+  “Application” menu has three items:
+  - “About” — the launcher and dsh backend versions, the dsh path, Node.js
+    and OS; one click copies the whole block to the clipboard for pasting
+    into a bug report.
+  - “Check for updates” — on-demand re-check of the latest release on GitHub
+    and the latest `@deepseek-ai/dsh` on npm, shown per component (no
+    auto-install — updating still happens through the startup prompt).
+  - “Quit” — standard shutdown (stops the dsh the launcher started).
+  Menu labels follow the window language (RU|EN).
+
 ## System requirements
 
 Tested on **Ubuntu 26.04** (desktop, Wayland) and on clean **Ubuntu 26.04**
@@ -111,7 +122,7 @@ Constants at the very top of `main.js`, or environment variables:
 | `DSH_LAUNCHER_NO_UPDATE_CHECK` | —             | `1` — skip version checks (GitHub Releases + npm) |
 
 The language of the launcher's own screens (startup, dsh installation,
-marketplace prompt, updates, errors) can be switched right in the window — **RU | EN**
+marketplace prompt, updates, errors) can be switched right in the window — **RU|EN**
 in the top-right corner; the choice is saved to
 `~/.config/dsh-launcher/ui-lang.json`. Until a choice is made, the system
 locale is used (`LC_ALL` / `LC_MESSAGES` / `LANG`): `ru*` means Russian,
