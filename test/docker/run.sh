@@ -6,6 +6,7 @@
 #   test/docker/run.sh                 — все сценарии на обеих системах
 #   test/docker/run.sh close sigterm   — только указанные
 #   OSES="26.04" JOBS=2 test/docker/run.sh
+#   OSES="debian-13" test/docker/run.sh   — Debian (debian:13)
 #
 # Нужны Docker, собранный Electron (npm install && npx install-electron) и
 # сеть (GitHub, npm, nodejs.org). Контейнеры идут с seccomp=unconfined —
@@ -62,15 +63,21 @@ annotate() { # заголовок, текст (многострочный)
 # загрузки с одного IP (429 Too Many Requests), а IP раннеров общие — поэтому
 # 3 попытки с паузой, затем то же с mirror.gcr.io (официальное зеркало
 # Docker Hub от Google).
+# OS — версия Ubuntu («26.04») или Debian («debian-13» → debian:13).
+base_of() { case "$1" in debian-*) echo "debian:${1#debian-}" ;; *) echo "ubuntu:$1" ;; esac; }
 build_image() {
-  local os=$1 base out try
-  for base in "ubuntu:$os" "mirror.gcr.io/library/ubuntu:$os"; do
+  local os=$1 base out try img
+  img=$(base_of "$os")
+  for base in "$img" "mirror.gcr.io/library/$img"; do
     for try in 1 2 3; do
       if out=$(docker build -q --build-arg BASE="$base" --build-arg NODE_VER="$NODE_VER" -t "dshl-test:$os" "$WORK/ctx" 2>&1); then
-        [ "$base" = "ubuntu:$os" ] || echo "   база с зеркала: $base"
+        [ "$base" = "$img" ] || echo "   база с зеркала: $base"
         return 0
       fi
       echo "   сборка не удалась ($base, попытка $try): $(echo "$out" | grep -m1 -iE 'error|429' | cut -c1-200)"
+      # Повторять имеет смысл только сетевые сбои (лимит, таймаут, DNS, npm
+      # 404 свежей публикации); ошибка в Dockerfile или пакете повторится.
+      echo "$out" | grep -qiE '429|Too Many Requests|toomanyrequests|failed to resolve source metadata|timeout|TLS handshake|connection reset|EAI_AGAIN|E404|ECONNRESET|ETIMEDOUT' || break 2
       [ "$try" -lt 3 ] && sleep $((try * 15))
     done
   done

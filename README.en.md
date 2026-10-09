@@ -1,6 +1,6 @@
-<p align="center"><img src="icon.png" width="128" alt="dsh-launcher"></p>
+<p align="center"><img src="icon.png" width="128" alt="DSH Launcher"></p>
 
-# dsh-launcher
+# DSH Launcher
 
 [Русский](README.md) | **English**
 
@@ -100,10 +100,12 @@ A small Electron app: a window that opens **DeepSeek Harness**
 
 ## System requirements
 
-Tested on **Ubuntu 26.04** (desktop, Wayland) and on clean **Ubuntu 26.04**
-and **Ubuntu 24.04** (amd64) in a container: the package installs via `apt`
-with all dependencies, and the dsh installation scenarios go all the way to
-the UI.
+Tested on **Ubuntu 26.04** (desktop, Wayland) and on clean **Ubuntu 26.04**,
+**Ubuntu 24.04** and **Debian 13** (amd64) in a container: the package
+installs via `apt` with all dependencies, and the dsh installation scenarios
+go all the way to the UI. The package also installs on systems with the old
+library names (without the `t64` suffix) — Debian 12, Ubuntu 22.04; those
+are not tested regularly.
 
 The launcher itself does not need Node.js — Electron is bundled in the
 package. But **DeepSeek Harness** is an npm package, and it needs:

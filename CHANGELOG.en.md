@@ -5,6 +5,15 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- **The package installs on Debian 12 and Ubuntu 22.04.** The dependencies
+  used only the new library names (with the `t64` suffix), which those
+  systems don't have, so `apt` refused to install the package. Each now
+  lists the old name too. Tested on Debian 13 (all scenarios) and Debian 12.
+
 ## [1.5.0] — 2026-10-09
 
 ### Added

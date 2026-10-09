@@ -10,7 +10,10 @@ COPY dsh-launcher_1.1.0-1_amd64.deb /tmp/
 RUN apt-get install -y /tmp/dsh-launcher_1.1.0-1_amd64.deb && rm /tmp/dsh-launcher_1.1.0-1_amd64.deb
 # Node 22 для драйвера/фейкового dsh и для сценариев с настоящим dsh.
 COPY node-${NODE_VER}-linux-x64.tar.xz /tmp/
-RUN mkdir -p /opt/node22 && tar -xJf /tmp/node-${NODE_VER}-linux-x64.tar.xz -C /opt/node22 --strip-components=1 \
+# --no-same-owner: файлы архива Node принадлежат uid 1000; в Debian это и есть
+# tester (в Ubuntu 1000 — встроенный ubuntu), и «root-префикс» /opt/noderoot
+# оказался бы доступен ему на запись.
+RUN mkdir -p /opt/node22 && tar -xJf /tmp/node-${NODE_VER}-linux-x64.tar.xz -C /opt/node22 --strip-components=1 --no-same-owner \
     && rm /tmp/node-${NODE_VER}-linux-x64.tar.xz
 RUN useradd -m -s /bin/bash tester
 # Старый настоящий dsh: (1) в nvm пользователя — prefix доступен на запись;
