@@ -20,7 +20,8 @@ OSES=${OSES:-"24.04 26.04"}
 JOBS=${JOBS:-4}
 ALL="close sigterm sigterm_ignored sigterm_double adopt_samegroup adopt_detached
      dsh_update_auto dsh_update_other_prefix dsh_update_root_prefix
-     launcher_update launcher_update_denied launcher_update_nopkexec menu_about context_menu"
+     launcher_update launcher_update_denied launcher_update_nopkexec menu_about context_menu
+     find restart_dsh proxy window_state"
 SCENARIOS=${*:-$ALL}
 
 mkdir -p "$WORK/src" "$WORK/ctx" "$WORK/results"
@@ -47,7 +48,7 @@ if [ ! -f "$WORK/ctx/$TARBALL" ]; then
   curl -fsSL "https://nodejs.org/dist/$NODE_VER/SHASUMS256.txt" | grep " $TARBALL\$" \
     | (cd "$WORK/ctx" && sha256sum -c --quiet -) || { rm -f "$WORK/ctx/$TARBALL"; exit 1; }
 fi
-cp -f "$HERE/Dockerfile" "$HERE/fakedsh.js" "$HERE/driver.js" "$HERE/scenario.sh" "$WORK/ctx/"
+cp -f "$HERE/Dockerfile" "$HERE/fakedsh.js" "$HERE/driver.js" "$HERE/proxy.js" "$HERE/scenario.sh" "$WORK/ctx/"
 
 for os in $OSES; do
   echo ">> образ dshl-test:$os"

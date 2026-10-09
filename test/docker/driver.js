@@ -6,10 +6,11 @@
 //   driver.js wait-url <re> <sec>      — ждать URL страницы по regexp
 //   driver.js eval <js>                — выполнить JS на странице
 //   driver.js rclick <x> <y>           — правый клик мышью в точке окна (контекстное меню)
+//   driver.js key <Ctrl+KeyF | F3 | …> — нажатие клавиши (Input.dispatchKeyEvent; код по KeyboardEvent.code)
 //   driver.js --page <re> <команда …>  — в окне, чей заголовок или URL подходит под <re>
 //                                        (без --page — первое окно в списке CDP)
 //   driver.js pages                    — окна: заголовок | URL
-const CDP = 'http://127.0.0.1:9222';
+const CDP = process.env.DRV_CDP || 'http://127.0.0.1:9222'; // DRV_CDP — другой порт отладки
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let PAGE_RE = null; // --page <re>: окно по заголовку или URL
@@ -66,6 +67,23 @@ async function evalJs(expr) {
   return r && r.result && r.result.result ? r.result.result.value : undefined;
 }
 
+// Нажатие клавиши: «Ctrl+Shift+KeyF», «F3», «Escape». Последняя часть —
+// KeyboardEvent.code; key и windowsVirtualKeyCode выводим из него.
+async function pressKey(spec) {
+  const parts = spec.split('+');
+  const code = parts.pop();
+  const mods = { Alt: 1, Ctrl: 2, Meta: 4, Shift: 8 };
+  const modifiers = parts.reduce((m, p) => m | (mods[p] || 0), 0);
+  let key = code; let vk = 0;
+  if (/^Key[A-Z]$/.test(code)) { key = code.slice(3).toLowerCase(); vk = code.charCodeAt(3); }
+  else if (/^Digit\d$/.test(code)) { key = code.slice(5); vk = code.charCodeAt(5); }
+  else if (/^F\d{1,2}$/.test(code)) { vk = 111 + Number(code.slice(1)); }
+  else vk = { Escape: 27, Enter: 13 }[code] || 0;
+  const ev = (type) => ['Input.dispatchKeyEvent', { type, modifiers, code, key, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk }];
+  const r = await cdp([ev('rawKeyDown'), ev('keyUp')]);
+  if (!r || r.error) throw new Error('CDP: нажатие не прошло' + (r && r.error ? ': ' + r.error.message : ''));
+}
+
 // Настоящее событие мыши (Input.dispatchMouseEvent): Chromium обрабатывает
 // его как клик пользователя — для правой кнопки приходит context-menu.
 async function rightClick(x, y) {
@@ -100,6 +118,7 @@ async function waitFor(get, re, sec) {
   else if (cmd === 'wait-url') await waitFor(current, a, Number(b || 30));
   else if (cmd === 'eval') console.log(await evalJs(a));
   else if (cmd === 'rclick') await rightClick(Number(a), Number(b));
+  else if (cmd === 'key') await pressKey(a);
   else if (cmd === 'pages') for (const t of await pages()) console.log(`${t.title} | ${t.url.slice(0, 80)}`);
   else { console.error('unknown command'); process.exit(2); }
 })().catch((e) => { console.error('driver error:', e.message); process.exit(1); });

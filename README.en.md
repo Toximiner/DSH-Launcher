@@ -55,24 +55,43 @@ A small Electron app: a window that opens **DeepSeek Harness**
   - Requests are sent right at startup, in parallel with everything else;
     before starting dsh the launcher waits for them at most ~8 s (without a
     network they fail at once and the launcher simply doesn’t ask). Disable with
-    `DSH_LAUNCHER_NO_UPDATE_CHECK=1`.
+    `DSH_LAUNCHER_NO_UPDATE_CHECK=1`. Requests go through the system proxy
+    (GNOME/KDE settings or `HTTPS_PROXY`) when one is set.
 
-- **Window menu.** The menu bar is always visible:
-  “Edit” — “Cut”, “Copy”, “Paste”, “Select all” (same as the context menu;
-  Ctrl+X / C / V / A work without the menu too);
-  “Application” has three items:
-  - “About” — the launcher and dsh backend versions, the dsh path, Node.js
-    and OS; one click copies the whole block to the clipboard for pasting
-    into a bug report.
-  - “Check for updates” — on-demand re-check of the latest release on GitHub
-    and the latest `@deepseek-ai/dsh` on npm, shown per component (no
-    auto-install — updating still happens through the startup prompt).
-  - “Quit” — standard shutdown (stops the dsh the launcher started).
+- **Window menu** (always visible; labels follow the window language, RU|EN):
+  - “File” — “Restart dsh…” (e.g. after plugin updates; asks first; a dsh
+    not started by the launcher is left alone) and “Quit” — standard
+    shutdown (stops the dsh the launcher started).
+  - “Edit” — “Cut”, “Copy”, “Paste”, “Select all” (same as the context menu;
+    Ctrl+X / C / V / A work without the menu too).
+  - “View” — reload (F5, Ctrl+Shift+R — ignoring cache), zoom (Ctrl+= /
+    Ctrl+− / Ctrl+0, remembered), find in page, spell check (on/off), full
+    screen (F11).
+  - “Help” — “Check for updates…” (the latest release on GitHub and the
+    latest `@deepseek-ai/dsh` on npm, shown per component; no auto-install —
+    updating still happens through the startup prompt), “Open logs folder”,
+    “About” (the launcher and dsh backend versions, the dsh path, Node.js,
+    OS, GPU acceleration, the logs path; one click copies the whole block to
+    the clipboard for a bug report).
 
   “About” and “Check for updates” open in a small window over the launcher:
   the dsh GUI underneath is dimmed but not reloaded. Close with “Close”, Esc
   or the window's close button.
-  Menu labels follow the window language (RU|EN).
+
+- **Find in page (Ctrl+F)** — a bar in the top-right corner with a match
+  counter; Enter / Shift+Enter (F3 / Shift+F3) — next / previous, Esc —
+  close.
+
+- **Spell check** in text fields (Russian and English): suggestions and
+  “Add to dictionary” on right-click over an underlined word. Chromium
+  downloads the dictionaries the first time it is on (offline it does not
+  work).
+
+- **The window size is remembered** between launches.
+
+- **Logs and diagnostics:** “Help → Open logs folder”; “About” shows the
+  logs path and the GPU acceleration state. If the GPU was turned off after
+  GPU process crashes, a “Re-enable GPU” button is there too.
 
 - **Right-click context menu** — both in the dsh GUI and on the launcher's
   own pages: in a text field “Cut”, “Copy”, “Paste”, “Select all”; on

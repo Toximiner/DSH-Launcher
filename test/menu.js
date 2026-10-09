@@ -119,21 +119,39 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
 // ---- appMenuTemplate: строка меню окна ----
 {
   const calls = [];
-  const mk = (tr) => extract('appMenuTemplate', {
+  const viewActions = new Proxy({}, { get: (_t, k) => () => calls.push('view.' + String(k)) });
+  const mk = (tr, spellcheckOn = true) => extract('appMenuTemplate', {
     tr,
+    spellcheckOn,
+    viewActions,
     showAboutDialog: () => calls.push('about'),
     showUpdateCheckDialog: () => calls.push('check'),
+    openLogsFolder: () => calls.push('logs'),
+    restartDsh: () => calls.push('restart'),
+    setSpellcheck: (on) => calls.push('spell:' + on),
   })();
   const ru = mk((r) => r);
   const en = mk((r, e) => e);
-  assert.deepStrictEqual(ru.map((m) => m.label), ['Приложение', 'Правка'], 'пункты строки меню (RU)');
-  assert.deepStrictEqual(en.map((m) => m.label), ['Application', 'Edit'], 'пункты строки меню (EN)');
+  assert.deepStrictEqual(ru.map((m) => m.label), ['Файл', 'Правка', 'Вид', 'Справка'], 'пункты строки меню (RU)');
+  assert.deepStrictEqual(en.map((m) => m.label), ['File', 'Edit', 'View', 'Help'], 'пункты строки меню (EN)');
+  const item = (menu, label) => menu.submenu.find((i) => i.label === label);
+  const labels = (menu) => menu.submenu.map((i) => (i.type ? '|' : i.label));
 
-  const app = ru[0].submenu;
-  app.find((i) => i.label === 'О программе…').click();
-  app.find((i) => i.label === 'Проверить обновления…').click();
-  assert.deepStrictEqual(calls, ['about', 'check'], '«О программе» и «Проверить обновления» открывают свои окна');
-  assert.strictEqual(app.find((i) => i.label === 'Выйти').role, 'quit', '«Выйти» — штатный quit');
+  // «Файл»: перезапуск dsh и выход
+  assert.deepStrictEqual(labels(ru[0]), ['Перезапустить dsh…', '|', 'Выйти'], '«Файл»');
+  calls.length = 0;
+  item(ru[0], 'Перезапустить dsh…').click();
+  assert.deepStrictEqual(calls, ['restart'], '«Перезапустить dsh…» → restart');
+  assert.strictEqual(item(ru[0], 'Выйти').role, 'quit', '«Выйти» — штатный quit');
+
+  // «Справка»: обновления, логи, «О программе» — последним пунктом
+  assert.deepStrictEqual(labels(ru[3]), ['Проверить обновления…', 'Открыть папку логов', '|', 'О программе'], '«Справка»');
+  assert.deepStrictEqual(labels(en[3]), ['Check for updates…', 'Open logs folder', '|', 'About'], '«Help»');
+  for (const [label, call] of [['Проверить обновления…', 'check'], ['Открыть папку логов', 'logs'], ['О программе', 'about']]) {
+    calls.length = 0;
+    item(ru[3], label).click();
+    assert.deepStrictEqual(calls, [call], `«${label}» → ${call}`);
+  }
 
   // «Правка» — те же действия, что в контекстном меню, стандартными ролями
   const edit = (t) => t[1].submenu.map((i) => (i.type ? '|' : `${i.label}:${i.role}:${i.accelerator}`));
@@ -143,13 +161,99 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
   assert.deepStrictEqual(edit(en),
     ['Cut:cut:CmdOrCtrl+X', 'Copy:copy:CmdOrCtrl+C', 'Paste:paste:CmdOrCtrl+V', '|', 'Select all:selectAll:CmdOrCtrl+A'],
     '«Правка» (EN)');
-  // те же подписи, что у контекстного меню
   const ctxLabels = ctx({ isEditable: true, editFlags: all }).filter((i) => !i.type).map((i) => i.label);
-  assert.deepStrictEqual(ru[1].submenu.filter((i) => !i.type).map((i) => i.label), ctxLabels, 'подписи совпадают с контекстным меню');
-  // сочетания — только подсказкой: не перехватывать горячие клавиши GUI dsh
-  for (const i of ru[1].submenu.filter((x) => !x.type)) {
+  assert.deepStrictEqual(ru[1].submenu.filter((i) => !i.type).map((i) => i.label), ctxLabels, 'подписи «Правки» совпадают с контекстным меню');
+
+  // «Вид» — действие и подсказка-сочетание у каждого пункта
+  for (const [label, act, key] of [
+    ['Перезагрузить', 'reload', 'F5'], ['Перезагрузить без кэша', 'reloadHard', 'CmdOrCtrl+Shift+R'],
+    ['Увеличить', 'zoomIn', 'CmdOrCtrl+='], ['Уменьшить', 'zoomOut', 'CmdOrCtrl+-'], ['Обычный масштаб', 'zoomReset', 'CmdOrCtrl+0'],
+    ['Найти на странице…', 'find', 'CmdOrCtrl+F'], ['Полноэкранный режим', 'fullscreen', 'F11']]) {
+    calls.length = 0;
+    const it = item(ru[2], label);
+    assert.ok(it, `«Вид»: есть «${label}»`);
+    it.click();
+    assert.deepStrictEqual(calls, ['view.' + act], `«${label}» → ${act}`);
+    assert.strictEqual(it.accelerator, key, `«${label}»: подсказка ${key}`);
+  }
+  const spell = item(ru[2], 'Проверка орфографии');
+  assert.strictEqual(spell.type, 'checkbox', 'орфография — галочка');
+  assert.strictEqual(spell.checked, true, 'галочка отражает состояние (вкл)');
+  assert.strictEqual(item(mk((r) => r, false)[2], 'Проверка орфографии').checked, false, 'галочка отражает состояние (выкл)');
+  calls.length = 0;
+  spell.click({ checked: false });
+  assert.deepStrictEqual(calls, ['spell:false'], 'снять галочку → выключить');
+
+  // все сочетания — только подсказки: не перехватывать горячие клавиши GUI dsh
+  for (const m of ru) for (const i of m.submenu.filter((x) => x.accelerator)) {
     assert.strictEqual(i.registerAccelerator, false, `«${i.label}»: registerAccelerator: false`);
   }
 }
 
-console.log('OK: contextMenuItems, showContextMenu, appMenuTemplate — все проверки прошли');
+// ---- keyAction: клавиша → действие «Вида» ----
+{
+  const ka = extract('keyAction');
+  const k = (o) => ka({ type: 'keyDown', control: false, shift: false, key: '', code: '', ...o });
+  assert.strictEqual(k({ key: 'F5' }), 'reload', 'F5');
+  assert.strictEqual(k({ control: true, code: 'KeyR', key: 'к' }), 'reload', 'Ctrl+R в русской раскладке');
+  assert.strictEqual(k({ control: true, shift: true, code: 'KeyR' }), 'reloadHard', 'Ctrl+Shift+R');
+  assert.strictEqual(k({ control: true, code: 'Equal' }), 'zoomIn', 'Ctrl+=');
+  assert.strictEqual(k({ control: true, code: 'NumpadAdd' }), 'zoomIn', 'Ctrl+Num+');
+  assert.strictEqual(k({ control: true, code: 'Minus' }), 'zoomOut', 'Ctrl+-');
+  assert.strictEqual(k({ control: true, code: 'Digit0' }), 'zoomReset', 'Ctrl+0');
+  assert.strictEqual(k({ control: true, code: 'KeyF', key: 'а' }), 'find', 'Ctrl+F в русской раскладке');
+  assert.strictEqual(k({ control: true, shift: true, code: 'KeyF' }), null, 'Ctrl+Shift+F — странице');
+  assert.strictEqual(k({ key: 'F3' }), 'findNext', 'F3');
+  assert.strictEqual(k({ key: 'F3', shift: true }), 'findPrev', 'Shift+F3');
+  assert.strictEqual(k({ key: 'F11' }), 'fullscreen', 'F11');
+  assert.strictEqual(k({ key: 'f', code: 'KeyF' }), null, 'просто F — странице');
+  assert.strictEqual(k({ control: true, code: 'KeyC' }), null, 'Ctrl+C — странице (копирование)');
+}
+
+// ---- windowSize: размер окна из сохранённого состояния ----
+{
+  const deps = { WIN_DEFAULT: { width: 1440, height: 900 }, WIN_MIN: { width: 760, height: 480 } };
+  const ws = extract('windowSize', deps);
+  const wa = { width: 1920, height: 1050 };
+  assert.deepStrictEqual(ws(null, wa), { width: 1440, height: 900, maximized: false }, 'нет состояния → по умолчанию');
+  assert.deepStrictEqual(ws({ width: 1200, height: 800, maximized: true }, wa), { width: 1200, height: 800, maximized: true }, 'сохранённое');
+  assert.deepStrictEqual(ws({ width: 3000, height: 2000 }, wa), { width: 1920, height: 1050, maximized: false }, 'больше экрана → по экрану');
+  assert.deepStrictEqual(ws({ width: 300, height: 200 }, wa), { width: 760, height: 480, maximized: false }, 'меньше минимума → минимум');
+  assert.deepStrictEqual(ws({ width: 'x', height: -5, maximized: 'yes' }, wa), { width: 1440, height: 900, maximized: false }, 'мусор → по умолчанию');
+  assert.deepStrictEqual(ws({ width: 1000.6, height: 700.2 }, null), { width: 1001, height: 700, maximized: false }, 'нет данных об экране');
+  assert.deepStrictEqual(ws({ width: 1440, height: 900 }, { width: 700, height: 400 }), { width: 760, height: 480, maximized: false }, 'экран меньше минимума → минимум');
+}
+
+// ---- gpuStatus: GPU-ускорение для «О программе» ----
+{
+  const g = extract('gpuStatus');
+  const DAY = 86400000;
+  const base = { noGpuRequested: false, disabledByMarker: false, hasRenderNode: true, hasEgl: true, markerAgeMs: null, ttlMs: 30 * DAY };
+  assert.deepStrictEqual(g(base), { on: true, reason: null, marker: false, daysLeft: 0 }, 'включено');
+  assert.deepStrictEqual(g({ ...base, disabledByMarker: true, markerAgeMs: 2.5 * DAY }), { on: false, reason: 'marker', marker: true, daysLeft: 28 }, 'маркер: ещё 28 дн.');
+  assert.deepStrictEqual(g({ ...base, disabledByMarker: true, markerAgeMs: null }), { on: false, reason: 'marker', marker: false, daysLeft: 0 }, 'маркер сняли — до перезапуска');
+  assert.deepStrictEqual(g({ ...base, markerAgeMs: 1000 }), { on: true, reason: null, marker: true, daysLeft: 30 }, 'падал в этой сессии — отключится со следующего');
+  assert.strictEqual(g({ ...base, markerAgeMs: 31 * DAY }).marker, false, 'маркер старше 30 дней не действует');
+  assert.strictEqual(g({ ...base, noGpuRequested: true, disabledByMarker: true }).reason, 'env', 'переменная окружения важнее маркера');
+  assert.strictEqual(g({ ...base, hasRenderNode: false }).reason, 'norender', 'нет render-узлов');
+  assert.strictEqual(g({ ...base, hasEgl: false }).reason, 'noegl', 'нет EGL');
+}
+
+// ---- орфография в контекстном меню ----
+{
+  const word = { isEditable: true, editFlags: all, misspelledWord: 'превет', dictionarySuggestions: ['привет', 'прелесть', 'a', 'b', 'c', 'd'] };
+  assert.deepStrictEqual(acts(ctx(word)),
+    ['replace', 'replace', 'replace', 'replace', 'replace', 'addWord', '|', 'cut', 'copy', 'paste', '|', 'selectAll'],
+    'слово с ошибкой: до 5 вариантов и «Добавить в словарь» первой группой');
+  assert.deepStrictEqual(acts(ctx({ ...word, dictionarySuggestions: [] })).slice(0, 2), ['none-', 'addWord'], 'вариантов нет — неактивный пункт');
+  const env = fakeEnv();
+  const replaced = []; const added = [];
+  env.win.webContents.replaceMisspelling = (w) => replaced.push(w);
+  env.win.webContents.session = { addWordToSpellCheckerDictionary: (w) => added.push(w) };
+  env.show(word);
+  byLabel(env, 'привет').click();
+  byLabel(env, 'Добавить в словарь').click();
+  assert.deepStrictEqual([replaced, added], [['привет'], ['превет']], 'замена и добавление в словарь');
+}
+
+console.log('OK: contextMenuItems, showContextMenu, appMenuTemplate, keyAction, windowSize, gpuStatus — все проверки прошли');

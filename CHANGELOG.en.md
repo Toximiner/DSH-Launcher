@@ -11,13 +11,33 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 - **“Edit” menu** in the window menu bar: “Cut”, “Copy”, “Paste”, “Select
   all” — the same actions as the context menu.
+- **“View” menu:** reload (F5), reload ignoring cache (Ctrl+Shift+R), zoom
+  (Ctrl+= / Ctrl+− / Ctrl+0), find in page, spell check, full screen (F11).
+- **Find in page (Ctrl+F):** a bar in the top-right corner with a match
+  counter; Enter / Shift+Enter (or F3 / Shift+F3) — next / previous, Esc —
+  close.
+- **Spell check** in text fields (Russian and English): suggestions and
+  “Add to dictionary” in the context menu. Toggle it in “View”. Chromium
+  downloads the dictionaries the first time it is on.
+- **The window size is remembered** between launches (and “maximized”).
+- **“File → Restart dsh”** (asks first; a dsh not started by the launcher
+  is left alone) and **“Help → Open logs folder”**.
+- **“About”** shows the logs path, a “Logs folder” button and the GPU
+  acceleration state; if the GPU was turned off after crashes — a
+  “Re-enable GPU” button (instead of deleting the marker by hand).
 
 ### Changed
 
+- **The menu follows the usual layout: “File” (restart dsh, quit),
+  “Edit”, “View”, “Help”** (check for updates, logs folder, “About”)
+  instead of a single “Application” menu.
 - **“About” and “Check for updates” open in a small window over the
   launcher** instead of a separate page. The dsh GUI underneath is dimmed
   but stays as it was — no reload, typed text kept. Close with “Close”,
   Esc or the window's close button.
+- **The update check and the package download use the system proxy
+  again** (GNOME/KDE settings or `HTTPS_PROXY`), as before 1.3.1 — without
+  the Electron network module that made the launcher crash.
 
 ## [1.4.0] — 2026-10-09
 

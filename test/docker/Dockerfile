@@ -20,5 +20,5 @@ RUN su tester -c "mkdir -p ~/.nvm/versions/node/${NODE_VER} && cp -a /opt/node22
       && npm i -g --no-fund --no-audit @deepseek-ai/dsh@0.1.7-rc.2 \
       && npm i -g --no-fund --no-audit --prefix ~/.local @deepseek-ai/dsh@0.1.7-rc.2"
 RUN cp -a /opt/node22 /opt/noderoot && PATH=/opt/noderoot/bin:$PATH npm i -g --no-fund --no-audit @deepseek-ai/dsh@0.1.7-rc.2
-COPY fakedsh.js driver.js scenario.sh /opt/t/
+COPY fakedsh.js driver.js proxy.js scenario.sh /opt/t/
 RUN chmod 755 /opt/t/*

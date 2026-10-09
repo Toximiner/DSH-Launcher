@@ -84,4 +84,16 @@ assert.strictEqual(marketInPkg({ dependencies: { other: '1' } }), false);
 assert.strictEqual(marketInPkg({ dsh: { profile: {} } }), false, 'нет bundles → false');
 assert.strictEqual(marketInPkg({}), false);
 
+// ---- proxyUrlFromRule: правило прокси Chromium → URL для агента Node ----
+const proxyUrlFromRule = extract('proxyUrlFromRule');
+assert.strictEqual(proxyUrlFromRule('DIRECT'), null, 'DIRECT → напрямую');
+assert.strictEqual(proxyUrlFromRule(''), null, 'пусто → напрямую');
+assert.strictEqual(proxyUrlFromRule(undefined), null, 'нет правила → напрямую');
+assert.strictEqual(proxyUrlFromRule('PROXY 10.0.0.1:3128'), 'http://10.0.0.1:3128', 'PROXY');
+assert.strictEqual(proxyUrlFromRule('PROXY proxy.corp:8080; DIRECT'), 'http://proxy.corp:8080', 'PROXY; DIRECT — первый');
+assert.strictEqual(proxyUrlFromRule('HTTPS secure.corp:443'), 'https://secure.corp:443', 'HTTPS-прокси');
+assert.strictEqual(proxyUrlFromRule('SOCKS5 127.0.0.1:1080'), null, 'SOCKS не поддержан → напрямую');
+assert.strictEqual(proxyUrlFromRule('SOCKS5 s:1; PROXY p:3128'), 'http://p:3128', 'SOCKS пропускаем, берём HTTP');
+assert.strictEqual(proxyUrlFromRule('proxy p:1'), 'http://p:1', 'регистр не важен');
+
 console.log('OK: parsing — все проверки прошли');

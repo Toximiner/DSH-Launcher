@@ -18,11 +18,12 @@
  *    SIGKILL лаунчеру перехватить нельзя — тот случай остаётся незакрытым.
  */
 
-const { app, BrowserWindow, Menu, protocol, net: electronNet, shell, clipboard } = require('electron');
+const { app, BrowserWindow, WebContentsView, Menu, protocol, net: electronNet, session, screen, dialog, shell, clipboard } = require('electron');
 const { spawn, execFile, execFileSync } = require('child_process');
 const { promisify } = require('util');
 const nodeNet = require('net');
-const { Readable } = require('stream');
+const http = require('http');
+const https = require('https');
 const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
@@ -456,8 +457,13 @@ function startDsh() {
     dshFatal = true;
     pushErr(tr(`ошибка запуска dsh: ${err.message}`, `failed to start dsh: ${err.message}`));
   });
+  const proc = dshProc;
   dshProc.on('exit', (code, signal) => {
     try { logStream.end(); } catch { /* noop */ }
+    if (proc !== dshProc || restartingDsh) { // остановлен «Перезапустить dsh» — это не сбой
+      console.log('[launcher] прежний процесс dsh завершился (перезапуск):', { code, signal });
+      return;
+    }
     handleDshExit(code, signal);
   });
 }
@@ -1205,20 +1211,70 @@ function timedCheck(promise, ms) {
 }
 /* ===== end timedCheck ===== */
 
-// Внешние запросы (GitHub, npm, скачивание .deb) — через fetch из Node, а не
-// electronNet.fetch. После electronNet.fetch к внешним хостам при старте
+// Внешние запросы (GitHub, npm, скачивание .deb) — через http/https из Node,
+// а не electronNet.fetch. После electronNet.fetch к внешним хостам при старте
 // следующий запуск дочернего процесса (dpkg-query, dsh --version в «О
 // программе») ронял Electron 44 в нативном коде: «terminate called without
-// an active exception» / SIGSEGV (Wayland, Ubuntu 26.04; 1.3.0). Цена — fetch
-// из Node не берёт системный прокси: за прокси проверка обновлений просто не
-// сработает (как без сети). Проверка куки окна (plainUrlIsAuthed) остаётся на
-// electronNet — ей нужна сессия окна.
-async function fetchLauncherLatest() {
-  const res = await fetch(`https://api.github.com/repos/${UPDATE_GITHUB_REPO}/releases/latest`, {
-    headers: { 'User-Agent': 'dsh-launcher', 'Accept': 'application/vnd.github+json' },
+// an active exception» / SIGSEGV (Wayland, Ubuntu 26.04; 1.3.0). Системный
+// прокси берём у Chromium (session.resolveProxy — настройки GNOME/KDE и
+// переменные окружения) и передаём агенту Node (proxyEnv, Node 24.5+).
+// Проверка куки окна (plainUrlIsAuthed) остаётся на electronNet — ей нужна
+// сессия окна.
+
+/* ===== proxyUrlFromRule (чистая функция, тест test/parsing.js) =====
+   Правило Chromium («PROXY h:p; DIRECT», «HTTPS h:p», «SOCKS5 h:p», «DIRECT»)
+   → URL прокси для Node или null (напрямую). Берём первый HTTP(S)-прокси;
+   SOCKS агент Node не умеет — тогда напрямую. */
+function proxyUrlFromRule(rule) {
+  for (const part of String(rule || '').split(';')) {
+    const m = part.trim().match(/^(PROXY|HTTPS)\s+(\S+)$/i);
+    if (m) return (m[1].toUpperCase() === 'HTTPS' ? 'https://' : 'http://') + m[2];
+  }
+  return null;
+}
+/* ===== end proxyUrlFromRule ===== */
+
+async function proxyAgentFor(u) {
+  let rule = 'DIRECT';
+  try { rule = await session.defaultSession.resolveProxy(u.toString()); } catch { /* напрямую */ }
+  const proxy = proxyUrlFromRule(rule);
+  if (!proxy) return undefined;
+  const isHttp = u.protocol === 'http:';
+  return new (isHttp ? http : https).Agent({ proxyEnv: { [isHttp ? 'HTTP_PROXY' : 'HTTPS_PROXY']: proxy } });
+}
+
+/* ===== httpGet (тест test/http.js, с подставным агентом) =====
+   GET с переходами по редиректам (ассеты релизов GitHub отдаются через 302)
+   → поток ответа (http.IncomingMessage): statusCode, headers, данные. */
+async function httpGet(url, { headers = {}, maxRedirects = 5, timeoutMs = 30000 } = {}) {
+  const u = new URL(url);
+  const agent = await proxyAgentFor(u);
+  const res = await new Promise((resolve, reject) => {
+    const req = (u.protocol === 'http:' ? http : https).get(u, { headers, agent }, resolve);
+    req.on('error', reject);
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`таймаут ${timeoutMs / 1000} с: ${u.host}`)));
   });
-  if (!res.ok) throw new Error(`GitHub API: HTTP ${res.status}`);
-  const j = await res.json();
+  if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
+    res.resume();
+    if (maxRedirects <= 0) throw new Error('слишком много перенаправлений');
+    return httpGet(new URL(res.headers.location, u).toString(), { headers, maxRedirects: maxRedirects - 1, timeoutMs });
+  }
+  return res;
+}
+/* ===== end httpGet ===== */
+
+async function httpJson(url, headers, what) {
+  const res = await httpGet(url, { headers });
+  let body = '';
+  res.setEncoding('utf8');
+  for await (const c of res) body += c;
+  if (res.statusCode !== 200) throw new Error(`${what}: HTTP ${res.statusCode}`);
+  return JSON.parse(body);
+}
+
+async function fetchLauncherLatest() {
+  const j = await httpJson(`https://api.github.com/repos/${UPDATE_GITHUB_REPO}/releases/latest`,
+    { 'User-Agent': 'dsh-launcher', 'Accept': 'application/vnd.github+json' }, 'GitHub API');
   const asset = (j.assets || []).find((a) => String(a.name).endsWith('.deb'));
   const meta = {
     version: String(j.tag_name || '').replace(/^v/, ''),
@@ -1235,11 +1291,8 @@ async function fetchLauncherLatest() {
 }
 
 async function fetchDshLatest() {
-  const res = await fetch(`https://registry.npmjs.org/${DSH_NPM_PKG}/latest`, {
-    headers: { 'User-Agent': 'dsh-launcher' },
-  });
-  if (!res.ok) throw new Error(`npm registry: HTTP ${res.status}`);
-  const j = await res.json();
+  const j = await httpJson(`https://registry.npmjs.org/${DSH_NPM_PKG}/latest`,
+    { 'User-Agent': 'dsh-launcher' }, 'npm registry');
   const version = String(j.version || '');
   if (!version) throw new Error('нет версии в ответе npm');
   const meta = { version, htmlUrl: `https://www.npmjs.com/package/${DSH_NPM_PKG}` };
@@ -1460,9 +1513,9 @@ async function downloadDeb(url, expectedSha256) {
     for (const f of fs.readdirSync(dir)) {
       if (f.endsWith('.deb')) try { fs.unlinkSync(path.join(dir, f)); } catch { /* noop */ }
     }
-    const res = await fetch(url); // не electronNet — см. fetchLauncherLatest
-    if (!res.ok || !res.body) throw new Error(`download: HTTP ${res.status}`);
-    const total = Number(res.headers.get('content-length') || 0);
+    const res = await httpGet(url, { headers: { 'User-Agent': 'dsh-launcher' } }); // не electronNet — см. proxyUrlFromRule
+    if (res.statusCode !== 200) { res.resume(); throw new Error(`download: HTTP ${res.statusCode}`); }
+    const total = Number(res.headers['content-length'] || 0);
     const name = url.split('/').pop() || 'dsh-launcher.deb';
     const dest = path.join(dir, name);
     updateState.log.push(total ? `${name} (${(total / 1048576).toFixed(1)} МБ)` : name);
@@ -1478,7 +1531,7 @@ async function downloadDeb(url, expectedSha256) {
     }, 800);
     try {
       await new Promise((resolve, reject) => {
-        const body = Readable.fromWeb(res.body);
+        const body = res;
         body.on('data', (c) => { got += c.length; hash.update(c); });
         body.on('error', reject);
         out.on('error', reject);
@@ -1778,34 +1831,31 @@ async function offerDshUpdate() {
 
 /* ---------------- меню окна: «О программе», «Проверить обновления» ---------------- */
 
-// Строка меню сверху окна всегда видна (autoHideMenuBar: false). Пункты:
-// «Правка» — Вырезать / Копировать / Вставить / Выделить всё (см.
-// appMenuTemplate); «Приложение»:
-//   «О программе…»        — (окно-диалог) версии лаунчера и бэкенда dsh, путь
-//                           dsh, Node.js и ОС; собранный блок одной кнопкой
-//                           копируется в буфер — для отчёта о проблеме;
-//   «Проверить обновления…» — (окно-диалог) сверяет последний релиз на GitHub
-//                           и последнюю версию @deepseek-ai/dsh на npm и
-//                           показывает результат (авто-обновления здесь нет:
-//                           установка — через штатный вопрос при старте);
-//   «Выйти»               — штатное завершение (останавливает dsh).
+// Строка меню сверху окна всегда видна (autoHideMenuBar: false):
+//   «Файл»    — Перезапустить dsh…, Выйти (штатно, останавливает dsh);
+//   «Правка»  — Вырезать / Копировать / Вставить / Выделить всё;
+//   «Вид»     — перезагрузка, масштаб, поиск, орфография, полный экран;
+//   «Справка» — Проверить обновления… (окно-диалог: сверяет GitHub и npm,
+//               без авто-установки), Открыть папку логов, О программе
+//               (окно-диалог: версии, пути, GPU; блок копируется для отчёта).
 // Подписи следуют за языком окна — при переключении RU|EN меню собирается
 // заново (onLangSwitch → buildAppMenu).
 
 /* ===== appMenuTemplate (чистая функция, тест test/menu.js) =====
-   «Правка» — те же действия, что в контекстном меню, через стандартные роли
-   (действуют на окно в фокусе — главное или диалог). Сочетания клавиш —
-   только подсказкой (registerAccelerator: false): Ctrl+X/C/V/A Chromium
-   обрабатывает сам, а перехват меню перебивал бы горячие клавиши GUI dsh. */
+   Сочетания клавиш в меню — только подсказки (registerAccelerator: false):
+   Ctrl+X/C/V/A Chromium обрабатывает сам, остальные — keyAction в
+   before-input-event; перехват меню перебивал бы горячие клавиши GUI dsh.
+   «Правка» — те же действия, что в контекстном меню, стандартными ролями
+   (действуют на окно в фокусе — главное или диалог). */
 function appMenuTemplate() {
-  const edit = (role, ru, en, key) =>
-    ({ role, label: tr(ru, en), accelerator: 'CmdOrCtrl+' + key, registerAccelerator: false });
+  const hint = (key) => ({ accelerator: key, registerAccelerator: false });
+  const edit = (role, ru, en, key) => ({ role, label: tr(ru, en), ...hint('CmdOrCtrl+' + key) });
+  const view = (act, ru, en, key) => ({ label: tr(ru, en), click: () => viewActions[act](), ...hint(key) });
   return [
     {
-      label: tr('Приложение', 'Application'),
+      label: tr('Файл', 'File'),
       submenu: [
-        { label: tr('О программе…', 'About…'), click: () => { void showAboutDialog(); } },
-        { label: tr('Проверить обновления…', 'Check for updates…'), click: () => { void showUpdateCheckDialog(); } },
+        { label: tr('Перезапустить dsh…', 'Restart dsh…'), click: () => { void restartDsh(); } },
         { type: 'separator' },
         { label: tr('Выйти', 'Quit'), role: 'quit' },
       ],
@@ -1820,6 +1870,31 @@ function appMenuTemplate() {
         edit('selectAll', 'Выделить всё', 'Select all', 'A'),
       ],
     },
+    {
+      label: tr('Вид', 'View'),
+      submenu: [
+        view('reload', 'Перезагрузить', 'Reload', 'F5'),
+        view('reloadHard', 'Перезагрузить без кэша', 'Reload ignoring cache', 'CmdOrCtrl+Shift+R'),
+        { type: 'separator' },
+        view('zoomIn', 'Увеличить', 'Zoom in', 'CmdOrCtrl+='),
+        view('zoomOut', 'Уменьшить', 'Zoom out', 'CmdOrCtrl+-'),
+        view('zoomReset', 'Обычный масштаб', 'Actual size', 'CmdOrCtrl+0'),
+        { type: 'separator' },
+        view('find', 'Найти на странице…', 'Find in page…', 'CmdOrCtrl+F'),
+        { type: 'separator' },
+        { label: tr('Проверка орфографии', 'Spell check'), type: 'checkbox', checked: spellcheckOn, click: (item) => setSpellcheck(item.checked) },
+        view('fullscreen', 'Полноэкранный режим', 'Full screen', 'F11'),
+      ],
+    },
+    {
+      label: tr('Справка', 'Help'),
+      submenu: [
+        { label: tr('Проверить обновления…', 'Check for updates…'), click: () => { void showUpdateCheckDialog(); } },
+        { label: tr('Открыть папку логов', 'Open logs folder'), click: () => { void openLogsFolder(); } },
+        { type: 'separator' },
+        { label: tr('О программе', 'About'), click: () => { void showAboutDialog(); } },
+      ],
+    },
   ];
 }
 /* ===== end appMenuTemplate ===== */
@@ -1832,11 +1907,21 @@ function buildAppMenu() {
    Контекстное меню по правому клику — по params события context-menu:
    в поле ввода — Вырезать / Копировать / Вставить / Выделить всё (доступность
    по editFlags); вне поля — Копировать (если есть выделение) и Выделить всё;
-   на ссылке — ещё «Копировать адрес ссылки». Пункты — { action, label,
-   enabled }, группы разделены { type: 'separator' }. */
+   на ссылке — ещё «Копировать адрес ссылки»; на слове с ошибкой — первой
+   группой варианты исправления и «Добавить в словарь». Пункты — { action,
+   label, enabled[, value] }, группы разделены { type: 'separator' }. */
 function contextMenuItems(params) {
   const f = params.editFlags || {};
   const groups = [];
+  if (params.misspelledWord) {
+    const sugg = (params.dictionarySuggestions || []).slice(0, 5);
+    groups.push([
+      ...(sugg.length
+        ? sugg.map((w) => ({ action: 'replace', label: w, value: w, enabled: true }))
+        : [{ action: 'none', label: tr('Нет вариантов', 'No suggestions'), enabled: false }]),
+      { action: 'addWord', label: tr('Добавить в словарь', 'Add to dictionary'), enabled: true },
+    ]);
+  }
   if (params.linkURL) {
     groups.push([{ action: 'copyLink', label: tr('Копировать адрес ссылки', 'Copy link address'), enabled: true }]);
   }
@@ -1872,6 +1957,9 @@ function showContextMenu(params, w = win) {
     paste: () => wc.paste(),
     selectAll: () => wc.selectAll(),
     copyLink: () => clipboard.writeText(params.linkURL),
+    replace: (i) => wc.replaceMisspelling(i.value),
+    addWord: () => wc.session.addWordToSpellCheckerDictionary(params.misspelledWord),
+    none: () => {},
   };
   const items = contextMenuItems(params);
   // В лог — что показали (Docker-сценарий context_menu проверяет по нему:
@@ -1879,7 +1967,7 @@ function showContextMenu(params, w = win) {
   console.log('[launcher] контекстное меню: ' +
     items.map((i) => (i.type ? '|' : i.label + (i.enabled ? '' : ' (off)'))).join(', '));
   const template = items.map((i) =>
-    i.type ? i : { label: i.label, enabled: i.enabled, click: run[i.action] });
+    i.type ? i : { label: i.label, enabled: i.enabled, click: () => run[i.action](i) });
   Menu.buildFromTemplate(template).popup({ window: w });
 }
 /* ===== end showContextMenu ===== */
@@ -1899,6 +1987,332 @@ async function dshVersionRaw() {
     if (r.ok) return r.version;
   }
   return dshInstalledVersion;
+}
+
+/* ---------------- размер окна между запусками ---------------- */
+
+// Запоминаем размер и «развёрнуто» (позицию не трогаем: на Wayland её
+// выбирает композитор). Полноэкранный режим не сохраняем.
+const WIN_DEFAULT = { width: 1440, height: 900 };
+const WIN_MIN = { width: 760, height: 480 };
+const windowStateFile = () => path.join(app.getPath('userData'), 'window-state.json');
+
+function loadWindowState() {
+  try { return JSON.parse(fs.readFileSync(windowStateFile(), 'utf8')); } catch { return null; }
+}
+
+/* ===== windowSize (чистая функция, тест test/menu.js) =====
+   Размер окна из сохранённого состояния: не меньше WIN_MIN и не больше
+   рабочей области экрана (монитор могли сменить); мусор — размер по умолчанию. */
+function windowSize(saved, workArea) {
+  const num = (v) => (Number.isFinite(v) && v > 0 ? v : null);
+  const fit = (v, def, min, max) => {
+    const x = num(v) || def;
+    return Math.round(Math.max(min, num(max) ? Math.min(x, max) : x));
+  };
+  const st = saved && typeof saved === 'object' ? saved : {};
+  const wa = workArea || {};
+  return {
+    width: fit(st.width, WIN_DEFAULT.width, WIN_MIN.width, wa.width),
+    height: fit(st.height, WIN_DEFAULT.height, WIN_MIN.height, wa.height),
+    maximized: st.maximized === true,
+  };
+}
+/* ===== end windowSize ===== */
+
+function trackWindowState(w) {
+  // Последнее известное состояние — в памяти: при закрытии из страницы
+  // (window.close()) Electron не шлёт 'close', и окно уже не спросить;
+  // 'closed' же приходит всегда — тогда и пишем.
+  let last = null;
+  let timer = null;
+  const snapshot = () => {
+    if (w.isDestroyed() || w.isFullScreen()) return;
+    const b = w.getNormalBounds(); // размер «не развёрнутого» окна
+    last = { width: b.width, height: b.height, maximized: w.isMaximized() };
+  };
+  const write = () => {
+    if (!last) return;
+    try { fs.writeFileSync(windowStateFile(), JSON.stringify(last)); } catch { /* noop */ }
+  };
+  const later = () => { snapshot(); clearTimeout(timer); timer = setTimeout(write, 500); };
+  w.once('ready-to-show', snapshot);
+  w.once('show', snapshot); // Wayland: ready-to-show может не прийти — окно показывают по таймеру
+  for (const ev of ['resize', 'maximize', 'unmaximize']) w.on(ev, later);
+  w.on('close', snapshot); // крестик / «Выйти» — самые свежие размеры
+  w.on('closed', () => { clearTimeout(timer); write(); });
+}
+
+/* ---------------- «Вид»: перезагрузка, масштаб, поиск, полный экран ---------------- */
+
+// Действия доступны и из меню «Вид», и с клавиатуры (keyAction). Масштаб
+// сохраняем в userData, чтобы не сбрасывался между запусками. (Ctrl+колесо
+// не поддержано: в свежих Electron wheel-события в main-процесс приходят
+// ненадёжно, а перехват колеса в самой странице конфликтует с её
+// обработчиками.)
+const zoomFile = () => path.join(app.getPath('userData'), 'zoom-level.json');
+let zoomSaveTimer = null;
+
+function applyZoom(level, note) {
+  if (!win || win.isDestroyed()) return;
+  const z = Math.max(-5, Math.min(5, level));
+  win.webContents.setZoomLevel(z);
+  clearTimeout(zoomSaveTimer);
+  zoomSaveTimer = setTimeout(() => {
+    try { fs.writeFileSync(zoomFile(), JSON.stringify({ zoomLevel: z })); } catch { /* noop */ }
+  }, 400);
+  if (note) console.log(`[launcher] ${note}`);
+}
+
+const zoomOf = () => (win && !win.isDestroyed() ? win.webContents.getZoomLevel() : 0);
+const viewActions = {
+  reload: () => { win.webContents.reload(); console.log('[launcher] перезагрузка страницы'); },
+  reloadHard: () => { win.webContents.reloadIgnoringCache(); console.log('[launcher] перезагрузка страницы без кэша'); },
+  zoomIn: () => applyZoom(zoomOf() + 0.5),
+  zoomOut: () => applyZoom(zoomOf() - 0.5),
+  zoomReset: () => applyZoom(0, 'масштаб сброшен'),
+  find: () => openFind(),
+  findNext: () => findStep(true),
+  findPrev: () => findStep(false),
+  fullscreen: () => win.setFullScreen(!win.isFullScreen()),
+};
+
+/* ===== keyAction (чистая функция, тест test/menu.js) =====
+   Клавиша → действие «Вида» (имя из viewActions) или null — клавиша
+   странице. code — физическая клавиша, не зависит от раскладки (RU/EN). */
+function keyAction(input) {
+  const c = input.control;
+  if (input.key === 'F5' || (c && input.code === 'KeyR')) return input.shift ? 'reloadHard' : 'reload';
+  if (c && (input.code === 'Equal' || input.code === 'NumpadAdd')) return 'zoomIn';
+  if (c && (input.code === 'Minus' || input.code === 'NumpadSubtract')) return 'zoomOut';
+  if (c && (input.code === 'Digit0' || input.code === 'Numpad0')) return 'zoomReset';
+  if (c && !input.shift && input.code === 'KeyF') return 'find';
+  if (input.key === 'F3') return input.shift ? 'findPrev' : 'findNext';
+  if (input.key === 'F11') return 'fullscreen';
+  return null;
+}
+/* ===== end keyAction ===== */
+
+// Поиск по странице (Ctrl+F): панель в правом верхнем углу окна — отдельный
+// WebContentsView поверх страницы (не окно: на Wayland его не поставить в
+// нужное место). Панель — data:-страница; ввод и кнопки — переходы на
+// dshlauncher://find/… (ответ 204: панель остаётся как есть, фокус в поле).
+// Счётчик «N из M» — по событию found-in-page главного окна.
+const FIND_W = 430;
+const FIND_H = 46;
+let findView = null;
+let findText = '';
+
+function findBarUrl() {
+  const css = `html,body{margin:0;height:100%;background:#151a23;color:#d7dce3;overflow:hidden;
+    font:13px system-ui,'Segoe UI',Roboto,Ubuntu,sans-serif}
+    body{display:flex;align-items:center;gap:6px;padding:0 8px;box-sizing:border-box;
+    border:1px solid #2a3550;border-radius:10px}
+    input{flex:1;min-width:0;background:#0f1115;border:1px solid #2a3550;border-radius:7px;color:#e6ebf4;
+    padding:6px 9px;font-size:13px}
+    input:focus{outline:none;border-color:#3b82f6}
+    #n{min-width:64px;text-align:center;color:#9aa4b2;font-variant-numeric:tabular-nums}
+    button{background:#1f2836;border:0;border-radius:7px;color:#d7dce3;width:28px;height:28px;cursor:pointer;font-size:14px}
+    button:hover{background:#2a3550}`;
+  const go = (r) => `location.href='dshlauncher://find/${r}/'`;
+  const html = `<!doctype html><html lang="${UI_LANG}"><head><meta charset="utf-8"><style>${css}</style></head><body>
+    <input id="q" placeholder="${esc(tr('Найти на странице', 'Find in page'))}" spellcheck="false" autocomplete="off">
+    <span id="n"></span>
+    <button title="${esc(tr('Предыдущее (Shift+Enter)', 'Previous (Shift+Enter)'))}" onclick="${go('prev')}">&#8593;</button>
+    <button title="${esc(tr('Следующее (Enter)', 'Next (Enter)'))}" onclick="${go('next')}">&#8595;</button>
+    <button title="${esc(tr('Закрыть (Esc)', 'Close (Esc)'))}" onclick="${go('close')}">&#10005;</button>
+    <script>
+      const q = document.getElementById('q');
+      q.addEventListener('input', () => { location.href = 'dshlauncher://find/q/?t=' + encodeURIComponent(q.value); });
+      q.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); ${go("' + (e.shiftKey ? 'prev' : 'next') + '")}; }
+        else if (e.key === 'Escape') { e.preventDefault(); ${go('close')}; }
+      });
+      window.setCount = (t) => { document.getElementById('n').textContent = t; };
+    </script></body></html>`;
+  return 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+}
+
+function placeFind() {
+  if (!findView || !win || win.isDestroyed()) return;
+  const [cw] = win.getContentSize();
+  findView.setBounds({ x: Math.max(0, cw - FIND_W - 18), y: 10, width: Math.min(FIND_W, cw), height: FIND_H });
+}
+
+function setFindCount(text) {
+  if (!findView) return;
+  findView.webContents.executeJavaScript(`window.setCount && setCount(${JSON.stringify(text)})`).catch(() => {});
+}
+
+function openFind() {
+  if (!win || win.isDestroyed() || stopping) return;
+  if (!findView) {
+    findView = new WebContentsView({ webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: false } });
+    findView.setBackgroundColor('#00000000');
+    findView.webContents.loadURL(findBarUrl()).catch(() => {});
+    win.contentView.addChildView(findView);
+    win.on('resize', placeFind);
+    win.webContents.on('found-in-page', (_e, r) => {
+      if (r.finalUpdate) setFindCount(r.matches ? `${r.activeMatchOrdinal} / ${r.matches}` : tr('нет', 'none'));
+    });
+    // Ушли на другую страницу — старые совпадения неактуальны.
+    win.webContents.on('did-navigate', () => { if (findText) { findText = ''; closeFind(); } });
+  }
+  placeFind();
+  findView.setVisible(true);
+  findView.webContents.focus();
+  findView.webContents.executeJavaScript("document.getElementById('q') && document.getElementById('q').select()").catch(() => {});
+}
+
+function findQuery(text) {
+  if (!win || win.isDestroyed()) return;
+  findText = text;
+  if (!text) { win.webContents.stopFindInPage('clearSelection'); setFindCount(''); return; }
+  win.webContents.findInPage(text, { findNext: true });
+}
+
+function findStep(forward) {
+  if (!findView || !findView.getVisible()) return openFind();
+  if (findText) win.webContents.findInPage(findText, { forward, findNext: false });
+}
+
+function closeFind() {
+  if (!findView || !win || win.isDestroyed()) return;
+  win.webContents.stopFindInPage('keepSelection');
+  findView.setVisible(false);
+  win.webContents.focus();
+}
+
+function onFindRequest(route, url) {
+  if (route.startsWith('/find/q/')) findQuery(new URL(url).searchParams.get('t') || '');
+  else if (route.startsWith('/find/next/')) findStep(true);
+  else if (route.startsWith('/find/prev/')) findStep(false);
+  else if (route.startsWith('/find/close/')) closeFind();
+  return noContentResponse();
+}
+
+// Проверка орфографии в полях ввода (русский и английский). Словари
+// Chromium на Linux скачивает при первом включении (с серверов Google); без
+// сети проверка просто не работает. Вкл/выкл — меню «Вид», запоминается.
+const spellFile = () => path.join(app.getPath('userData'), 'spellcheck.json');
+let spellcheckOn = true;
+
+function initSpellcheck() {
+  try { spellcheckOn = JSON.parse(fs.readFileSync(spellFile(), 'utf8')).enabled !== false; } catch { /* по умолчанию вкл */ }
+  const ses = session.defaultSession;
+  const langs = ['ru', 'en-US'].filter((l) => ses.availableSpellCheckerLanguages.includes(l));
+  if (langs.length) ses.setSpellCheckerLanguages(langs);
+  ses.setSpellCheckerEnabled(spellcheckOn);
+}
+
+function setSpellcheck(on) {
+  spellcheckOn = on;
+  session.defaultSession.setSpellCheckerEnabled(on);
+  try { fs.writeFileSync(spellFile(), JSON.stringify({ enabled: on })); } catch { /* noop */ }
+  console.log(`[launcher] проверка орфографии: ${on ? 'вкл' : 'выкл'}`);
+  buildAppMenu(); // галочка в «Виде»
+}
+
+/* ---------------- «Файл» / «Справка»: перезапуск dsh, папка логов ---------------- */
+
+async function openLogsFolder() {
+  try { fs.mkdirSync(LOG_DIR, { recursive: true }); } catch { /* noop */ }
+  const err = await shell.openPath(LOG_DIR);
+  if (err) console.error('[launcher] не удалось открыть папку логов:', err);
+}
+
+// «Перезапустить dsh» (например, после обновления плагинов): останавливаем
+// dsh, который запустил лаунчер, и запускаем заново — без вопросов об
+// обновлениях. dsh, к которому лаунчер лишь подключился (запущен в
+// терминале), не трогаем — у него свой хозяин.
+let restartingDsh = false;
+
+async function restartDsh({ confirm = true } = {}) {
+  if (!win || win.isDestroyed() || stopping || launching || restartingDsh) return;
+  if (!weStartedDsh && !adoptedDsh) {
+    await dialog.showMessageBox(win, {
+      type: 'info',
+      title: tr('Перезапуск dsh', 'Restart dsh'),
+      message: tr('Этот dsh запущен не лаунчером', 'This dsh was not started by the launcher'),
+      detail: tr('Лаунчер подключился к уже работавшему dsh — перезапустите его там, где запускали (например, в терминале).',
+        'The launcher attached to a dsh that was already running — restart it where it was started (e.g. in a terminal).'),
+    });
+    return;
+  }
+  if (confirm) {
+    const { response } = await dialog.showMessageBox(win, {
+      type: 'question',
+      buttons: [tr('Перезапустить', 'Restart'), tr('Отмена', 'Cancel')],
+      defaultId: 0,
+      cancelId: 1,
+      title: tr('Перезапуск dsh', 'Restart dsh'),
+      message: tr('Перезапустить dsh?', 'Restart dsh?'),
+      detail: tr('Текущий ответ агента прервётся; сессии сохранятся.', 'The current agent reply will be interrupted; sessions are kept.'),
+    });
+    if (response !== 0) return;
+  }
+  console.log('[launcher] перезапуск dsh по запросу');
+  restartingDsh = true;
+  launching = true; // watchdog не трогает окно, пока порт падает и поднимается
+  try {
+    showPage(() => showStatus(tr('Перезапуск dsh…', 'Restarting dsh…'),
+      tr('<p>Останавливаю <code>dsh</code> и запускаю заново…</p>', '<p>Stopping <code>dsh</code> and starting it again…</p>'), false));
+    if (adoptedDsh) await stopAdoptedDsh(); else await stopDsh();
+    for (let i = 0; i < 50 && await portOpen(); i++) await sleep(100); // порт освободился
+    weStartedDsh = false; adoptedDsh = false; adoptedOldPgid = null; dshProc = null; dshFatal = false;
+  } finally {
+    restartingDsh = false;
+    launching = false;
+  }
+  await launchDshInner();
+}
+
+/* ===== gpuStatus (чистая функция, тест test/menu.js) =====
+   Состояние GPU-ускорения для «О программе». Причины отключения — как в
+   начале main.js; markerAgeMs — возраст маркера сбоев сейчас (null — нет).
+   Маркер при включённом GPU = отключится со следующего запуска. */
+function gpuStatus(st) {
+  const marker = st.markerAgeMs !== null && st.markerAgeMs < st.ttlMs;
+  const daysLeft = marker ? Math.max(1, Math.ceil((st.ttlMs - st.markerAgeMs) / 86400000)) : 0;
+  const reason = st.noGpuRequested ? 'env'
+    : st.disabledByMarker ? 'marker'
+    : !st.hasRenderNode ? 'norender'
+    : !st.hasEgl ? 'noegl'
+    : null;
+  return { on: reason === null, reason, marker, daysLeft };
+}
+/* ===== end gpuStatus ===== */
+
+function gpuStatusNow() {
+  let markerAgeMs = null;
+  try { markerAgeMs = Date.now() - fs.statSync(GPU_MARKER_FILE).mtimeMs; } catch { /* маркера нет */ }
+  return gpuStatus({
+    noGpuRequested, disabledByMarker: gpuDisabledByMarker, hasRenderNode: hasGpuRenderNode, hasEgl: hasEglLibs,
+    markerAgeMs, ttlMs: GPU_MARKER_TTL_MS,
+  });
+}
+
+function gpuStatusText(g) {
+  if (g.on) {
+    return g.marker
+      ? tr('включено; со следующего запуска будет отключено — GPU-процесс падал', 'on; will be off from the next start — the GPU process crashed')
+      : tr('включено', 'on');
+  }
+  if (g.reason === 'env') return tr('отключено (DSH_LAUNCHER_NO_GPU=1)', 'off (DSH_LAUNCHER_NO_GPU=1)');
+  if (g.reason === 'marker') {
+    return g.marker
+      ? tr(`отключено после сбоев GPU-процесса (ещё ${g.daysLeft} дн.)`, `off after GPU process crashes (${g.daysLeft} more days)`)
+      : tr('отключено до перезапуска лаунчера (включится при следующем запуске)', 'off until the launcher restarts (on from the next start)');
+  }
+  if (g.reason === 'norender') return tr('отключено (нет /dev/dri/renderD* — ВМ без 3D?)', 'off (no /dev/dri/renderD* — a VM without 3D?)');
+  return tr('отключено (нет библиотек EGL)', 'off (no EGL libraries)');
+}
+
+function onDialogGpuEnable() {
+  try { fs.unlinkSync(GPU_MARKER_FILE); console.log('[launcher] маркер сбоев GPU снят — GPU со следующего запуска'); }
+  catch (e) { if (e.code !== 'ENOENT') console.error('[launcher] маркер GPU:', e.message); }
+  if (dialogRender) dialogRender(false);
+  return noContentResponse();
 }
 
 /* ---------------- окно-диалог: «О программе», «Проверить обновления» ---------------- */
@@ -1941,8 +2355,8 @@ function openDialog(title) {
   const d = new BrowserWindow({
     parent: win,
     modal: true,
-    width: 580,
-    height: 360,
+    width: 600,
+    height: 440,
     resizable: false,
     minimizable: false,
     maximizable: false,
@@ -2006,6 +2420,7 @@ async function showAboutDialog() {
   if (gen === null) return;
   const ver = { lver: null, dver: null, loaded: false };
   const render = (copied) => {
+    const gpu = gpuStatusNow();
     const fromSrc = !process.execPath.startsWith('/opt/dsh-launcher/');
     const lLabel = fromSrc ? tr(' (сборка из исходников)', ' (built from source)') : '';
     const lDisp = ver.loaded ? (ver.lver || tr('неизвестно', 'unknown')) : tr('загружаю…', 'loading…');
@@ -2016,6 +2431,8 @@ async function showAboutDialog() {
       [tr('путь к dsh', 'path to dsh'), DSH_BIN || '—'],
       ['Node.js', 'v' + process.versions.node],
       [tr('ОС', 'OS'), os.platform() + ' ' + os.release() + ' (' + os.arch() + ')'],
+      [tr('GPU-ускорение', 'GPU acceleration'), gpuStatusText(gpu)],
+      [tr('логи', 'logs'), LOG_DIR],
     ];
     dialogCopyText = ver.loaded ? rows.map(([k, v]) => k + ': ' + v).join('\n') : '';
     const body = `
@@ -2030,6 +2447,8 @@ async function showAboutDialog() {
       </p>
       <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap">
         ${ver.loaded ? '<button onclick="location.href=\'dshlauncher://dialog/copy/\'">' + (copied ? tr('Скопировано', 'Copied') : tr('Скопировать для отчёта', 'Copy for report')) + '</button>' : ''}
+        <button onclick="location.href='dshlauncher://dialog/logs/'">${tr('Папка логов', 'Logs folder')}</button>
+        ${gpu.marker ? '<button onclick="location.href=\'dshlauncher://dialog/gpu-enable/\'">' + tr('Включить GPU снова', 'Re-enable GPU') + '</button>' : ''}
         ${dialogCloseButton()}
       </div>`;
     dialogPage(title, body);
@@ -2413,8 +2832,8 @@ if (!app.requestSingleInstanceLock()) {
 
 async function onReady() {
   installSignalHandlers();
-  buildAppMenu(); // меню «Приложение»: О программе / Проверить обновления / Выйти
-                  // (подписи следуют за языком окна, при RU|EN собирается заново)
+  buildAppMenu(); // «Файл», «Правка», «Вид», «Справка» (подписи следуют за
+                  // языком окна, при RU|EN собирается заново)
   loadLangPref();
   // Проверки обновлений — параллельно всему остальному; перед стартом dsh
   // их ждём не дольше UPDATE_CHECK_TIMEOUT.
@@ -2441,23 +2860,33 @@ async function onReady() {
       // Ответ 204: страница, с которой перешли (GUI dsh), остаётся на месте.
       if (route.startsWith('/menu/about/')) { void showAboutDialog(); return noContentResponse(); }
       if (route.startsWith('/menu/check/')) { void showUpdateCheckDialog(); return noContentResponse(); }
+      if (route.startsWith('/find/')) return onFindRequest(route, request.url);
+      if (route.startsWith('/dialog/logs/')) { void openLogsFolder(); return noContentResponse(); }
+      if (route.startsWith('/dialog/gpu-enable/')) return onDialogGpuEnable();
+      if (route.startsWith('/menu/restart-dsh/')) { void restartDsh({ confirm: false }); return noContentResponse(); }
       if (route.startsWith('/dialog/close/')) return onDialogClose();
       if (route.startsWith('/dialog/copy/')) return onDialogCopy();
     } catch { /* noop */ }
     return onPasteRequest(request);
   });
 
+  const size = windowSize(loadWindowState(), screen.getPrimaryDisplay().workAreaSize);
   win = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 760,
-    minHeight: 480,
+    width: size.width,
+    height: size.height,
+    minWidth: WIN_MIN.width,
+    minHeight: WIN_MIN.height,
     title: 'DeepSeek Harness',
     backgroundColor: '#0f1115',
-    autoHideMenuBar: false, // строка меню «Приложение» всегда видна
+    autoHideMenuBar: false, // строка меню всегда видна
     show: false,
-    webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: false },
+    // spellcheck включён всегда, а вкл/выкл — session.setSpellCheckerEnabled
+    // (меню «Вид»): так переключается без перезапуска.
+    webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: true },
   });
+  if (size.maximized) win.maximize();
+  trackWindowState(win);
+  initSpellcheck();
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
@@ -2491,55 +2920,23 @@ async function onReady() {
     if (launcherUpdatedOnDisk) restartLauncher(); // новые файлы на диске — старому не подняться
   });
 
-  // Управление, как в браузере: стандартных ускорителей (Reload и т.п.) в
-  // меню нет — привязываем свои. (Сочетания в «Правке» — только подсказки.)
-  // F5 / Ctrl+R — перезагрузка страницы; Ctrl+Shift+R — без кэша.
-  // Ctrl+= / Ctrl+- — шаг масштаба; Ctrl+0 — сброс.
-  // Масштаб сохраняем в userData, чтобы не сбрасывался между запусками.
-  // (Ctrl+колесо не поддержано: в свежих Electron wheel-события в main-процесс
-  //  приходят ненадёжно, а перехват колес в самой странице конфликтует с
-  //  обработчиками загруженной страницы.)
-  const wc = win.webContents;
-  const zoomFile = path.join(app.getPath('userData'), 'zoom-level.json');
-  let zoomSaveTimer = null;
-  const saveZoom = (level) => {
-    clearTimeout(zoomSaveTimer);
-    zoomSaveTimer = setTimeout(() => {
-      try { fs.writeFileSync(zoomFile, JSON.stringify({ zoomLevel: level })); }
-      catch { /* noop */ }
-    }, 400);
-  };
-  const applyZoom = (level, note) => {
-    const z = Math.max(-5, Math.min(5, level));
-    wc.setZoomLevel(z);
-    saveZoom(z);
-    if (note) console.log(`[launcher] ${note}`);
-  };
+  // Клавиши «как в браузере» (F5, Ctrl+R, Ctrl+= / - / 0, Ctrl+F, F3, F11) —
+  // keyAction → viewActions; в меню «Вид» те же действия. Ускорители меню
+  // не регистрируются — только подсказки, чтобы не перебивать клавиши GUI dsh.
   try {
-    const savedZoom = JSON.parse(fs.readFileSync(zoomFile, 'utf8'));
+    const savedZoom = JSON.parse(fs.readFileSync(zoomFile(), 'utf8'));
     if (Number.isFinite(savedZoom.zoomLevel)) {
-      wc.setZoomLevel(Math.max(-5, Math.min(5, savedZoom.zoomLevel)));
+      win.webContents.setZoomLevel(Math.max(-5, Math.min(5, savedZoom.zoomLevel)));
       console.log(`[launcher] восстановлен масштаб: ${savedZoom.zoomLevel}`);
     }
   } catch { /* noop */ }
   win.webContents.on('before-input-event', (event, input) => {
     try {
       if (input.type !== 'keyDown') return;
-      // code — физическая клавиша (не зависит от раскладки: RU/EN/другие)
-      if (input.key === 'F5' || (input.control && input.code === 'KeyR')) {
-        event.preventDefault();
-        if (input.shift) wc.reloadIgnoringCache(); else wc.reload();
-        console.log(`[launcher] перезагрузка страницы (${input.key === 'F5' ? 'F5' : 'Ctrl+R'})`);
-      } else if (input.control && (input.code === 'Equal' || input.code === 'NumpadAdd')) {
-        event.preventDefault();
-        applyZoom(wc.getZoomLevel() + 0.5);
-      } else if (input.control && (input.code === 'Minus' || input.code === 'NumpadSubtract')) {
-        event.preventDefault();
-        applyZoom(wc.getZoomLevel() - 0.5);
-      } else if (input.control && (input.code === 'Digit0' || input.code === 'Numpad0')) {
-        event.preventDefault();
-        applyZoom(0, 'масштаб сброшен (Ctrl+0)');
-      }
+      const act = keyAction(input);
+      if (!act) return;
+      event.preventDefault();
+      viewActions[act]();
     } catch (e) { console.error('[launcher] ошибка в обработчике клавиш:', e); }
   });
 

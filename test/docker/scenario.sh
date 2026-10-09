@@ -228,6 +228,7 @@ menu_about)
   for i in 1 2 3; do
     drv --page "$GUI" eval "location.href='dshlauncher://menu/about/'" >/dev/null
     step "«О программе» #$i — окно с версиями лаунчера и dsh" drv --page '^About$' wait-text 'DSH Launcher 1\.1\.0-1.*dsh backend 0\.2\.0-rc\.2.*Copy for report' 30
+    [ "$i" = 1 ] && step "«О программе»: GPU (в контейнере выкл.) и путь к логам" drv --page '^About$' wait-text 'GPU acceleration off \(no /dev/dri/renderD.*logs /home/tester/\.local/state/dsh-launcher.*Logs folder' 5
     check "GUI dsh под окном не перезагружался (#$i)" gui_kept
     check "GUI dsh под окном затемнён (#$i)" dimmed
     if [ "$i" = 1 ]; then
@@ -281,6 +282,93 @@ context_menu)
   kill -TERM "$LPID"
   step "лаунчер штатно завершился после контекстных меню" wait_exit "$LPID" 15
   check "дерево dsh остановлено" tree_gone
+  ;;
+
+find)
+  # Поиск по странице: Ctrl+F (настоящее нажатие через CDP) открывает панель
+  # (отдельный WebContentsView — в CDP своя страница), ввод ищет, счётчик
+  # «N / M», «следующее» листает.
+  start_launcher $FAKE $NOUPD || exit 1
+  step "окно дошло до GUI dsh" drv wait-url '^http://127.0.0.1:3080/' 60
+  GUI='^http://127\.0\.0\.1:3080/'
+  FIND='%3Cinput%20id%3D%22q%22'
+  drv --page "$GUI" eval "document.body.innerHTML = '<p>needle one</p><p>needle two</p><p>needle three</p>'; 1" >/dev/null
+  drv --page "$GUI" key Ctrl+KeyF
+  find_open() { for _ in $(seq 1 20); do curl -s http://127.0.0.1:9222/json/list | grep -q "$FIND" && return 0; sleep 0.5; done; return 1; }
+  step "Ctrl+F — панель поиска открылась" find_open
+  count() { drv --page "$FIND" eval "document.getElementById('n').textContent"; }
+  count_is() { for _ in $(seq 1 20); do [ "$(count)" = "$1" ] && return 0; sleep 0.25; done; echo "счётчик: $(count)"; return 1; }
+  drv --page "$FIND" eval "(() => { const q = document.getElementById('q'); q.value = 'needle'; q.dispatchEvent(new Event('input')); return 1; })()" >/dev/null
+  for _ in $(seq 1 20); do count | grep -q '/ 3$' && break; sleep 0.25; done
+  if count | grep -q '/ 3$'; then ok "счётчик: $(count)"; else bad "счётчик совпадений ($(count))"; fi
+  BEFORE=$(count)
+  drv --page "$FIND" eval "(() => { location.href = 'dshlauncher://find/next/'; return 1; })()" >/dev/null
+  for _ in $(seq 1 20); do [ "$(count)" != "$BEFORE" ] && break; sleep 0.25; done
+  if [ "$(count)" != "$BEFORE" ]; then ok "«следующее»: $BEFORE → $(count)"; else bad "«следующее» не сменило совпадение ($BEFORE)"; fi
+  drv --page "$FIND" eval "(() => { const q = document.getElementById('q'); q.value = 'nothing-like-this'; q.dispatchEvent(new Event('input')); return 1; })()" >/dev/null
+  step "нет совпадений — «none»" count_is none
+  check "лаунчер жив" kill -0 "$LPID"
+  kill -TERM "$LPID"; wait_exit "$LPID" 15 >/dev/null
+  ;;
+
+restart_dsh)
+  # «Перезапустить dsh» (маршрут без вопроса — по меню спрашивает
+  # подтверждение): dsh лаунчера останавливается и запускается заново,
+  # ошибки «dsh остановился» нет, окно снова на GUI.
+  start_launcher $FAKE $NOUPD || exit 1
+  step "окно дошло до GUI dsh" drv wait-url '^http://127.0.0.1:3080/' 60
+  check "дерево fakedsh живо" tree_alive
+  drv eval "location.href='dshlauncher://menu/restart-dsh/'" >/dev/null
+  step "перезапуск по запросу" wait_log 'перезапуск dsh по запросу' 15
+  starts() { [ "$(grep -c 'start pgid' /tmp/fakedsh.log)" -ge 2 ]; }
+  wait_starts() { for _ in $(seq 1 60); do starts && return 0; sleep 0.5; done; return 1; }
+  step "dsh запущен заново (второй старт)" wait_starts
+  check "прежний dsh получил SIGTERM" grep -q SIGTERM /tmp/fakedsh.log
+  step "окно снова на GUI dsh" drv wait-url '^http://127.0.0.1:3080/' 60
+  check "без страницы «dsh остановился»" sh -c "! grep -q 'dsh has stopped\|dsh остановился' '$OUT'"
+  check "новое дерево fakedsh живо" tree_alive
+  kill -TERM "$LPID"
+  step "лаунчер штатно завершился" wait_exit "$LPID" 15
+  check "дерево dsh остановлено" tree_gone
+  ;;
+
+proxy)
+  # Проверка обновлений через системный прокси (session.resolveProxy → агент
+  # Node): в контейнере прокси задан переменными окружения. «Последние»
+  # версии подменены — без вопроса об обновлении.
+  rm -f /tmp/proxy.log
+  runuser -u tester -- /opt/node22/bin/node $T/proxy.js 3129 >/dev/null 2>&1 &
+  for _ in $(seq 1 20); do grep -q listening /tmp/proxy.log 2>/dev/null && break; sleep 0.25; done
+  P=http://127.0.0.1:3129
+  start_launcher $FAKE HTTPS_PROXY=$P https_proxy=$P HTTP_PROXY=$P http_proxy=$P \
+    DSH_LAUNCHER_FAKE_LAUNCHER_LATEST=1.0.0 DSH_LAUNCHER_FAKE_DSH_LATEST=0.0.1 || exit 1
+  step "окно дошло до GUI dsh (localhost — мимо прокси)" drv wait-url '^http://127.0.0.1:3080/' 60
+  step "проверка обновлений npm прошла" wait_log 'последний @deepseek-ai/dsh' 30
+  check "запрос к npm шёл через прокси" grep -q 'CONNECT registry.npmjs.org:443' /tmp/proxy.log
+  check "запрос к GitHub шёл через прокси" grep -q 'CONNECT api.github.com:443' /tmp/proxy.log
+  kill -TERM "$LPID"; wait_exit "$LPID" 15 >/dev/null
+  ;;
+
+window_state)
+  # Размер окна между запусками: сохранённый размер применяется; без
+  # сохранённого — по умолчанию 1440×900, но не больше экрана (Xvfb 1280×800);
+  # при закрытии размер записывается.
+  WS=/home/tester/.config/dsh-launcher/window-state.json
+  runuser -u tester -- sh -c "mkdir -p ~/.config/dsh-launcher && echo '{\"width\":1000,\"height\":640}' > $WS"
+  start_launcher $FAKE $NOUPD || exit 1
+  step "окно дошло до GUI dsh" drv wait-url '^http://127.0.0.1:3080/' 60
+  step "сохранённая ширина 1000 применена" sh -c "[ \"\$($DRV eval 'window.outerWidth')\" = 1000 ]"
+  drv eval 'window.close()' >/dev/null
+  step "лаунчер завершился" wait_exit "$LPID" 15
+  check "при закрытии размер записан (1000)" grep -q '"width":1000' "$WS"
+  rm -f "$WS"
+  start_launcher $FAKE $NOUPD || exit 1
+  step "окно дошло до GUI dsh (без сохранённого размера)" drv wait-url '^http://127.0.0.1:3080/' 60
+  W=$(drv eval 'window.outerWidth')
+  if [ -n "$W" ] && [ "$W" -le 1280 ] && [ "$W" -ge 760 ]; then ok "по умолчанию, но не шире экрана: $W"; else bad "ширина по умолчанию ($W)"; fi
+  drv eval 'window.close()' >/dev/null
+  step "лаунчер завершился" wait_exit "$LPID" 15
+  check "размер записан при закрытии" grep -q '"width":' "$WS"
   ;;
 
 *) echo "неизвестный сценарий"; exit 2 ;;
