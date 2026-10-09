@@ -209,6 +209,30 @@ launcher_update_nopkexec)
   kill -TERM "$LPID"; wait_exit "$LPID" 15 >/dev/null
   ;;
 
+menu_about)
+  # Страницы меню после проверки обновлений при старте. На машине разработчика
+  # 1.3.0 здесь падал (electronNet.fetch при старте, затем dpkg-query /
+  # dsh --version из «О программе» — SIGSEGV/abort в Electron), но в контейнере
+  # это падение НЕ воспроизводится — сценарий проверяет страницы меню, а не
+  # ту регрессию. Проверки включены, «последние» версии подменены на старые —
+  # без вопроса об обновлении. Страницы открываются по URL (по нативному меню
+  # driver кликать не умеет).
+  start_launcher $FAKE DSH_LAUNCHER_FAKE_LAUNCHER_LATEST=1.0.0 DSH_LAUNCHER_FAKE_DSH_LATEST=0.0.1 || exit 1
+  step "окно дошло до GUI dsh" drv wait-url '^http://127.0.0.1:3080/' 60
+  step "проверка обновлений при старте прошла (npm)" wait_log 'последний @deepseek-ai/dsh' 30
+  for i in 1 2 3; do
+    drv eval "location.href='dshlauncher://menu/about/'" >/dev/null
+    step "«О программе» #$i — версии лаунчера и dsh" drv wait-text 'About.*DSH Launcher 1\.1\.0-1.*dsh backend 0\.2\.0-rc\.2' 30
+    check "лаунчер жив после «О программе» #$i" kill -0 "$LPID"
+    drv eval "location.href='dshlauncher://menu/back/'" >/dev/null
+    step "«Вернуться» #$i — снова GUI dsh" drv wait-url '^http://127.0.0.1:3080/' 30
+  done
+  drv eval "location.href='dshlauncher://menu/check/'" >/dev/null
+  step "«Проверить обновления» — оба компонента актуальны" drv wait-text 'Update check.*DSH Launcher.*up to date.*dsh backend.*up to date' 60
+  check "лаунчер жив после проверки обновлений" kill -0 "$LPID"
+  kill -TERM "$LPID"; wait_exit "$LPID" 15 >/dev/null
+  ;;
+
 *) echo "неизвестный сценарий"; exit 2 ;;
 esac
 

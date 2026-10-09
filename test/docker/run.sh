@@ -20,7 +20,7 @@ OSES=${OSES:-"24.04 26.04"}
 JOBS=${JOBS:-4}
 ALL="close sigterm sigterm_ignored sigterm_double adopt_samegroup adopt_detached
      dsh_update_auto dsh_update_other_prefix dsh_update_root_prefix
-     launcher_update launcher_update_denied launcher_update_nopkexec"
+     launcher_update launcher_update_denied launcher_update_nopkexec menu_about"
 SCENARIOS=${*:-$ALL}
 
 mkdir -p "$WORK/src" "$WORK/ctx" "$WORK/results"

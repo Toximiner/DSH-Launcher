@@ -5,6 +5,18 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- **The launcher quit when opening “About”** (and could quit on “Check for
+  updates”). Cause: an Electron crash — after the startup update check, the
+  first external command (`dpkg-query`, `dsh --version`) took the process
+  down. The update check and the package download now use the Node.js HTTP
+  client. Side effect: they don't use the system proxy — on a network with
+  internet access only through a proxy, the launcher won't learn about a new
+  version (as when offline), but it keeps working.
+
 ## [1.3.0] — 2026-10-09
 
 ### Added

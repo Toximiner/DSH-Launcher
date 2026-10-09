@@ -1201,8 +1201,16 @@ function timedCheck(promise, ms) {
 }
 /* ===== end timedCheck ===== */
 
+// Внешние запросы (GitHub, npm, скачивание .deb) — через fetch из Node, а не
+// electronNet.fetch. После electronNet.fetch к внешним хостам при старте
+// следующий запуск дочернего процесса (dpkg-query, dsh --version в «О
+// программе») ронял Electron 44 в нативном коде: «terminate called without
+// an active exception» / SIGSEGV (Wayland, Ubuntu 26.04; 1.3.0). Цена — fetch
+// из Node не берёт системный прокси: за прокси проверка обновлений просто не
+// сработает (как без сети). Проверка куки окна (plainUrlIsAuthed) остаётся на
+// electronNet — ей нужна сессия окна.
 async function fetchLauncherLatest() {
-  const res = await electronNet.fetch(`https://api.github.com/repos/${UPDATE_GITHUB_REPO}/releases/latest`, {
+  const res = await fetch(`https://api.github.com/repos/${UPDATE_GITHUB_REPO}/releases/latest`, {
     headers: { 'User-Agent': 'dsh-launcher', 'Accept': 'application/vnd.github+json' },
   });
   if (!res.ok) throw new Error(`GitHub API: HTTP ${res.status}`);
@@ -1223,7 +1231,7 @@ async function fetchLauncherLatest() {
 }
 
 async function fetchDshLatest() {
-  const res = await electronNet.fetch(`https://registry.npmjs.org/${DSH_NPM_PKG}/latest`, {
+  const res = await fetch(`https://registry.npmjs.org/${DSH_NPM_PKG}/latest`, {
     headers: { 'User-Agent': 'dsh-launcher' },
   });
   if (!res.ok) throw new Error(`npm registry: HTTP ${res.status}`);
@@ -1448,7 +1456,7 @@ async function downloadDeb(url, expectedSha256) {
     for (const f of fs.readdirSync(dir)) {
       if (f.endsWith('.deb')) try { fs.unlinkSync(path.join(dir, f)); } catch { /* noop */ }
     }
-    const res = await electronNet.fetch(url);
+    const res = await fetch(url); // не electronNet — см. fetchLauncherLatest
     if (!res.ok || !res.body) throw new Error(`download: HTTP ${res.status}`);
     const total = Number(res.headers.get('content-length') || 0);
     const name = url.split('/').pop() || 'dsh-launcher.deb';
@@ -1873,9 +1881,6 @@ function onMenuCopy() {
   if (onMenuPage && currentPage) currentPage(true); // перерисовка: «Скопировано»
   return blankResponse();
 }
-
-async function onMenuAboutRequest() { await showAboutPage(); return blankResponse(); }
-async function onMenuCheckRequest() { await showUpdateCheckPage(); return blankResponse(); }
 
 async function showAboutPage() {
   if (!win || win.isDestroyed() || stopping) return;
@@ -2323,6 +2328,10 @@ async function onReady() {
       if (route.startsWith('/update/recheck/')) return onUpdateChoice('recheck');
       if (route.startsWith('/update/copy/')) return onUpdateChoice('copy');
       if (route.startsWith('/update/restart/')) return onUpdateChoice('restart');
+      // О программе / проверка обновлений по URL — для Docker-сценариев
+      // (driver.js не умеет кликать по нативному меню); штатно — пункт меню.
+      if (route.startsWith('/menu/about/')) { void showAboutPage(); return blankResponse(); }
+      if (route.startsWith('/menu/check/')) { void showUpdateCheckPage(); return blankResponse(); }
       if (route.startsWith('/menu/back/')) return onMenuBack();
       if (route.startsWith('/menu/copy/')) return onMenuCopy();
     } catch { /* noop */ }
