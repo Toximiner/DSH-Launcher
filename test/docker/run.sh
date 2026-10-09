@@ -50,9 +50,38 @@ if [ ! -f "$WORK/ctx/$TARBALL" ]; then
 fi
 cp -f "$HERE/Dockerfile" "$HERE/fakedsh.js" "$HERE/driver.js" "$HERE/proxy.js" "$HERE/scenario.sh" "$WORK/ctx/"
 
+# На CI (GITHUB_ACTIONS) ошибки дублируются аннотациями — их видно на
+# странице прогона без раскрытия логов (и через публичный API).
+annotate() { # заголовок, текст (многострочный)
+  [ -n "${GITHUB_ACTIONS:-}" ] || return 0
+  local msg; msg=$(printf '%s' "$2" | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')
+  echo "::error title=$1::$msg"
+}
+
+# Образ: базовый ubuntu с Docker Hub. Без авторизации Docker Hub ограничивает
+# загрузки с одного IP (429 Too Many Requests), а IP раннеров общие — поэтому
+# 3 попытки с паузой, затем то же с mirror.gcr.io (официальное зеркало
+# Docker Hub от Google).
+build_image() {
+  local os=$1 base out try
+  for base in "ubuntu:$os" "mirror.gcr.io/library/ubuntu:$os"; do
+    for try in 1 2 3; do
+      if out=$(docker build -q --build-arg BASE="$base" --build-arg NODE_VER="$NODE_VER" -t "dshl-test:$os" "$WORK/ctx" 2>&1); then
+        [ "$base" = "ubuntu:$os" ] || echo "   база с зеркала: $base"
+        return 0
+      fi
+      echo "   сборка не удалась ($base, попытка $try): $(echo "$out" | grep -m1 -iE 'error|429' | cut -c1-200)"
+      [ "$try" -lt 3 ] && sleep $((try * 15))
+    done
+  done
+  echo "$out" | tail -20
+  annotate "Docker: образ $os" "$(echo "$out" | tail -5)"
+  return 1
+}
+
 for os in $OSES; do
   echo ">> образ dshl-test:$os"
-  docker build -q --build-arg BASE=ubuntu:$os --build-arg NODE_VER=$NODE_VER -t dshl-test:$os "$WORK/ctx" >/dev/null
+  build_image "$os" || exit 1
 done
 
 rm -f "$WORK/results"/*
@@ -81,6 +110,8 @@ FAILED=$(grep -c '^FAIL' "$WORK/results/summary.txt" || true)
 TOTAL=$(wc -l < "$WORK/results/summary.txt")
 echo ">> итог: $((TOTAL - FAILED))/$TOTAL прошли"
 for f in $(grep '^FAIL' "$WORK/results/summary.txt" | awk '{print $2"-"$3}'); do
-  echo "---- $f"; grep -E '^\s+\[FAIL\]|TIMEOUT' "$WORK/results/$f.log" || tail -20 "$WORK/results/$f.log"
+  fails=$(grep -E '^\s+\[FAIL\]|TIMEOUT' "$WORK/results/$f.log" || tail -20 "$WORK/results/$f.log")
+  echo "---- $f"; echo "$fails"
+  annotate "Docker: $f" "$fails"
 done
 [ "$FAILED" -eq 0 ]
