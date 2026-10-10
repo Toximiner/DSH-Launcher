@@ -42,10 +42,18 @@ def pgrep(pattern, user=None):
 
 
 def alive(pid):
+    """Процесс жив. Завершившийся, но не подобранный родителем («зомби», Z) —
+    уже не жив: лаунчер — прямой потомок pytest, и до waitpid он остаётся
+    зомби, а os.kill(pid, 0) для зомби проходит."""
     try:
         os.kill(pid, 0)
-        return True
     except OSError:
+        return False
+    try:
+        with open(f'/proc/{pid}/stat') as f:
+            state = f.read().rsplit(')', 1)[1].split()[0]
+        return state not in ('Z', 'X')
+    except (OSError, IndexError):
         return False
 
 
