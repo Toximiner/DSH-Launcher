@@ -5,6 +5,7 @@
 умеет); маршрут отвечает 204 — страница, с которой перешли, остаётся на месте.
 """
 import json
+import time
 
 from .env import GUI_URL
 from .procs import wait_for
@@ -202,13 +203,16 @@ class FindBar:
 
     def search(self, text, expect, tries=3):
         """Ввести текст и дождаться счётчика, для которого expect(счётчик) истинно.
-        Первый поиск сразу после открытия панели иногда (Debian 13) отвечает
-        «none» — повторяем ввод."""
+        Первый поиск сразу после открытия панели иногда отвечает «none» —
+        повторяем ввод с паузой. Поле перед повтором НЕ очищаем: пустая строка
+        останавливает поиск (stopFindInPage), и это асинхронно может отменить
+        следующий запрос."""
+        time.sleep(1)  # панель только что открылась — дать ей устояться
         for _ in range(tries):
-            self.type('')
             self.type(text)
-            if self.wait_count(expect):
+            if self.wait_count(expect, 4):
                 return True
+            time.sleep(1)
         return False
 
     def next(self):
