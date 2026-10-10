@@ -14,7 +14,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
   nothing: a desktop notification (once per version) and a “Help → Update …
   to X…” item with “What’s new” and an “Update now” button — the launcher
   restarts and installs the update right away. “Update” buttons are also in
-  “Help → Check for updates…”.
+  “Help → Check for updates…”. “Settings” has separate checkboxes: the
+  check at startup and every 12 hours (the second applies at once).
 
 ## [1.7.0] — 2026-10-10
 

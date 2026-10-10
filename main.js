@@ -139,7 +139,14 @@ function effectiveConfig(env, settings, home) {
   else if (s.checkUpdates === false) { checkUpdates = false; from('checkUpdates', 'settings'); }
   else from('checkUpdates', 'default');
 
-  return { port, args, profile, dshBin, cwd, noGpu, ozone, checkUpdates, src };
+  // проверка раз в 12 часов, пока лаунчер открыт — отдельная галочка;
+  // DSH_LAUNCHER_NO_UPDATE_CHECK запрещает любые проверки
+  let pollUpdates = true;
+  if (src.checkUpdates === 'env') { pollUpdates = false; from('pollUpdates', 'env'); }
+  else if (s.pollUpdates === false) { pollUpdates = false; from('pollUpdates', 'settings'); }
+  else from('pollUpdates', 'default');
+
+  return { port, args, profile, dshBin, cwd, noGpu, ozone, checkUpdates, pollUpdates, src };
 }
 /* ===== end effectiveConfig ===== */
 
@@ -2738,6 +2745,7 @@ function settingValue(key, raw) {
       if (!abs(v)) return { error: tr('Нужен полный путь (начинается с /).', 'A full path is needed (starting with /).') };
       return { value: v };
     case 'checkUpdates':
+    case 'pollUpdates':
     case 'spellcheck':
     case 'market':
       if (v !== 'true' && v !== 'false') return { error: 'bad value' };
@@ -2808,6 +2816,7 @@ function onSettingsSet(url) {
       else if (key === 'port') saveSettings({ port: r.value === DEFAULT_PORT ? null : r.value });
       else if (key === 'profile') saveSettings({ profile: r.value === DEFAULT_PROFILE ? null : r.value });
       else if (key === 'checkUpdates') saveSettings({ checkUpdates: r.value ? null : false });
+      else if (key === 'pollUpdates') { saveSettings({ pollUpdates: r.value ? null : false }); setUpdatePolling(r.value); }
       else saveSettings({ [key]: r.value || null }); // dshPath, cwd: '' — по умолчанию
       console.log(`[launcher] настройки: ${key} = ${key === 'dshPath' || key === 'cwd' ? (r.value || '(по умолчанию)') : r.value}`);
       settingsNote = { text: tr('Сохранено.', 'Saved.'), error: false };
@@ -2895,8 +2904,10 @@ function showSettingsDialog() {
         <div class="row">${check('spellcheck', spellcheckOn, tr('Проверка орфографии в полях ввода', 'Spell check in text fields'))}</div>
 
         <h4>${tr('Обновления', 'Updates')}</h4>
-        <div class="row">${check('checkUpdates', next.checkUpdates, tr('Проверять обновления — при запуске и раз в 12 часов (со следующего запуска)', 'Check for updates — at startup and every 12 hours (from the next start)'), next.src.checkUpdates === 'env')}
+        <div class="row">${check('checkUpdates', next.checkUpdates, tr('Проверять обновления при запуске (со следующего запуска)', 'Check for updates at startup (from the next start)'), next.src.checkUpdates === 'env')}
           ${envNote('checkUpdates', 'DSH_LAUNCHER_NO_UPDATE_CHECK')}</div>
+        <div class="row">${check('pollUpdates', next.pollUpdates, tr('Проверять обновления раз в 12 часов, пока лаунчер открыт', 'Check for updates every 12 hours while the launcher is open'), next.src.pollUpdates === 'env')}
+          ${envNote('pollUpdates', 'DSH_LAUNCHER_NO_UPDATE_CHECK')}</div>
         <div class="row"><span>${dismissed.length ? tr('Не спрашивать: ', 'Don’t ask: ') + esc(dismissed.join(', ')) : tr('Отложенных обновлений нет', 'No postponed updates')}</span>
           ${dismissed.length ? `<button onclick="go('reset-updates')">${tr('Снова спрашивать', 'Ask again')}</button>` : ''}</div>
         <div class="row">${check('market', !marketPromptDisabled(), tr('Предлагать установить плагин маркета', 'Offer to install the marketplace plugin'))}</div>
@@ -3225,6 +3236,21 @@ async function refreshAvailableUpdates() {
   if (NO_UPDATE_CHECK) return;
   try { setAvailableUpdates(await findUpdates(), false); }
   catch (e) { console.error('[launcher] проверка обновлений:', e.message); }
+}
+
+// Таймер периодической проверки: галочка в «Настройках» действует сразу.
+let pollTimer = null;
+
+function setUpdatePolling(on) {
+  if (Boolean(pollTimer) === Boolean(on)) return;
+  if (on) {
+    pollTimer = setInterval(() => { void pollUpdates(); }, UPDATE_POLL_MS);
+    console.log(`[launcher] периодическая проверка обновлений: раз в ${Math.round(UPDATE_POLL_MS / 1000)} с`);
+  } else {
+    clearInterval(pollTimer);
+    pollTimer = null;
+    console.log('[launcher] периодическая проверка обновлений выключена');
+  }
 }
 
 async function pollUpdates() {
@@ -3615,10 +3641,7 @@ async function onReady() {
   // Проверки обновлений — параллельно всему остальному; перед стартом dsh
   // их ждём не дольше UPDATE_CHECK_TIMEOUT.
   startUpdateChecks();
-  if (!NO_UPDATE_CHECK) {
-    setInterval(() => { void pollUpdates(); }, UPDATE_POLL_MS);
-    console.log(`[launcher] периодическая проверка обновлений: раз в ${Math.round(UPDATE_POLL_MS / 1000)} с`);
-  }
+  if (CONFIG.pollUpdates) setUpdatePolling(true);
   protocol.handle('dshlauncher', (request) => {
     try {
       const route = launcherRoute(request.url);

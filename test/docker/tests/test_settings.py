@@ -59,6 +59,7 @@ def test_settings_env_locked(start, gui):
     settings.wait_text(r'Working folder /opt set by DSH_CWD', 5)
     assert 'Choose' not in settings.text().split('Working folder', 1)[1].split('Port', 1)[0], 'нет кнопки «Выбрать…»'
     assert settings.disabled('checkUpdates'), 'проверка обновлений задана DSH_LAUNCHER_NO_UPDATE_CHECK — поле неактивно'
+    assert settings.disabled('pollUpdates'), 'и проверка раз в 12 часов — тоже'
     settings.close()
     launcher.term()
 

@@ -66,7 +66,8 @@ A small Electron app: a window that opens **DeepSeek Harness**
     version) and a “Help → Update … to X…” item. Its window shows “What’s
     new” and “Update now”: the launcher restarts (dsh stops) and installs
     the update right away, without asking again. The same buttons are in
-    “Help → Check for updates…”.
+    “Help → Check for updates…”. Turned off with its own checkbox in
+    “Settings”.
 
 - **Window menu** (always visible; labels follow the window language, RU|EN):
   - “File” — “Settings…” (Ctrl+,; see below), “Restart dsh…” (e.g. after plugin updates; asks first; a dsh
@@ -92,7 +93,8 @@ A small Electron app: a window that opens **DeepSeek Harness**
 
 - **Settings window** (“File → Settings…”, Ctrl+,):
   - general — interface language (Auto / Русский / English), spell check;
-  - updates — whether to check (at startup and every 12 hours), “ask again” about postponed
+  - updates — whether to check at startup and every 12 hours (two
+    checkboxes; the second applies at once), “ask again” about postponed
     versions, whether to offer the marketplace plugin;
   - starting dsh — the dsh program (automatic or a chosen file), profile,
     working folder, port (the launcher passes it to dsh: `--port`);

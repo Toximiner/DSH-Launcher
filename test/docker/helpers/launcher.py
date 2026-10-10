@@ -73,6 +73,10 @@ class Launcher:
         """Дождаться строки в логе лаунчера."""
         return wait_for(lambda: text in launcher_log(), timeout)
 
+    def wait_log_count(self, text, count, timeout):
+        """Дождаться, что строка встретилась в логе не меньше count раз."""
+        return wait_for(lambda: launcher_log().count(text) >= count, timeout)
+
     def term(self, timeout=15):
         """SIGTERM → секунды до выхода (None — не вышел)."""
         sh(f'kill -TERM {self.pid}')

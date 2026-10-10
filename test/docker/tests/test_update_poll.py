@@ -2,9 +2,10 @@
 в 2 с): новая версия → уведомление и пункт «Справка → Обновить … до X…»; его
 окно — что нового и «Обновить сейчас» (перезапуск лаунчера, обновление без
 вопроса) / «Позже»."""
+import json
 import os
 
-from helpers.env import FAKE
+from helpers.env import CONF, FAKE, NO_PROMPTS
 from helpers.procs import fakedsh_starts, wait_exit
 
 # «последняя» версия dsh на npm — из файла: тест «выпускает» новую на ходу
@@ -49,3 +50,25 @@ def test_update_poll(start, gui):
     assert fakedsh_starts() == 1, 'dsh запускал только прежний экземпляр'
     os.kill(new, 15)
     assert wait_exit(new, 15) is not None, 'новый экземпляр штатно завершился'
+
+
+def test_update_poll_setting(start, gui):
+    """Галочка «Проверять обновления раз в 12 часов» действует сразу, без
+    перезапуска; проверка при запуске — отдельная галочка."""
+    launcher = start(FAKE, NO_PROMPTS, DSH_LAUNCHER_UPDATE_POLL_SEC='2')
+    gui.wait()
+    assert launcher.wait_log('периодическая проверка обновлений: раз в 2 с', 5)
+    settings = gui.open_settings()
+
+    settings.set('pollUpdates', 'false')
+    settings.wait_note('Saved')
+    assert launcher.wait_log('периодическая проверка обновлений выключена', 5)
+    assert json.load(open(f'{CONF}/settings.json')) == {'pollUpdates': False}
+    assert not settings.restart_banner(), 'без перезапуска'
+
+    settings.set('pollUpdates', 'true')
+    settings.wait_note('Saved')
+    assert launcher.wait_log_count('периодическая проверка обновлений: раз в 2 с', 2, 5), 'снова включена'
+    assert json.load(open(f'{CONF}/settings.json')) == {}, 'по умолчанию — ключа нет'
+    settings.close()
+    launcher.term()
