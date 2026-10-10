@@ -21,6 +21,11 @@ class Gui:
         """Дождаться загрузки GUI dsh (окно ищем по адресу: первым в списке CDP
         может оказаться окно-диалог)."""
         self.drv.wait_url(GUI_URL, timeout, page=GUI_URL)
+        # Адрес в списке CDP меняется в момент перехода, а документ ещё может быть
+        # прежним (служебная страница «Подключение…»): ждём, что внутри страницы —
+        # уже GUI dsh и он догружен.
+        assert wait_for(lambda: self.eval("location.origin === 'http://127.0.0.1:3080' && "
+                                          "document.readyState === 'complete'"), timeout, 0.2), 'GUI dsh не догрузился'
         return self
 
     def eval(self, js):
@@ -53,7 +58,9 @@ class Gui:
     # ---- содержимое страницы для проверок ----
 
     def set_body(self, html):
-        self.eval(f'document.body.innerHTML = {json.dumps(html)}; 1')
+        """Подложить содержимое страницы; вернуть, когда оно на месте."""
+        self.eval(f'document.body.innerHTML = {json.dumps(html)}; window.__body = true; 1')
+        assert wait_for(lambda: self.eval('window.__body === true'), 5, 0.1), 'содержимое страницы не подложилось'
 
     def select_text_of(self, element_id):
         """Выделить текст элемента; вернуть, когда выделение действительно стоит."""
