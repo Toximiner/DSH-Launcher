@@ -1,5 +1,5 @@
 """Инструменты страницы: контекстное меню по правому клику и поиск (Ctrl+F)."""
-import pytest
+import time
 
 from helpers.env import FAKE, NOUPD
 from helpers.procs import dsh_tree_gone, wait_for
@@ -19,24 +19,21 @@ def test_context_menu(start, gui):
     gui.wait()
     gui.set_body(FIXTURE)
 
-    def menu_at(x, y):
+    def menu_at(x, y, prepare):
+        """prepare() — выделение и т. п. прямо перед кликом: предыдущее нативное
+        меню ещё может быть открыто и сбить подготовленное раньше."""
         shown = launcher.context_menus_shown()
+        prepare()
+        time.sleep(0.5)
         gui.right_click(x, y)
         wait_for(lambda: launcher.context_menus_shown() > shown, 5, 0.25)
         return launcher.last_context_menu()
 
-    gui.clear_selection()
-    assert menu_at(600, 400) == 'Select all', 'пустое место'
-
-    gui.select_text_of('t')
-    assert menu_at(60, 30) == 'Copy, |, Select all', 'выделенный текст'
-
-    gui.select_input('i')
-    assert menu_at(100, 95) in ('Cut, Copy, Paste, |, Select all',
-                                'Cut, Copy, Paste (off), |, Select all'), 'поле ввода с выделением'
-
-    gui.clear_selection()
-    assert menu_at(40, 150) == 'Copy link address, |, Select all', 'ссылка'
+    assert menu_at(600, 400, gui.clear_selection) == 'Select all', 'пустое место'
+    assert menu_at(60, 30, lambda: gui.select_text_of('t')) == 'Copy, |, Select all', 'выделенный текст'
+    assert menu_at(100, 95, lambda: gui.select_input('i')) in (
+        'Cut, Copy, Paste, |, Select all', 'Cut, Copy, Paste (off), |, Select all'), 'поле ввода с выделением'
+    assert menu_at(40, 150, gui.clear_selection) == 'Copy link address, |, Select all', 'ссылка'
 
     assert launcher.alive, 'лаунчер жив после контекстных меню'
     assert launcher.term() is not None, 'лаунчер штатно завершился'

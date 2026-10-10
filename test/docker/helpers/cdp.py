@@ -54,8 +54,18 @@ class Driver:
     def text(self, page=None):
         return _page_text(self.url(page))
 
+    def wait_page(self, page=None, timeout=10):
+        """Страница, дождавшись её: во время перехода (например, обмен токена на
+        куки → чистый адрес GUI) окна с нужным адресом в списке на миг нет."""
+        end = time.time() + timeout
+        while True:
+            p = self.page(page)
+            if p or time.time() >= end:
+                return p
+            time.sleep(0.25)
+
     def _call(self, calls, page=None):
-        p = self.page(page)
+        p = self.wait_page(page)
         if not p:
             raise AssertionError(f'CDP: нет страницы {page!r}')
         # Origin не шлём: Chromium отклоняет WebSocket DevTools с чужим Origin.
@@ -70,6 +80,8 @@ class Driver:
                         res = msg
                         break
             return res
+        except (websocket.WebSocketException, OSError):
+            return None  # страница закрылась / ушла на другой адрес, не ответив (window.close())
         finally:
             ws.close()
 
