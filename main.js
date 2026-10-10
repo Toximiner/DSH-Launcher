@@ -2689,6 +2689,9 @@ function shouldShowWhatsNew(last, current, scheme) {
 /* ===== end shouldShowWhatsNew ===== */
 
 function saveLastVersion(v) {
+  // подставная «установленная» версия (разработка/тесты) — не настоящая:
+  // не запоминать, иначе «Что нового» потом назовёт её прежней версией
+  if (process.env.DSH_LAUNCHER_FAKE_INSTALLED) return;
   try {
     fs.mkdirSync(path.dirname(lastVersionFile()), { recursive: true });
     fs.writeFileSync(lastVersionFile(), JSON.stringify({ version: v }));
