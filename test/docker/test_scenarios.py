@@ -308,7 +308,7 @@ def test_proxy(start, drv):
     # переменными окружения.
     if os.path.exists('/tmp/proxy.log'):
         os.remove('/tmp/proxy.log')
-    subprocess.Popen(f'runuser -u tester -- /opt/node22/bin/node {T}/proxy.js 3129 >/dev/null 2>&1', shell=True)
+    subprocess.Popen(f'runuser -u tester -- python3 {T}/proxy.py 3129 >/dev/null 2>&1', shell=True)
     assert wait_for(lambda: os.path.exists('/tmp/proxy.log') and 'listening' in open('/tmp/proxy.log').read(), 5, 0.25)
     p = 'http://127.0.0.1:3129'
     l = start(FAKE, NO_PROMPTS, HTTPS_PROXY=p, https_proxy=p, HTTP_PROXY=p, http_proxy=p)

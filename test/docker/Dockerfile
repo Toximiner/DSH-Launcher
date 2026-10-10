@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # (сценарии обновления лаунчера ставят настоящий последний релиз).
 COPY dsh-launcher_1.1.0-1_amd64.deb /tmp/
 RUN apt-get install -y /tmp/dsh-launcher_1.1.0-1_amd64.deb && rm /tmp/dsh-launcher_1.1.0-1_amd64.deb
-# Node 22 для драйвера/фейкового dsh и для сценариев с настоящим dsh.
+# Node 22 — для сценариев с настоящим dsh (npm, nvm, root-префикс).
 COPY node-${NODE_VER}-linux-x64.tar.xz /tmp/
 # --no-same-owner: файлы архива Node принадлежат uid 1000; в Debian это и есть
 # tester (в Ubuntu 1000 — встроенный ubuntu), и «root-префикс» /opt/noderoot
@@ -24,5 +24,5 @@ RUN su tester -c "mkdir -p ~/.nvm/versions/node/${NODE_VER} && cp -a /opt/node22
       && npm i -g --no-fund --no-audit @deepseek-ai/dsh@0.1.7-rc.2 \
       && npm i -g --no-fund --no-audit --prefix ~/.local @deepseek-ai/dsh@0.1.7-rc.2"
 RUN cp -a /opt/node22 /opt/noderoot && PATH=/opt/noderoot/bin:$PATH npm i -g --no-fund --no-audit @deepseek-ai/dsh@0.1.7-rc.2
-COPY fakedsh.js proxy.js cdp.py lib.py conftest.py test_scenarios.py /opt/t/
+COPY *.py /opt/t/
 RUN chmod 755 /opt/t/*

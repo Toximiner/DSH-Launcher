@@ -50,7 +50,7 @@ if [ ! -f "$WORK/ctx/$TARBALL" ]; then
   curl -fsSL "https://nodejs.org/dist/$NODE_VER/SHASUMS256.txt" | grep " $TARBALL\$" \
     | (cd "$WORK/ctx" && sha256sum -c --quiet -) || { rm -f "$WORK/ctx/$TARBALL"; exit 1; }
 fi
-cp -f "$HERE/Dockerfile" "$HERE/fakedsh.js" "$HERE/proxy.js" "$HERE"/*.py "$WORK/ctx/"
+cp -f "$HERE/Dockerfile" "$HERE"/*.py "$WORK/ctx/"
 
 # На CI (GITHUB_ACTIONS) ошибки дублируются аннотациями — их видно на
 # странице прогона без раскрытия логов (и через публичный API).

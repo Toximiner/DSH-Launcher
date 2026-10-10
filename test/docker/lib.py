@@ -14,7 +14,7 @@ CONF = f'{HOME}/.config/dsh-launcher'
 UPD = f'{CONF}/updates'
 GUI = r'^http://127\.0\.0\.1:3080/'  # адрес GUI dsh (регулярное выражение)
 
-FAKE = {'DSH_BIN': f'{T}/fakedsh.js'}
+FAKE = {'DSH_BIN': f'{T}/fakedsh.py'}
 NOUPD = {'DSH_LAUNCHER_NO_UPDATE_CHECK': '1'}
 
 # Последний релиз лаунчера на GitHub (передаёт run.sh): тег vX.Y.Z → пакет X.Y.Z-1.
@@ -57,11 +57,11 @@ def pgrep(pattern, user=None):
 
 
 def tree_alive():
-    return pgrep('fakedsh.js') and pgrep('^sleep 7777')
+    return pgrep('fakedsh.py') and pgrep('^sleep 7777')
 
 
 def tree_gone():
-    return not pgrep('fakedsh.js') and not pgrep('^sleep 7777')
+    return not pgrep('fakedsh.py') and not pgrep('^sleep 7777')
 
 
 def real_dsh_gone():
