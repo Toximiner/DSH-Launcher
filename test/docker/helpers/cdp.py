@@ -120,7 +120,7 @@ class Driver:
         ev = lambda t: ('Input.dispatchMouseEvent', {'type': t, 'x': x, 'y': y, 'button': 'right', 'buttons': 2, 'clickCount': 1})
         r = self._call([('Input.dispatchMouseEvent', {'type': 'mouseMoved', 'x': x, 'y': y}),
                         ev('mousePressed'), ev('mouseReleased')], page)
-        assert r and 'error' not in r, f'CDP: правый клик не прошёл: {r}'
+        assert r is None or 'error' not in r, f'CDP: правый клик не прошёл: {r}'
 
     def key(self, spec, page=None):
         """Нажатие: «Ctrl+Shift+KeyF», «F3», «Escape»; последняя часть —
@@ -140,4 +140,6 @@ class Driver:
         ev = lambda t: ('Input.dispatchKeyEvent', {'type': t, 'modifiers': modifiers, 'code': code, 'key': key,
                                                    'windowsVirtualKeyCode': vk, 'nativeVirtualKeyCode': vk})
         r = self._call([ev('rawKeyDown'), ev('keyUp')], page)
-        assert r and 'error' not in r, f'CDP: нажатие не прошло: {r}'
+        # None — страница закрылась, не ответив (Esc в окне-диалоге закрывает его
+        # уже на нажатии); это не ошибка
+        assert r is None or 'error' not in r, f'CDP: нажатие не прошло: {r}'
