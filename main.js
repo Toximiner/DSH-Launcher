@@ -18,7 +18,7 @@
  *    SIGKILL лаунчеру перехватить нельзя — тот случай остаётся незакрытым.
  */
 
-const { app, BrowserWindow, WebContentsView, Menu, protocol, net: electronNet, session, screen, dialog, shell, clipboard } = require('electron');
+const { app, BrowserWindow, WebContentsView, Menu, Notification, protocol, net: electronNet, session, screen, dialog, shell, clipboard } = require('electron');
 const { spawn, execFile, execFileSync } = require('child_process');
 const { promisify } = require('util');
 const nodeNet = require('net');
@@ -37,6 +37,10 @@ const execFileAsync = promisify(execFile);
 // его не унаследуют dsh, npm и плагины. Значение нигде не печатается.
 const GITHUB_TOKEN = process.env.DSH_LAUNCHER_GITHUB_TOKEN || '';
 delete process.env.DSH_LAUNCHER_GITHUB_TOKEN;
+// «Обновить сейчас» (окно обновления во время работы) перезапускает лаунчер с
+// этой переменной: новый экземпляр сразу ставит обновление, без вопроса.
+const UPDATE_NOW = /^(launcher|dsh)$/.test(process.env.DSH_LAUNCHER_UPDATE_NOW || '') ? process.env.DSH_LAUNCHER_UPDATE_NOW : null;
+delete process.env.DSH_LAUNCHER_UPDATE_NOW;
 
 // Разбор строки аргументов как в shell: пробелы разделяют, '…' и "…"
 // группируют, \ экранирует следующий символ (внутри '…' — нет).
@@ -1448,8 +1452,8 @@ async function fetchLauncherLatest({ force = false } = {}) {
       : null,
     releases: rels.map((r) => ({ version: ver(r), body: String(r.body || '') })),
   };
-  const fake = process.env.DSH_LAUNCHER_FAKE_LAUNCHER_LATEST; // разработка/тесты
-  if (fake) meta.version = String(fake);
+  const fake = fakeLatest('DSH_LAUNCHER_FAKE_LAUNCHER_LATEST'); // разработка/тесты
+  if (fake) meta.version = fake;
   return meta;
 }
 
@@ -1535,9 +1539,17 @@ async function fetchDshLatest() {
   const version = String(j.version || '');
   if (!version) throw new Error('нет версии в ответе npm');
   const meta = { version, htmlUrl: `https://www.npmjs.com/package/${DSH_NPM_PKG}` };
-  const fake = process.env.DSH_LAUNCHER_FAKE_DSH_LATEST; // разработка/тесты
-  if (fake) meta.version = String(fake);
+  const fake = fakeLatest('DSH_LAUNCHER_FAKE_DSH_LATEST'); // разработка/тесты
+  if (fake) meta.version = fake;
   return meta;
+}
+
+// Подставная «последняя» версия (разработка/тесты): значение переменной или,
+// если это путь, — содержимое файла (читается при каждой проверке).
+function fakeLatest(name) {
+  const v = process.env[name];
+  if (!v || !v.startsWith('/')) return v || null;
+  try { return fs.readFileSync(v, 'utf8').trim() || null; } catch { return null; }
 }
 
 let updateChecks = { launcher: null, dsh: null };
@@ -1545,7 +1557,8 @@ let updateChecks = { launcher: null, dsh: null };
 // При старте — оба запроса в параллель (здесь не ждём их завершения).
 function startUpdateChecks() {
   if (GITHUB_TOKEN) console.log('[launcher] запросы к GitHub API — с токеном (DSH_LAUNCHER_GITHUB_TOKEN)');
-  if (NO_UPDATE_CHECK) {
+  if (UPDATE_NOW) console.log(`[launcher] обновление ${UPDATE_NOW} — по просьбе пользователя, без вопроса`);
+  if (NO_UPDATE_CHECK && !UPDATE_NOW) {
     console.log('[launcher] проверка обновлений отключена (DSH_LAUNCHER_NO_UPDATE_CHECK)');
     return;
   }
@@ -1874,13 +1887,14 @@ const ROOT_INSTALL_SH = [
 // true — лаунчер обновлён и сейчас перезапустится: dsh этим экземпляром не
 // запускаем (его поднимет новый).
 async function offerLauncherUpdate() {
+  if (UPDATE_NOW === 'dsh') return; // просили обновить dsh — о лаунчере спросим в другой раз
   const latest = await updateChecks.launcher;
   if (!latest || !latest.version) return; // нет сети / отключено / таймаут
   const installed = await launcherInstalledVersion();
   if (!installed) return; // не установлен через .deb (запуск из исходников)
   const latestPkg = tagToPackageVersion(latest.version);
   if (compareDebianVer(latestPkg, installed) <= 0) return; // новой версии нет
-  if (updateDismissed('launcher', latest.version)) {
+  if (UPDATE_NOW !== 'launcher' && updateDismissed('launcher', latest.version)) {
     console.log(`[launcher] обновление до ${latest.version} отклонено — не спрашиваю`);
     return;
   }
@@ -1895,8 +1909,10 @@ async function offerLauncherUpdate() {
   updateState.manualCmd = null;
   let note = null;
   let noteIsError = false;
+  let auto = UPDATE_NOW === 'launcher'; // «Обновить сейчас» — первый раз без вопроса
   for (;;) {
-    const choice = await askUpdate(note, noteIsError);
+    const choice = auto ? 'install' : await askUpdate(note, noteIsError);
+    auto = false;
     if (stopping) return;
     note = null;
     noteIsError = false;
@@ -1981,7 +1997,7 @@ async function offerDshUpdate() {
     dshInstalledVersion = r.version;
   }
   if (compareSemVer(latest.version, dshInstalledVersion) <= 0) return;
-  if (updateDismissed('dsh', latest.version)) {
+  if (UPDATE_NOW !== 'dsh' && updateDismissed('dsh', latest.version)) {
     console.log(`[launcher] обновление dsh до ${latest.version} отклонено — не спрашиваю`);
     return;
   }
@@ -1997,8 +2013,10 @@ async function offerDshUpdate() {
   const cmdAuto = `npm install -g ${DSH_NPM_PKG}@${latest.version}`;
   let note = null;
   let noteIsError = false;
+  let auto = UPDATE_NOW === 'dsh'; // «Обновить сейчас» — первый раз без вопроса
   for (;;) {
-    const choice = await askUpdate(note, noteIsError);
+    const choice = auto ? 'install' : await askUpdate(note, noteIsError);
+    auto = false;
     if (stopping) return;
     note = null;
     noteIsError = false;
@@ -2095,6 +2113,12 @@ function appMenuTemplate() {
   const hint = (key) => ({ accelerator: key, registerAccelerator: false });
   const edit = (role, ru, en, key) => ({ role, label: tr(ru, en), ...hint('CmdOrCtrl+' + key) });
   const view = (act, ru, en, key) => ({ label: tr(ru, en), click: () => viewActions[act](), ...hint(key) });
+  // найдено обновление (периодическая проверка или «Проверить обновления…») —
+  // пункт «Обновить … до X…» в «Справке»
+  const upd = (kind, name) => (availableUpdates[kind] ? [{
+    label: tr(`Обновить ${name} до ${availableUpdates[kind].version}…`, `Update ${name} to ${availableUpdates[kind].version}…`),
+    click: () => showUpdateNowDialog(kind),
+  }] : []);
   return [
     {
       label: tr('Файл', 'File'),
@@ -2135,6 +2159,9 @@ function appMenuTemplate() {
     {
       label: tr('Справка', 'Help'),
       submenu: [
+        ...upd('launcher', 'DSH Launcher'),
+        ...upd('dsh', 'dsh'),
+        ...(availableUpdates.launcher || availableUpdates.dsh ? [{ type: 'separator' }] : []),
         { label: tr('Проверить обновления…', 'Check for updates…'), click: () => { void showUpdateCheckDialog(); } },
         { label: tr('Журнал dsh…', 'dsh log…'), click: () => showLogDialog() },
         { label: tr('Открыть папку логов', 'Open logs folder'), click: () => { void openLogsFolder(); } },
@@ -2821,15 +2848,17 @@ function onSettingsResetUpdates() {
 // блокировку, запускает новый экземпляр и выходит.
 let relaunchRequested = false;
 
-function relaunchLauncher() {
-  console.log('[launcher] перезапуск лаунчера, чтобы применить настройки');
+function relaunchLauncher(why = 'чтобы применить настройки') {
+  if (relaunchRequested || stopping) return;
+  console.log(`[launcher] перезапуск лаунчера, ${why}`);
   relaunchRequested = true;
   app.quit();
 }
 
 function spawnNewInstance() {
   app.releaseSingleInstanceLock();
-  const p = spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: 'ignore', env: process.env });
+  // stdout/stderr — те же: вывод нового экземпляра идёт туда же, что и прежнего
+  const p = spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: ['ignore', 'inherit', 'inherit'], env: process.env });
   p.unref();
   console.log(`[launcher] запущен новый экземпляр (pid ${p.pid})`);
 }
@@ -2866,7 +2895,7 @@ function showSettingsDialog() {
         <div class="row">${check('spellcheck', spellcheckOn, tr('Проверка орфографии в полях ввода', 'Spell check in text fields'))}</div>
 
         <h4>${tr('Обновления', 'Updates')}</h4>
-        <div class="row">${check('checkUpdates', next.checkUpdates, tr('Проверять обновления при запуске (со следующего запуска)', 'Check for updates at startup (from the next start)'), next.src.checkUpdates === 'env')}
+        <div class="row">${check('checkUpdates', next.checkUpdates, tr('Проверять обновления — при запуске и раз в 12 часов (со следующего запуска)', 'Check for updates — at startup and every 12 hours (from the next start)'), next.src.checkUpdates === 'env')}
           ${envNote('checkUpdates', 'DSH_LAUNCHER_NO_UPDATE_CHECK')}</div>
         <div class="row"><span>${dismissed.length ? tr('Не спрашивать: ', 'Don’t ask: ') + esc(dismissed.join(', ')) : tr('Отложенных обновлений нет', 'No postponed updates')}</span>
           ${dismissed.length ? `<button onclick="go('reset-updates')">${tr('Снова спрашивать', 'Ask again')}</button>` : ''}</div>
@@ -3069,6 +3098,15 @@ async function showUpdateCheckDialog() {
   const isSrc = !process.execPath.startsWith('/opt/dsh-launcher/');
   const lSt = updateStatus(latestL && latestL.version, lver, isSrc ? 'semver' : 'deb');
   const dSt = updateStatus(latestD && latestD.version, dver, 'semver');
+  // найденное — и в меню «Справка» (уведомлять не нужно: окно и так открыто)
+  const canL = lSt === 'available' && !isSrc && Boolean(lver);
+  const canD = dSt === 'available' && Boolean(dver);
+  if (!NO_UPDATE_CHECK || canL || canD) {
+    setAvailableUpdates({
+      ...(canL ? { launcher: { version: latestL.version, installed: lver, releases: latestL.releases } } : {}),
+      ...(canD ? { dsh: { version: latestD.version, installed: dver } } : {}),
+    }, false);
+  }
   // Диалог закрыли или открыли в нём другое — dialogShow ничего не покажет.
   dialogShow(gen, () => {
     let lStatus;
@@ -3080,7 +3118,7 @@ async function showUpdateCheckDialog() {
     if (dSt === 'nocheck') dStatus = tr('не удалось проверить (нет ответа npm)', 'could not check (no reply from npm)');
     else if (dSt === 'notinstalled') dStatus = tr('dsh не установлен', 'dsh is not installed');
     else if (dSt === 'uptodate') dStatus = tr('актуальная версия', 'up to date');
-    else dStatus = tr('доступна версия <code>' + esc(latestD.version) + '</code> (будет предложено при следующем запуске)', 'version <code>' + esc(latestD.version) + '</code> is available (will be offered on next launch)');
+    else dStatus = tr('доступна версия <code>' + esc(latestD.version) + '</code>', 'version <code>' + esc(latestD.version) + '</code> is available');
     const row = (name, ver, status) =>
       '<tr><td style="padding:3px 14px 3px 0; color:#9aa4b2; white-space:nowrap">' + esc(name) + '</td>' +
       '<td style="padding:3px 0">' +
@@ -3092,9 +3130,153 @@ async function showUpdateCheckDialog() {
         ${row(tr('бэкенд dsh', 'dsh backend'), dver, dStatus)}
       </table>
       ${lSt === 'available' ? notesBlockHtml(notesBetween(latestL.releases, lver, latestL.version, isSrc ? 'semver' : 'deb')) : ''}
-      <div class="actions">${dialogCloseButton()}</div>`;
+      ${canL || canD ? '<p class="hint">' + tr('«Обновить» перезапустит лаунчер, dsh будет остановлен — незаконченный ответ агента прервётся.',
+        '“Update” restarts the launcher and stops dsh — an unfinished agent reply will be interrupted.') + '</p>' : ''}
+      <div class="actions">
+        ${canL ? `<button onclick="location.href='dshlauncher://update-now/?k=launcher'">${tr('Обновить DSH Launcher', 'Update DSH Launcher')}</button>` : ''}
+        ${canD ? `<button onclick="location.href='dshlauncher://update-now/?k=dsh'">${tr('Обновить dsh', 'Update dsh')}</button>` : ''}
+        ${dialogCloseButton()}
+      </div>`;
     dialogPage(title, body);
   });
+}
+
+/* ===== announceUpdates (чистые функции, тест test/updates.js) =====
+   updatePollMs — интервал периодической проверки: 12 часов
+   (DSH_LAUNCHER_UPDATE_POLL_SEC — для тестов). announceUpdates — что
+   показать по найденным обновлениям: found — { launcher, dsh } (новые
+   версии или null), dismissed — update-prefs.json («не спрашивать больше»
+   по версиям), notified — о каких версиях уже уведомляли в этом сеансе.
+   → { menu: { kind: версия } — пункты «Обновить … до X…» в «Справке»,
+       notify: [kind] — системные уведомления (раз на версию; не для
+       отклонённой — пункт меню для неё всё же есть) }. */
+function updatePollMs(env) {
+  const sec = Number(env.DSH_LAUNCHER_UPDATE_POLL_SEC);
+  return Number.isFinite(sec) && sec >= 1 ? Math.round(sec * 1000) : 12 * 3600 * 1000;
+}
+
+function announceUpdates(found, dismissed, notified) {
+  const menu = {};
+  const notify = [];
+  for (const kind of ['launcher', 'dsh']) {
+    const v = found && found[kind];
+    if (!v) continue;
+    menu[kind] = v;
+    if ((dismissed || {})[kind] !== v && (notified || {})[kind] !== v) notify.push(kind);
+  }
+  return { menu, notify };
+}
+/* ===== end announceUpdates ===== */
+
+/* ---------------- обновления во время работы ---------------- */
+
+// Пока лаунчер работает — раз в 12 часов та же проверка, что при запуске.
+// Ставить обновление посреди работы нельзя без спроса (перезапуск оборвёт
+// ответ агента): только уведомление и пункт «Обновить … до X…» в «Справке»;
+// его окно — «Что нового» и «Обновить сейчас» (перезапуск с UPDATE_NOW).
+const UPDATE_POLL_MS = updatePollMs(process.env);
+let availableUpdates = {};      // kind → { version, installed, releases? }
+const notifiedUpdates = {};     // kind → версия, о которой уже уведомили
+let lastNotification = null;    // ссылка, чтобы уведомление (и его click) не собрал GC
+
+const updateName = (kind) => (kind === 'launcher' ? 'DSH Launcher' : 'dsh');
+
+async function findUpdates() {
+  const [l, d] = await Promise.all([
+    timedCheck(fetchLauncherLatest(), UPDATE_CHECK_TIMEOUT),
+    timedCheck(fetchDshLatest(), UPDATE_CHECK_TIMEOUT),
+  ]);
+  const found = {};
+  const lInst = await launcherInstalledVersion();
+  if (l && l.version && lInst && compareDebianVer(tagToPackageVersion(l.version), lInst) > 0) {
+    found.launcher = { version: l.version, installed: lInst, releases: l.releases };
+  }
+  if (!dshInstalledVersion) {
+    const r = await probeDsh(DSH_BIN);
+    if (r.ok) dshInstalledVersion = r.version;
+  }
+  if (d && d.version && dshInstalledVersion && compareSemVer(d.version, dshInstalledVersion) > 0) {
+    found.dsh = { version: d.version, installed: dshInstalledVersion };
+  }
+  return found;
+}
+
+// Найденное → пункты меню; notify — ещё и системные уведомления.
+function setAvailableUpdates(found, notify) {
+  const versions = { launcher: found.launcher && found.launcher.version, dsh: found.dsh && found.dsh.version };
+  const a = announceUpdates(versions, updatePrefs(), notifiedUpdates);
+  const before = JSON.stringify(Object.entries(availableUpdates).map(([k, v]) => [k, v.version]));
+  availableUpdates = found;
+  if (JSON.stringify(Object.entries(found).map(([k, v]) => [k, v.version])) !== before) {
+    for (const [kind, v] of Object.entries(a.menu)) {
+      console.log(`[launcher] доступно обновление ${updateName(kind)} ${v} — пункт в меню «Справка»`);
+    }
+    buildAppMenu();
+  }
+  for (const kind of a.notify) {
+    notifiedUpdates[kind] = versions[kind];
+    if (notify) showUpdateNotification(kind, versions[kind]);
+  }
+}
+
+// После вопросов при старте: отложенное («Не сейчас») — пунктом в меню, без
+// уведомления (о нём только что спросили).
+async function refreshAvailableUpdates() {
+  if (NO_UPDATE_CHECK) return;
+  try { setAvailableUpdates(await findUpdates(), false); }
+  catch (e) { console.error('[launcher] проверка обновлений:', e.message); }
+}
+
+async function pollUpdates() {
+  if (stopping || launching || restarting || relaunchRequested || updateState.running) return;
+  try {
+    const found = await findUpdates();
+    if (!stopping) setAvailableUpdates(found, true);
+  } catch (e) {
+    console.error('[launcher] периодическая проверка обновлений:', e.message);
+  }
+}
+
+function showUpdateNotification(kind, version) {
+  console.log(`[launcher] уведомление: доступна ${updateName(kind)} ${version}`);
+  if (!Notification.isSupported()) return;
+  const n = new Notification({
+    title: tr(`Доступна ${updateName(kind)} ${version}`, `${updateName(kind)} ${version} is available`),
+    body: tr('Нажмите, чтобы посмотреть, что нового, и обновить.', 'Click to see what’s new and update.'),
+  });
+  n.on('click', () => {
+    if (win && !win.isDestroyed()) { win.show(); win.focus(); }
+    showUpdateNowDialog(kind);
+  });
+  n.show();
+  lastNotification = n;
+}
+
+// Окно «Обновить … до X…»: что нового и предупреждение о перезапуске.
+function showUpdateNowDialog(kind) {
+  const u = availableUpdates[kind];
+  if (!u) return;
+  const name = updateName(kind);
+  const title = tr(`Обновление ${name}`, `${name} update`);
+  const gen = openDialog(title);
+  if (gen === null) return;
+  dialogCopyText = '';
+  dialogShow(gen, () => dialogPage(title, `
+    <p>${tr(`Доступна версия <code>${esc(u.version)}</code> (установлена <code>${esc(u.installed)}</code>).`,
+            `Version <code>${esc(u.version)}</code> is available (installed: <code>${esc(u.installed)}</code>).`)}</p>
+    ${kind === 'launcher' ? notesBlockHtml(notesBetween(u.releases, u.installed, u.version, 'deb')) : ''}
+    <p class="hint">${tr('Лаунчер перезапустится, dsh будет остановлен — незаконченный ответ агента прервётся.',
+                         'The launcher will restart and dsh will be stopped — an unfinished agent reply will be interrupted.')}</p>
+    <div class="actions">
+      <button onclick="location.href='dshlauncher://update-now/?k=${kind}'">${tr('Обновить сейчас', 'Update now')}</button>
+      <button onclick="location.href='dshlauncher://dialog/close/'">${tr('Позже', 'Later')}</button>
+    </div>`));
+}
+
+function updateNow(kind) {
+  if (!availableUpdates[kind]) return;
+  process.env.DSH_LAUNCHER_UPDATE_NOW = kind; // новый экземпляр — сразу к установке
+  relaunchLauncher(`чтобы обновить ${updateName(kind)} до ${availableUpdates[kind].version}`);
 }
 
 /* ---------------- запуск dsh и доведение окна до GUI ---------------- */
@@ -3121,6 +3303,7 @@ async function launchDsh() {
     if (stopping) return;
     await offerMarketIfMissing();
     if (stopping) return;
+    void refreshAvailableUpdates(); // отложенное обновление — пунктом в «Справке»
     await launchDshInner();
   } finally {
     launching = false;
@@ -3432,6 +3615,10 @@ async function onReady() {
   // Проверки обновлений — параллельно всему остальному; перед стартом dsh
   // их ждём не дольше UPDATE_CHECK_TIMEOUT.
   startUpdateChecks();
+  if (!NO_UPDATE_CHECK) {
+    setInterval(() => { void pollUpdates(); }, UPDATE_POLL_MS);
+    console.log(`[launcher] периодическая проверка обновлений: раз в ${Math.round(UPDATE_POLL_MS / 1000)} с`);
+  }
   protocol.handle('dshlauncher', (request) => {
     try {
       const route = launcherRoute(request.url);
@@ -3454,6 +3641,8 @@ async function onReady() {
       // Ответ 204: страница, с которой перешли (GUI dsh), остаётся на месте.
       if (route.startsWith('/menu/about/')) { void showAboutDialog(); return noContentResponse(); }
       if (route.startsWith('/menu/check/')) { void showUpdateCheckDialog(); return noContentResponse(); }
+      if (route.startsWith('/menu/update/')) { showUpdateNowDialog(new URL(request.url).searchParams.get('k')); return noContentResponse(); }
+      if (route.startsWith('/update-now/')) { updateNow(new URL(request.url).searchParams.get('k')); return noContentResponse(); }
       if (route.startsWith('/find/')) return onFindRequest(route, request.url);
       if (route.startsWith('/dialog/logs/')) { void openLogsFolder(); return noContentResponse(); }
       if (route.startsWith('/dialog/log-refresh/')) { if (dialogRender) dialogRender(false); return noContentResponse(); }

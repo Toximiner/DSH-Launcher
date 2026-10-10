@@ -115,6 +115,11 @@ class Gui:
         self.go('dshlauncher://menu/settings/')
         return SettingsDialog(self.drv).wait_loaded()
 
+    def open_update_now(self, kind):
+        """«Справка → Обновить … до X…» (пункт есть, когда найдено обновление)."""
+        self.go(f'dshlauncher://menu/update/?k={kind}')
+        return UpdateNowDialog(self.drv, kind).wait_loaded()
+
     def open_find(self):
         self.drv.key('Ctrl+KeyF', page=GUI_URL)
         return FindBar(self.drv).wait_ready()
@@ -228,6 +233,25 @@ class SettingsDialog(Dialog):
 
     def relaunch(self):
         self.go('dshlauncher://settings/relaunch/')
+
+
+class UpdateNowDialog(Dialog):
+    """Окно «Обновить … до X…»: что нового, предупреждение, «Обновить сейчас» / «Позже»."""
+
+    def __init__(self, drv, kind):
+        super().__init__(drv)
+        self.kind = kind
+        self.TITLE = '^DSH Launcher update$' if kind == 'launcher' else '^dsh update$'
+
+    def wait_loaded(self):
+        self.wait_text('Update now', 15)
+        return self
+
+    def later(self):
+        self.close()  # «Позже» — то же, что закрыть окно
+
+    def update_now(self):
+        self.go(f'dshlauncher://update-now/?k={self.kind}')
 
 
 class WhatsNewDialog(Dialog):

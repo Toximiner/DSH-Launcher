@@ -61,6 +61,12 @@ A small Electron app: a window that opens **DeepSeek Harness**
     network they fail at once and the launcher simply doesn’t ask). Disable with
     `DSH_LAUNCHER_NO_UPDATE_CHECK=1`. Requests go through the system proxy
     (GNOME/KDE settings or `HTTPS_PROXY`) when one is set.
+  - While the launcher runs, the check repeats every 12 hours. A new version
+    found mid-work interrupts nothing: a desktop notification (once per
+    version) and a “Help → Update … to X…” item. Its window shows “What’s
+    new” and “Update now”: the launcher restarts (dsh stops) and installs
+    the update right away, without asking again. The same buttons are in
+    “Help → Check for updates…”.
 
 - **Window menu** (always visible; labels follow the window language, RU|EN):
   - “File” — “Settings…” (Ctrl+,; see below), “Restart dsh…” (e.g. after plugin updates; asks first; a dsh
@@ -86,7 +92,7 @@ A small Electron app: a window that opens **DeepSeek Harness**
 
 - **Settings window** (“File → Settings…”, Ctrl+,):
   - general — interface language (Auto / Русский / English), spell check;
-  - updates — whether to check at startup, “ask again” about postponed
+  - updates — whether to check (at startup and every 12 hours), “ask again” about postponed
     versions, whether to offer the marketplace plugin;
   - starting dsh — the dsh program (automatic or a chosen file), profile,
     working folder, port (the launcher passes it to dsh: `--port`);

@@ -120,9 +120,11 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
 {
   const calls = [];
   const viewActions = new Proxy({}, { get: (_t, k) => () => calls.push('view.' + String(k)) });
-  const mk = (tr, spellcheckOn = true) => extract('appMenuTemplate', {
+  const mk = (tr, spellcheckOn = true, availableUpdates = {}) => extract('appMenuTemplate', {
     tr,
     spellcheckOn,
+    availableUpdates,
+    showUpdateNowDialog: (kind) => calls.push('update:' + kind),
     viewActions,
     showAboutDialog: () => calls.push('about'),
     showUpdateCheckDialog: () => calls.push('check'),
@@ -157,6 +159,19 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
     calls.length = 0;
     item(ru[3], label).click();
     assert.deepStrictEqual(calls, [call], `«${label}» → ${call}`);
+  }
+
+  // найдены обновления — первыми пунктами «Справки»
+  {
+    const upd = mk((r) => r, true, { launcher: { version: '1.8.0' }, dsh: { version: '0.3.0' } });
+    assert.deepStrictEqual(labels(upd[3]).slice(0, 4),
+      ['Обновить DSH Launcher до 1.8.0…', 'Обновить dsh до 0.3.0…', '|', 'Проверить обновления…'], '«Справка» с обновлениями');
+    calls.length = 0;
+    item(upd[3], 'Обновить DSH Launcher до 1.8.0…').click();
+    item(upd[3], 'Обновить dsh до 0.3.0…').click();
+    assert.deepStrictEqual(calls, ['update:launcher', 'update:dsh'], 'пункт → окно «Обновить сейчас»');
+    const onlyDsh = mk((r, e) => e, true, { dsh: { version: '0.3.0' } });
+    assert.deepStrictEqual(labels(onlyDsh[3]).slice(0, 3), ['Update dsh to 0.3.0…', '|', 'Check for updates…'], '«Help» — только dsh');
   }
 
   // «Правка» — те же действия, что в контекстном меню, стандартными ролями

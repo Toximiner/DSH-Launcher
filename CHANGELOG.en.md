@@ -5,6 +5,17 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Added
+
+- **Update check while running** — every 12 hours while the launcher is open
+  (previously only at startup). A new launcher or dsh version interrupts
+  nothing: a desktop notification (once per version) and a “Help → Update …
+  to X…” item with “What’s new” and an “Update now” button — the launcher
+  restarts and installs the update right away. “Update” buttons are also in
+  “Help → Check for updates…”.
+
 ## [1.7.0] — 2026-10-10
 
 ### Added
