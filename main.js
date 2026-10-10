@@ -2814,10 +2814,24 @@ function onSettingsResetUpdates() {
   return noContentResponse();
 }
 
+// Перезапуск лаунчера (применить настройки). Не app.relaunch(): Electron
+// запускает новый экземпляр, пока старый ещё держит блокировку «один
+// экземпляр», и новый тут же закрывается. Поэтому так: before-quit
+// останавливает dsh, затем (relaunchRequested) старый сам отпускает
+// блокировку, запускает новый экземпляр и выходит.
+let relaunchRequested = false;
+
 function relaunchLauncher() {
   console.log('[launcher] перезапуск лаунчера, чтобы применить настройки');
-  app.relaunch();
-  app.quit(); // before-quit остановит dsh, который запустил лаунчер
+  relaunchRequested = true;
+  app.quit();
+}
+
+function spawnNewInstance() {
+  app.releaseSingleInstanceLock();
+  const p = spawn(process.execPath, process.argv.slice(1), { detached: true, stdio: 'ignore', env: process.env });
+  p.unref();
+  console.log(`[launcher] запущен новый экземпляр (pid ${p.pid})`);
 }
 
 function showSettingsDialog() {
@@ -3590,7 +3604,10 @@ app.on('before-quit', (e) => {
   Promise.resolve().then(async () => {
     await stopDsh();
     if (adoptedDsh) await stopAdoptedDsh();
-  }).finally(() => app.quit());
+  }).finally(() => {
+    if (relaunchRequested) { try { spawnNewInstance(); } catch (e) { console.error('[launcher] перезапуск:', e.message); } }
+    app.quit();
+  });
 });
 
 // страховка: если before-quit почему-то не сработала — жёстко
