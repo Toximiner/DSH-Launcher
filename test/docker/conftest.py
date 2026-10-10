@@ -1,19 +1,60 @@
-"""Фикстуры Docker-сценариев. Каждый сценарий — в свежем контейнере (run.sh
-запускает `pytest test_scenarios.py::test_<имя>` от root): system dbus,
-polkitd (правило «tester — разрешить/запретить» по POLKIT=yes|no), Xvfb;
-лаунчер — от tester с --remote-debugging-port=9222."""
+"""Фикстуры Docker-сценариев.
+
+Каждый сценарий — в свежем контейнере: run.sh вызывает
+`pytest /opt/t/tests --scenario <имя>`. Имя сценария — имя теста без «test_»;
+у параметризованного теста — id параметра (test_adopt[adopt_detached] →
+adopt_detached). `--list-scenarios` печатает все имена (run.sh берёт из них
+список по умолчанию).
+
+Окружение контейнера: system dbus, polkitd (правило «tester — разрешить /
+запретить» по POLKIT=yes|no), Xvfb; лаунчер — от tester с CDP на 9222.
+"""
 import os
 import subprocess
 import time
 
 import pytest
 
-import lib
-from cdp import Driver
+from helpers.cdp import Driver
+from helpers.env import FAKEDSH_LOG
+from helpers.launcher import Launcher, launcher_log, launcher_pids
+from helpers.procs import as_tester, sh
+from helpers.windows import Gui, UpdatePrompt
 
+
+# ---------------- выбор сценария ----------------
+
+def pytest_addoption(parser):
+    parser.addoption('--scenario', help='запустить один сценарий по имени')
+    parser.addoption('--list-scenarios', action='store_true', help='напечатать имена сценариев')
+
+
+def scenario_name(item):
+    callspec = getattr(item, 'callspec', None)
+    return callspec.id if callspec else item.originalname.removeprefix('test_')
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption('list_scenarios'):
+        for item in items:
+            print(f'SCENARIO {scenario_name(item)}')
+        items[:] = []
+        return
+    name = config.getoption('scenario')
+    if name:
+        selected = [i for i in items if scenario_name(i) == name]
+        if not selected:
+            raise pytest.UsageError(f'нет сценария «{name}»')
+        items[:] = selected
+
+
+# ---------------- окружение контейнера ----------------
 
 @pytest.fixture(scope='session', autouse=True)
-def container_env():
+def container_env(request):
+    if request.config.getoption('list_scenarios'):
+        yield
+        return
     subprocess.run('mkdir -p /run/dbus && dbus-daemon --system --fork', shell=True, check=True)
     os.makedirs('/etc/polkit-1/rules.d', exist_ok=True)
     verdict = 'YES' if os.environ.get('POLKIT', 'yes') == 'yes' else 'NO'
@@ -24,34 +65,49 @@ def container_env():
     subprocess.Popen('Xvfb :99 -screen 0 1280x800x24 -nolisten tcp >/dev/null 2>&1', shell=True)
     time.sleep(1.5)
     # Вопрос про маркет в тестах не нужен.
-    lib.as_tester('mkdir -p ~/.config/dsh-launcher && echo \'{"dontAsk":true}\' > ~/.config/dsh-launcher/market-prompt.json')
-    if os.path.exists(lib.FAKEDSH_LOG):
-        os.remove(lib.FAKEDSH_LOG)
+    as_tester('mkdir -p ~/.config/dsh-launcher && echo \'{"dontAsk":true}\' > ~/.config/dsh-launcher/market-prompt.json')
+    if os.path.exists(FAKEDSH_LOG):
+        os.remove(FAKEDSH_LOG)
     yield
 
 
+# ---------------- фикстуры тестов ----------------
+
 @pytest.fixture
 def drv():
+    """Драйвер окон (CDP)."""
     return Driver()
 
 
 @pytest.fixture
 def start():
-    """start(**env) → Launcher; в конце теста оставшиеся лаунчеры — SIGKILL."""
+    """start(*наборы_env, **env) → Launcher. В конце теста оставшиеся
+    экземпляры лаунчера — SIGKILL."""
     def _start(*envs, **kw):
         env = {}
         for e in envs:
             env.update(e)
         env.update(kw)
-        return lib.Launcher(env)
+        return Launcher(env)
     yield _start
-    for pid in lib.launcher_pids():
-        lib.sh(f'kill -KILL {pid}')
+    for pid in launcher_pids():
+        sh(f'kill -KILL {pid}')
+
+
+@pytest.fixture
+def gui(drv):
+    """Главное окно с GUI dsh."""
+    return Gui(drv)
+
+
+@pytest.fixture
+def prompt(drv):
+    """Вопрос об обновлении в главном окне."""
+    return UpdatePrompt(drv)
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_makereport(item, call):
-    """В отчёт об ошибке — хвост лога лаунчера (как раньше в scenario.sh)."""
+    """В отчёт об ошибке — хвост лога лаунчера."""
     if call.when == 'call' and call.excinfo is not None:
-        tail = '\n'.join(lib.log().splitlines()[-25:])
-        item.add_report_section('call', 'хвост лога лаунчера', tail)
+        item.add_report_section('call', 'хвост лога лаунчера', '\n'.join(launcher_log().splitlines()[-25:]))

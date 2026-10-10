@@ -20,11 +20,9 @@ WORK=$HERE/.work
 NODE_VER=v22.23.3
 OSES=${OSES:-"24.04 26.04 debian-13"}
 JOBS=${JOBS:-4}
-ALL="close sigterm sigterm_ignored sigterm_double adopt_samegroup adopt_detached
-     dsh_update_auto dsh_update_other_prefix dsh_update_root_prefix
-     launcher_update launcher_update_denied launcher_update_nopkexec menu_about context_menu
-     find restart_dsh proxy window_state whats_new dsh_log"
-SCENARIOS=${*:-$ALL}
+# Сценарии: аргументы или (по умолчанию) все — список даёт сам pytest
+# (`--list-scenarios`, см. conftest.py) после сборки образа.
+SCENARIOS=${*:-}
 
 mkdir -p "$WORK/src" "$WORK/ctx" "$WORK/results"
 
@@ -50,7 +48,9 @@ if [ ! -f "$WORK/ctx/$TARBALL" ]; then
   curl -fsSL "https://nodejs.org/dist/$NODE_VER/SHASUMS256.txt" | grep " $TARBALL\$" \
     | (cd "$WORK/ctx" && sha256sum -c --quiet -) || { rm -f "$WORK/ctx/$TARBALL"; exit 1; }
 fi
-cp -f "$HERE/Dockerfile" "$HERE"/*.py "$WORK/ctx/"
+rm -rf "$WORK/ctx/t" && mkdir -p "$WORK/ctx/t" && cp -f "$HERE/Dockerfile" "$WORK/ctx/" \
+  && cp -a "$HERE/conftest.py" "$HERE/helpers" "$HERE/fakes" "$HERE/tests" "$WORK/ctx/t/" \
+  && find "$WORK/ctx/t" -name __pycache__ -prune -exec rm -rf {} +
 
 # На CI (GITHUB_ACTIONS) ошибки дублируются аннотациями — их видно на
 # странице прогона без раскрытия логов (и через публичный API).
@@ -92,6 +92,13 @@ for os in $OSES; do
   build_image "$os" || exit 1
 done
 
+if [ -z "$SCENARIOS" ]; then
+  first=${OSES%% *}
+  SCENARIOS=$(docker run --rm "dshl-test:$first" python3 -m pytest -p no:cacheprovider -q \
+    --rootdir /opt/t /opt/t/tests --list-scenarios 2>/dev/null | sed -n 's/^SCENARIO //p' | tr '\n' ' ')
+  [ -n "$SCENARIOS" ] || { echo "не удалось получить список сценариев (pytest --list-scenarios)" >&2; exit 1; }
+fi
+
 rm -f "$WORK/results"/*
 one() {
   local os=$1 sc=$2 extra=""
@@ -104,7 +111,7 @@ one() {
   timeout -k 30 600 docker run --rm --init --name "$name" --shm-size=1g \
     --security-opt seccomp=unconfined $extra \
     dshl-test:$os python3 -m pytest -p no:cacheprovider -q -rf --tb=short --color=no \
-    "/opt/t/test_scenarios.py::test_$sc" >"$WORK/results/$os-$sc.log" 2>&1
+    --rootdir /opt/t /opt/t/tests --scenario "$sc" >"$WORK/results/$os-$sc.log" 2>&1
   local rc=$?
   docker rm -f "$name" >/dev/null 2>&1 || true
   [ $rc -eq 124 ] || [ $rc -eq 137 ] && echo "  [FAIL] сценарий не уложился в 10 минут" >>"$WORK/results/$os-$sc.log"
