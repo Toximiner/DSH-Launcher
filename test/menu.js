@@ -130,6 +130,7 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
     restartDsh: () => calls.push('restart'),
     setSpellcheck: (on) => calls.push('spell:' + on),
     showLogDialog: () => calls.push('log'),
+    showSettingsDialog: () => calls.push('settings'),
   })();
   const ru = mk((r) => r);
   const en = mk((r, e) => e);
@@ -139,7 +140,11 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
   const labels = (menu) => menu.submenu.map((i) => (i.type === 'separator' ? '|' : i.label));
 
   // «Файл»: перезапуск dsh и выход
-  assert.deepStrictEqual(labels(ru[0]), ['Перезапустить dsh…', '|', 'Выйти'], '«Файл»');
+  assert.deepStrictEqual(labels(ru[0]), ['Настройки…', '|', 'Перезапустить dsh…', '|', 'Выйти'], '«Файл»');
+  calls.length = 0;
+  item(ru[0], 'Настройки…').click();
+  assert.deepStrictEqual(calls, ['settings'], '«Настройки…» → окно настроек');
+  assert.strictEqual(item(ru[0], 'Настройки…').accelerator, 'CmdOrCtrl+,', '«Настройки…» — подсказка Ctrl+,');
   calls.length = 0;
   item(ru[0], 'Перезапустить dsh…').click();
   assert.deepStrictEqual(calls, ['restart'], '«Перезапустить dsh…» → restart');
@@ -207,6 +212,7 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
   assert.strictEqual(k({ key: 'F3' }), 'findNext', 'F3');
   assert.strictEqual(k({ key: 'F3', shift: true }), 'findPrev', 'Shift+F3');
   assert.strictEqual(k({ key: 'F11' }), 'fullscreen', 'F11');
+  assert.strictEqual(k({ control: true, code: 'Comma', key: 'б' }), 'settings', 'Ctrl+, (в русской раскладке — «б»)');
   assert.strictEqual(k({ key: 'f', code: 'KeyF' }), null, 'просто F — странице');
   assert.strictEqual(k({ control: true, code: 'KeyC' }), null, 'Ctrl+C — странице (копирование)');
 }

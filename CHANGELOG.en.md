@@ -5,6 +5,23 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Added
+
+- **Settings window** (“File → Settings…”, Ctrl+,): interface language,
+  spell check; update check at startup, “ask again” about postponed
+  versions, the marketplace plugin offer; the dsh program, profile, working
+  folder, port; GPU acceleration and the window mode on Wayland. What used
+  to be set only with environment variables can now be chosen in the
+  window; the variables still take precedence (the field is then
+  disabled). Stored in `~/.config/dsh-launcher/settings.json`.
+
+### Changed
+
+- **Scrollbars** in the launcher's windows and pages are thin and match the
+  window colours.
+
 ## [1.6.0] — 2026-10-10
 
 ### Added

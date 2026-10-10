@@ -29,7 +29,7 @@ if '--version' in sys.argv:
     print(os.environ.get('FAKE_DSH_VERSION', '0.2.0-rc.2'))
     sys.exit(0)
 
-log(f'start pgid={os.getpgid(0)}')
+log(f'start pgid={os.getpgid(0)} cwd={os.getcwd()} args={" ".join(sys.argv[1:])}')
 subprocess.Popen(['sleep', '7777'], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -56,7 +56,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 
-port = int(os.environ.get('DSH_PORT', '3080'))
+port = int(sys.argv[sys.argv.index('--port') + 1]) if '--port' in sys.argv else int(os.environ.get('DSH_PORT', '3080'))
 while True:  # порт ещё занят старым процессом (после самоперезапуска) — ждём
     try:
         srv = http.server.ThreadingHTTPServer(('127.0.0.1', port), Handler)

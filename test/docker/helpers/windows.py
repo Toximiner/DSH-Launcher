@@ -111,6 +111,10 @@ class Gui:
         self.go('dshlauncher://menu/log/')
         return LogDialog(self.drv).wait_loaded()
 
+    def open_settings(self):
+        self.go('dshlauncher://menu/settings/')
+        return SettingsDialog(self.drv).wait_loaded()
+
     def open_find(self):
         self.drv.key('Ctrl+KeyF', page=GUI_URL)
         return FindBar(self.drv).wait_ready()
@@ -200,6 +204,30 @@ class LogDialog(Dialog):
 
     def log_text(self):
         return self.drv.eval("(document.querySelector('pre.log') || {}).innerText", page=self.TITLE)
+
+
+class SettingsDialog(Dialog):
+    TITLE = '^Settings$'
+
+    def wait_loaded(self):
+        self.wait_text('General.*Updates.*Starting dsh.*Graphics', 15)
+        return self
+
+    def set(self, key, value):
+        """Изменить поле (как это делает само окно при изменении поля)."""
+        self.go(f'dshlauncher://settings/set/?k={key}&v={value}')
+
+    def wait_note(self, pattern, timeout=10):
+        return self.wait_text(pattern, timeout)
+
+    def restart_banner(self):
+        return 'Changes take effect after the launcher restarts' in self.text()
+
+    def disabled(self, element_id):
+        return self.drv.eval(f"(document.getElementById({json.dumps(element_id)}) || {{}}).disabled === true", page=self.TITLE)
+
+    def relaunch(self):
+        self.go('dshlauncher://settings/relaunch/')
 
 
 class WhatsNewDialog(Dialog):

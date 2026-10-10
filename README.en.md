@@ -63,7 +63,7 @@ A small Electron app: a window that opens **DeepSeek Harness**
     (GNOME/KDE settings or `HTTPS_PROXY`) when one is set.
 
 - **Window menu** (always visible; labels follow the window language, RU|EN):
-  - “File” — “Restart dsh…” (e.g. after plugin updates; asks first; a dsh
+  - “File” — “Settings…” (Ctrl+,; see below), “Restart dsh…” (e.g. after plugin updates; asks first; a dsh
     not started by the launcher is left alone) and “Quit” — standard
     shutdown (stops the dsh the launcher started).
   - “Edit” — “Cut”, “Copy”, “Paste”, “Select all” (same as the context menu;
@@ -83,6 +83,23 @@ A small Electron app: a window that opens **DeepSeek Harness**
   “About” and “Check for updates” open in a small window over the launcher:
   the dsh GUI underneath is dimmed but not reloaded. Close with “Close”, Esc
   or the window's close button.
+
+- **Settings window** (“File → Settings…”, Ctrl+,):
+  - general — interface language (Auto / Русский / English), spell check;
+  - updates — whether to check at startup, “ask again” about postponed
+    versions, whether to offer the marketplace plugin;
+  - starting dsh — the dsh program (automatic or a chosen file), profile,
+    working folder, port (the launcher passes it to dsh: `--port`);
+  - graphics — GPU acceleration (Auto / Off, with the current state), window
+    on Wayland (Auto / Wayland / X11 — if the window is invisible).
+
+  Language, spell check, marketplace and “ask again” apply at once; the rest
+  — after the launcher restarts (a button in the window). Stored in
+  `~/.config/dsh-launcher/settings.json`. Environment variables (`DSH_BIN`,
+  `DSH_ARGS`, `DSH_CWD`, `DSH_PORT`, `DSH_LAUNCHER_LANG`,
+  `DSH_LAUNCHER_NO_UPDATE_CHECK`, `DSH_LAUNCHER_NO_GPU`,
+  `DSH_LAUNCHER_OZONE`) take precedence: such a field is disabled and
+  labelled.
 
 - **Find in page (Ctrl+F)** — a bar in the top-right corner with a match
   counter; Enter / Shift+Enter (F3 / Shift+F3) — next / previous, Esc —

@@ -69,17 +69,88 @@ function splitArgs(str) {
 
 /* ========================= настройки ========================= */
 
+// Окно «Настройки» пишет ~/.config/dsh-launcher/settings.json (это же userData
+// лаунчера — путь считаем сами: настройки нужны до app.setName). Переменные
+// окружения важнее файла — ими пользуются тесты и те, кто настроил лаунчер
+// раньше; поле в окне тогда неактивно.
+const SETTINGS_FILE = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'),
+  'dsh-launcher', 'settings.json');
+
+function loadSettings() {
+  try { const s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); return s && typeof s === 'object' ? s : {}; }
+  catch { return {}; }
+}
+
+const DEFAULT_PORT = 3080;
+const DEFAULT_PROFILE = 'web';
+
+/* ===== effectiveConfig (чистая функция, тест test/settings.js) =====
+   Итоговые параметры из окружения (важнее) и settings.json; src[ключ] —
+   откуда взято: 'env' | 'settings' | 'default'. */
+function effectiveConfig(env, settings, home) {
+  const s = settings && typeof settings === 'object' ? settings : {};
+  const src = {};
+  const from = (key, where) => { src[key] = where; };
+
+  let port = DEFAULT_PORT;
+  if (env.DSH_PORT) { port = Number(env.DSH_PORT); from('port', 'env'); }
+  else if (Number.isInteger(s.port) && s.port >= 1 && s.port <= 65535) { port = s.port; from('port', 'settings'); }
+  else from('port', 'default');
+
+  let args;
+  let profile = DEFAULT_PROFILE;
+  if (env.DSH_ARGS) {
+    args = splitArgs(env.DSH_ARGS);
+    from('profile', 'env');
+  } else {
+    if (typeof s.profile === 'string' && /^[\w.-]+$/.test(s.profile)) { profile = s.profile; from('profile', 'settings'); }
+    else from('profile', 'default');
+    args = ['--profile', profile, '--no-open'];
+    if (port !== DEFAULT_PORT) args.push('--port', String(port)); // dsh слушает тот же порт, что ищет лаунчер
+  }
+
+  let dshBin = null; // null — искать автоматически
+  if (env.DSH_BIN) { dshBin = env.DSH_BIN; from('dshPath', 'env'); }
+  else if (typeof s.dshPath === 'string' && s.dshPath) { dshBin = s.dshPath; from('dshPath', 'settings'); }
+  else from('dshPath', 'default');
+
+  let cwd = home;
+  if (env.DSH_CWD) { cwd = env.DSH_CWD; from('cwd', 'env'); }
+  else if (typeof s.cwd === 'string' && s.cwd) { cwd = s.cwd; from('cwd', 'settings'); }
+  else from('cwd', 'default');
+
+  let noGpu = false;
+  if (env.DSH_LAUNCHER_NO_GPU === '1') { noGpu = true; from('gpu', 'env'); }
+  else if (s.gpu === 'off') { noGpu = true; from('gpu', 'settings'); }
+  else from('gpu', 'default');
+
+  let ozone = 'auto';
+  const envOzone = String(env.DSH_LAUNCHER_OZONE || '').toLowerCase();
+  if (envOzone === 'x11' || envOzone === 'wayland') { ozone = envOzone; from('ozone', 'env'); }
+  else if (s.ozone === 'x11' || s.ozone === 'wayland') { ozone = s.ozone; from('ozone', 'settings'); }
+  else from('ozone', 'default');
+
+  let checkUpdates = true;
+  if (/^(1|true|yes)$/i.test(env.DSH_LAUNCHER_NO_UPDATE_CHECK || '')) { checkUpdates = false; from('checkUpdates', 'env'); }
+  else if (s.checkUpdates === false) { checkUpdates = false; from('checkUpdates', 'settings'); }
+  else from('checkUpdates', 'default');
+
+  return { port, args, profile, dshBin, cwd, noGpu, ozone, checkUpdates, src };
+}
+/* ===== end effectiveConfig ===== */
+
+const CONFIG = effectiveConfig(process.env, loadSettings(), os.homedir());
+
 const DSH_BIN_DEFAULT = '/usr/bin/dsh';
-const DSH_BIN_EXPLICIT = Boolean(process.env.DSH_BIN);
-// путь к бинарнику dsh; если DSH_BIN не задан и /usr/bin/dsh нет — ищется
-// в PATH, npm prefix, nvm и т.п. (см. findDsh), найденный путь запоминается
-let DSH_BIN = process.env.DSH_BIN || DSH_BIN_DEFAULT;
-const DSH_ARGS = process.env.DSH_ARGS
-  ? splitArgs(process.env.DSH_ARGS)
-  : ['--profile', 'web', '--no-open'];
-const CWD = process.env.DSH_CWD || os.homedir(); // рабочая директория для dsh
+// путь к dsh задан явно (переменная DSH_BIN или «Настройки»); иначе, если
+// /usr/bin/dsh нет, — ищется в PATH, npm prefix, nvm и т.п. (см. findDsh),
+// найденный путь запоминается
+const DSH_BIN_EXPLICIT = Boolean(CONFIG.dshBin);
+let DSH_BIN = CONFIG.dshBin || DSH_BIN_DEFAULT;
+const DSH_ARGS = CONFIG.args;
+const CWD = CONFIG.cwd; // рабочая директория для dsh
 const HOST = '127.0.0.1';
-const PORT = Number(process.env.DSH_PORT || 3080);
+const PORT = CONFIG.port;
 const PLAIN_URL = `http://${HOST}:${PORT}/`;
 const START_TIMEOUT = Number(process.env.DSH_START_TIMEOUT_MS || 120000); // сколько ждать старта
 // в установленной версии (run.sh ставит DSH_LOG_DIR) — в ~/.local/state,
@@ -129,14 +200,13 @@ const isWaylandSession = process.platform === 'linux' &&
 if (isWaylandSession) {
   // Ошибку в значении DSH_LAUNCHER_OZONE не передаём в Electron:
   // неизвестный ozone-platform может не инициализироваться вовсе.
-  const envOzone = String(process.env.DSH_LAUNCHER_OZONE || '').toLowerCase();
-  const ozoneManual = envOzone === 'x11' || envOzone === 'wayland';
-  const ozone = ozoneManual ? envOzone : hasGpuRenderNode ? 'wayland' : 'x11';
+  const ozoneManual = CONFIG.ozone !== 'auto'; // DSH_LAUNCHER_OZONE или «Настройки»
+  const ozone = ozoneManual ? CONFIG.ozone : hasGpuRenderNode ? 'wayland' : 'x11';
   app.commandLine.appendSwitch('ozone-platform', ozone);
   console.log(
     `[launcher] Wayland-сессия — ozone-platform=${ozone}` +
     (ozoneManual
-      ? ' (принудительно: DSH_LAUNCHER_OZONE)'
+      ? (CONFIG.src.ozone === 'env' ? ' (принудительно: DSH_LAUNCHER_OZONE)' : ' (выбрано в «Настройках»)')
       : hasGpuRenderNode
         ? ' (есть реальный GPU — нативный Wayland; X11/XWayland-окно на KWin невидимо)'
         : ' (render-узлов нет — окно веду через X11 (XWayland))')
@@ -168,10 +238,10 @@ const gpuMarkerAgeMs = (() => {
 const gpuDisabledByMarker = process.platform === 'linux' &&
   gpuMarkerAgeMs !== null && gpuMarkerAgeMs < GPU_MARKER_TTL_MS;
 
-const noGpuRequested = process.env.DSH_LAUNCHER_NO_GPU === '1';
+const noGpuRequested = CONFIG.noGpu; // DSH_LAUNCHER_NO_GPU=1 или «Настройки» → «Выключено»
 if (process.platform === 'linux' && (noGpuRequested || gpuDisabledByMarker || !hasGpuRenderNode || !hasEglLibs)) {
   app.disableHardwareAcceleration();
-  const why = noGpuRequested ? 'DSH_LAUNCHER_NO_GPU=1'
+  const why = noGpuRequested ? (CONFIG.src.gpu === 'env' ? 'DSH_LAUNCHER_NO_GPU=1' : '«Настройки»: GPU-ускорение — выключено')
     : gpuDisabledByMarker ? `маркер ${GPU_MARKER_FILE} (GPU-процесс падал, маркер живёт 30 дней; удалить файл, чтобы включить GPU)`
     : !hasGpuRenderNode ? 'render-узлов в /dev/dri нет'
     : 'EGL-библиотек (libEGL/libGLESv2) в системе нет';
@@ -678,8 +748,8 @@ const PAGE_CSS = `
   pre{background:#151a23;border:1px solid #232b3a;border-radius:10px;padding:12px 14px;
     font-size:12px;line-height:1.5;overflow:auto;max-height:34vh;white-space:pre-wrap;
     word-break:break-word;color:#c7cedb}
-  input{width:100%;box-sizing:border-box;background:#151a23;border:1px solid #2a3550;
-    border-radius:10px;color:#e6ebf4;padding:12px 14px;font-size:14px;margin-bottom:12px}
+  input:not([type=checkbox]):not([type=radio]){width:100%;box-sizing:border-box;background:#151a23;
+    border:1px solid #2a3550;border-radius:10px;color:#e6ebf4;padding:12px 14px;font-size:14px;margin-bottom:12px}
   input:focus{outline:none;border-color:#3b82f6}
   button{background:#3b82f6;border:0;border-radius:10px;color:#fff;padding:12px 22px;
     font-size:14px;cursor:pointer}
@@ -690,6 +760,11 @@ const PAGE_CSS = `
   .lang a{color:#6b7689;text-decoration:none;padding:2px 4px;border-radius:5px}
   .lang a:hover{color:#d7dce3}
   .lang a.on{color:#d7dce3;font-weight:600;pointer-events:none}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#2a3550;border-radius:8px;border:2px solid transparent;background-clip:padding-box}
+  ::-webkit-scrollbar-thumb:hover{background:#3b4a6b;background-clip:padding-box}
+  ::-webkit-scrollbar-corner{background:transparent}
   .notes{max-height:34vh;overflow:auto;background:#151a23;border:1px solid #232b3a;border-radius:10px;
     padding:4px 16px 8px;margin-bottom:14px}
   .notes .ver{margin:12px 0 2px}
@@ -702,6 +777,23 @@ const PAGE_CSS = `
     display:flex;flex-direction:column}
   .dlg .notes{flex:1 1 auto;max-height:none;min-height:80px;margin-bottom:0}
   .dlg pre.log{flex:1 1 auto;max-height:none;min-height:80px;margin:0;white-space:pre-wrap}
+  .dlg .form{flex:1 1 auto;overflow:auto;min-height:0;padding-right:6px}
+  .dlg .form h4{margin:14px 0 6px;font-size:13px;color:#d7dce3;font-weight:600}
+  .dlg .form h4:first-child{margin-top:0}
+  .dlg .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:6px 0;color:#9aa4b2}
+  .dlg .row > span:first-child{min-width:150px}
+  .dlg .row input:not([type=checkbox]),.dlg .row select{width:auto;margin:0;padding:6px 9px;font-size:13px;
+    background:#151a23;border:1px solid #2a3550;border-radius:7px;color:#e6ebf4}
+  .dlg .row input:disabled,.dlg .row select:disabled{opacity:.55}
+  .dlg .row button{padding:6px 12px;font-size:13px}
+  .dlg .row code.val{max-width:360px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dlg .chk{display:inline-flex;align-items:center;gap:8px;cursor:pointer;line-height:1.4}
+  .dlg .chk input{width:16px;height:16px;margin:0;flex:none;accent-color:#3b82f6;cursor:pointer}
+  .dlg .hint{font-size:12px;color:#6b7689}
+  .dlg .banner{background:#2a2410;border:1px solid #6b5a1e;color:#e5c76b;border-radius:8px;padding:8px 12px;
+    margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .dlg .note{margin:0 0 8px;color:#3fb950}
+  .dlg .note.err{color:#f85149}
   .dlg .actions{margin-top:auto;padding-top:14px;display:flex;gap:10px;flex-wrap:wrap}
   .dlg h1{font-size:18px}
   .dlg button{padding:9px 18px}
@@ -1119,7 +1211,7 @@ async function offerMarketIfMissing() {
 const DSH_NPM_PKG = '@deepseek-ai/dsh';
 const UPDATE_GITHUB_REPO = 'Toximiner/DSH-Launcher';
 const UPDATE_CHECK_TIMEOUT = 8000; // сколько ждать проверки, прежде чем не спрашивать
-const NO_UPDATE_CHECK = /^(1|true|yes)$/i.test(process.env.DSH_LAUNCHER_NO_UPDATE_CHECK || '');
+const NO_UPDATE_CHECK = !CONFIG.checkUpdates; // DSH_LAUNCHER_NO_UPDATE_CHECK или «Настройки»
 
 /* ===== сравнение версий (чистые функции, тест test/version.js) ===== */
 // Debian-версия (лаунчер): X.Y.Z[-R]. Числовые части сравниваются
@@ -2007,6 +2099,8 @@ function appMenuTemplate() {
     {
       label: tr('Файл', 'File'),
       submenu: [
+        { label: tr('Настройки…', 'Settings…'), click: () => showSettingsDialog(), ...hint('CmdOrCtrl+,') },
+        { type: 'separator' },
         { label: tr('Перезапустить dsh…', 'Restart dsh…'), click: () => { void restartDsh(); } },
         { type: 'separator' },
         { label: tr('Выйти', 'Quit'), role: 'quit' },
@@ -2054,6 +2148,8 @@ function appMenuTemplate() {
 
 function buildAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate()));
+  // На Linux setApplicationMenu ставит меню всем окнам — у окна-диалога его быть не должно.
+  if (dialogWin && !dialogWin.isDestroyed()) dialogWin.setMenu(null);
 }
 
 /* ===== contextMenuItems (чистая функция, тест test/menu.js) =====
@@ -2239,6 +2335,7 @@ const viewActions = {
   findNext: () => findStep(true),
   findPrev: () => findStep(false),
   fullscreen: () => win.setFullScreen(!win.isFullScreen()),
+  settings: () => showSettingsDialog(),
 };
 
 /* ===== keyAction (чистая функция, тест test/menu.js) =====
@@ -2253,6 +2350,7 @@ function keyAction(input) {
   if (c && !input.shift && input.code === 'KeyF') return 'find';
   if (input.key === 'F3') return input.shift ? 'findPrev' : 'findNext';
   if (input.key === 'F11') return 'fullscreen';
+  if (c && input.code === 'Comma') return 'settings';
   return null;
 }
 /* ===== end keyAction ===== */
@@ -2438,7 +2536,7 @@ async function restartDsh({ confirm = true } = {}) {
 function gpuStatus(st) {
   const marker = st.markerAgeMs !== null && st.markerAgeMs < st.ttlMs;
   const daysLeft = marker ? Math.max(1, Math.ceil((st.ttlMs - st.markerAgeMs) / 86400000)) : 0;
-  const reason = st.noGpuRequested ? 'env'
+  const reason = st.noGpuRequested ? (st.noGpuBySettings ? 'setting' : 'env')
     : st.disabledByMarker ? 'marker'
     : !st.hasRenderNode ? 'norender'
     : !st.hasEgl ? 'noegl'
@@ -2451,7 +2549,7 @@ function gpuStatusNow() {
   let markerAgeMs = null;
   try { markerAgeMs = Date.now() - fs.statSync(GPU_MARKER_FILE).mtimeMs; } catch { /* маркера нет */ }
   return gpuStatus({
-    noGpuRequested, disabledByMarker: gpuDisabledByMarker, hasRenderNode: hasGpuRenderNode, hasEgl: hasEglLibs,
+    noGpuRequested, noGpuBySettings: CONFIG.src.gpu === 'settings', disabledByMarker: gpuDisabledByMarker, hasRenderNode: hasGpuRenderNode, hasEgl: hasEglLibs,
     markerAgeMs, ttlMs: GPU_MARKER_TTL_MS,
   });
 }
@@ -2463,6 +2561,7 @@ function gpuStatusText(g) {
       : tr('включено', 'on');
   }
   if (g.reason === 'env') return tr('отключено (DSH_LAUNCHER_NO_GPU=1)', 'off (DSH_LAUNCHER_NO_GPU=1)');
+  if (g.reason === 'setting') return tr('отключено в «Настройках»', 'off in Settings');
   if (g.reason === 'marker') {
     return g.marker
       ? tr(`отключено после сбоев GPU-процесса (ещё ${g.daysLeft} дн.)`, `off after GPU process crashes (${g.daysLeft} more days)`)
@@ -2584,6 +2683,213 @@ async function maybeShowWhatsNew() {
     <p style="margin:0 0 4px">${tr('DSH Launcher обновлён:', 'DSH Launcher was updated:')} <code>${esc(last)}</code> → <code>${esc(current)}</code></p>
     ${notesBlockHtml(items) || `<p>${tr('Подробности — на', 'Details are on the')} <a href="${esc(link)}" target="_blank">${tr('странице релизов', 'releases page')}</a>.</p>`}
     <div class="actions">${dialogCloseButton()}</div>`));
+}
+
+/* ---------------- окно «Настройки» ---------------- */
+
+// «Файл → Настройки…» (Ctrl+,). Каждое поле сохраняется сразу (переход на
+// dshlauncher://settings/set/?k=…&v=…, ответ 204); язык, орфография, маркет,
+// «снова спрашивать» действуют сразу, проверка обновлений — со следующего
+// запуска, остальное — после перезапуска лаунчера (кнопка в окне).
+
+/* ===== settingValue (чистая функция, тест test/settings.js) =====
+   Значение поля окна → { value } или { error } (сообщение для окна). */
+function settingValue(key, raw) {
+  const v = String(raw === undefined || raw === null ? '' : raw).trim();
+  const abs = (x) => x === '' || x.startsWith('/');
+  switch (key) {
+    case 'port': {
+      const n = Number(v);
+      if (!/^\d+$/.test(v) || n < 1024 || n > 65535) return { error: tr('Порт — число от 1024 до 65535.', 'The port must be a number from 1024 to 65535.') };
+      return { value: n };
+    }
+    case 'profile':
+      if (!/^[\w.-]+$/.test(v)) return { error: tr('Профиль — латинские буквы, цифры, «.», «_», «-».', 'The profile may contain Latin letters, digits, “.”, “_”, “-”.') };
+      return { value: v };
+    case 'dshPath':
+    case 'cwd':
+      if (!abs(v)) return { error: tr('Нужен полный путь (начинается с /).', 'A full path is needed (starting with /).') };
+      return { value: v };
+    case 'checkUpdates':
+    case 'spellcheck':
+    case 'market':
+      if (v !== 'true' && v !== 'false') return { error: 'bad value' };
+      return { value: v === 'true' };
+    case 'lang':
+      return ['auto', 'ru', 'en'].includes(v) ? { value: v } : { error: 'bad value' };
+    case 'gpu':
+      return ['auto', 'off'].includes(v) ? { value: v } : { error: 'bad value' };
+    case 'ozone':
+      return ['auto', 'wayland', 'x11'].includes(v) ? { value: v } : { error: 'bad value' };
+    default:
+      return { error: `unknown setting ${key}` };
+  }
+}
+
+/* Какие из действующих параметров изменятся после перезапуска лаунчера. */
+function restartNeeded(running, next) {
+  const changed = ['port', 'dshBin', 'cwd', 'noGpu', 'ozone'].filter((k) => running[k] !== next[k]);
+  if (JSON.stringify(running.args) !== JSON.stringify(next.args)) changed.push('args');
+  return changed;
+}
+/* ===== end settingValue ===== */
+
+function saveSettings(patch) {
+  const next = { ...loadSettings(), ...patch };
+  for (const k of Object.keys(next)) if (next[k] === null || next[k] === '') delete next[k];
+  fs.mkdirSync(path.dirname(SETTINGS_FILE), { recursive: true });
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(next, null, 2));
+  return next;
+}
+
+function setLanguage(lang) {
+  if (lang === 'auto') {
+    try { fs.rmSync(langPrefFile(), { force: true }); } catch { /* noop */ }
+    UI_LANG = /^ru/i.test(process.env.LC_ALL || process.env.LC_MESSAGES || process.env.LANG || '') ? 'ru' : 'en';
+    buildAppMenu();
+    if (currentPage) currentPage();
+  } else {
+    onLangSwitch(lang);
+  }
+}
+
+function langSetting() {
+  try { JSON.parse(fs.readFileSync(langPrefFile(), 'utf8')); return UI_LANG; } catch { return 'auto'; }
+}
+
+function updateDismissals() {
+  const p = updatePrefs();
+  return Object.keys(p).filter((k) => p[k]).map((k) => `${k === 'launcher' ? 'DSH Launcher' : 'dsh'} ${p[k]}`);
+}
+
+let settingsNote = null; // { text, error }
+
+function onSettingsSet(url) {
+  const q = new URL(url).searchParams;
+  const key = q.get('k');
+  const r = settingValue(key, q.get('v'));
+  if (r.error) {
+    settingsNote = { text: r.error, error: true };
+  } else {
+    try {
+      if (key === 'lang') setLanguage(r.value);
+      else if (key === 'spellcheck') setSpellcheck(r.value);
+      else if (key === 'market') {
+        fs.mkdirSync(path.dirname(marketPrefFile()), { recursive: true });
+        fs.writeFileSync(marketPrefFile(), JSON.stringify({ dontAsk: !r.value }));
+      } else if (key === 'gpu' || key === 'ozone') saveSettings({ [key]: r.value === 'auto' ? null : r.value });
+      else if (key === 'port') saveSettings({ port: r.value === DEFAULT_PORT ? null : r.value });
+      else if (key === 'profile') saveSettings({ profile: r.value === DEFAULT_PROFILE ? null : r.value });
+      else if (key === 'checkUpdates') saveSettings({ checkUpdates: r.value ? null : false });
+      else saveSettings({ [key]: r.value || null }); // dshPath, cwd: '' — по умолчанию
+      console.log(`[launcher] настройки: ${key} = ${key === 'dshPath' || key === 'cwd' ? (r.value || '(по умолчанию)') : r.value}`);
+      settingsNote = { text: tr('Сохранено.', 'Saved.'), error: false };
+    } catch (e) {
+      settingsNote = { text: e.message, error: true };
+    }
+  }
+  if (dialogRender) dialogRender(false);
+  return noContentResponse();
+}
+
+async function onSettingsPick(kind) {
+  if (!dialogWin || dialogWin.isDestroyed()) return noContentResponse();
+  const isDir = kind === 'cwd';
+  const r = await dialog.showOpenDialog(dialogWin, {
+    title: isDir ? tr('Рабочая папка dsh', 'dsh working folder') : tr('Программа dsh', 'The dsh program'),
+    defaultPath: isDir ? CWD : path.dirname(DSH_BIN),
+    properties: isDir ? ['openDirectory'] : ['openFile'],
+  });
+  if (!r.canceled && r.filePaths[0]) {
+    return onSettingsSet(`dshlauncher://settings/set/?k=${kind}&v=${encodeURIComponent(r.filePaths[0])}`);
+  }
+  return noContentResponse();
+}
+
+function onSettingsResetUpdates() {
+  try { fs.writeFileSync(updatePrefFile(), '{}'); } catch { /* noop */ }
+  console.log('[launcher] настройки: снова спрашивать об обновлениях');
+  settingsNote = { text: tr('Об отложенных обновлениях лаунчер снова спросит при запуске.', 'The launcher will ask about postponed updates again at startup.'), error: false };
+  if (dialogRender) dialogRender(false);
+  return noContentResponse();
+}
+
+function relaunchLauncher() {
+  console.log('[launcher] перезапуск лаунчера, чтобы применить настройки');
+  app.relaunch();
+  app.quit(); // before-quit остановит dsh, который запустил лаунчер
+}
+
+function showSettingsDialog() {
+  const title = tr('Настройки', 'Settings');
+  const gen = openDialog(title);
+  if (gen === null) return;
+  settingsNote = null;
+  dialogCopyText = '';
+  const render = () => {
+    const next = effectiveConfig(process.env, loadSettings(), os.homedir());
+    const pending = restartNeeded(CONFIG, next);
+    const envNote = (key, name) => (next.src[key] === 'env'
+      ? `<span class="hint">${tr('задано переменной', 'set by')} <code>${name}</code></span>` : '');
+    const locked = (key) => (next.src[key] === 'env' ? ' disabled' : '');
+    const sel = (key, value, options) => `<select id="${key}" onchange="set('${key}', this.value)"${locked(key)}>${
+      options.map(([v, label]) => `<option value="${v}"${v === value ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>`;
+    const check = (key, on, label, disabled = false) =>
+      `<label class="chk"><input type="checkbox" id="${key}"${on ? ' checked' : ''}${disabled ? ' disabled' : ''}
+        onchange="set('${key}', this.checked)"> ${esc(label)}</label>`;
+    const dismissed = updateDismissals();
+    const gpu = gpuStatusNow();
+    const dshShown = next.dshBin || tr(`автоматически (сейчас: ${DSH_BIN})`, `automatic (now: ${DSH_BIN})`);
+    const body = `
+      ${pending.length ? `<div class="banner">${tr('Изменения вступят в силу после перезапуска лаунчера.', 'Changes take effect after the launcher restarts.')}
+        <button onclick="go('relaunch')">${tr('Перезапустить лаунчер', 'Restart the launcher')}</button></div>` : ''}
+      ${settingsNote ? `<p class="${settingsNote.error ? 'note err' : 'note'}">${esc(settingsNote.text)}</p>` : ''}
+      <div class="form">
+        <h4>${tr('Общие', 'General')}</h4>
+        <div class="row"><span>${tr('Язык интерфейса', 'Interface language')}</span>
+          ${LANG_FORCED ? `<code>${UI_LANG}</code> <span class="hint">${tr('задано переменной', 'set by')} <code>DSH_LAUNCHER_LANG</code></span>`
+            : sel('lang', langSetting(), [['auto', tr('Авто (как в системе)', 'Auto (system)')], ['ru', 'Русский'], ['en', 'English']])}</div>
+        <div class="row">${check('spellcheck', spellcheckOn, tr('Проверка орфографии в полях ввода', 'Spell check in text fields'))}</div>
+
+        <h4>${tr('Обновления', 'Updates')}</h4>
+        <div class="row">${check('checkUpdates', next.checkUpdates, tr('Проверять обновления при запуске (со следующего запуска)', 'Check for updates at startup (from the next start)'), next.src.checkUpdates === 'env')}
+          ${envNote('checkUpdates', 'DSH_LAUNCHER_NO_UPDATE_CHECK')}</div>
+        <div class="row"><span>${dismissed.length ? tr('Не спрашивать: ', 'Don’t ask: ') + esc(dismissed.join(', ')) : tr('Отложенных обновлений нет', 'No postponed updates')}</span>
+          ${dismissed.length ? `<button onclick="go('reset-updates')">${tr('Снова спрашивать', 'Ask again')}</button>` : ''}</div>
+        <div class="row">${check('market', !marketPromptDisabled(), tr('Предлагать установить плагин маркета', 'Offer to install the marketplace plugin'))}</div>
+
+        <h4>${tr('Запуск dsh', 'Starting dsh')}</h4>
+        <div class="row"><span>${tr('Программа dsh', 'dsh program')}</span> <code class="val">${esc(dshShown)}</code>
+          ${next.src.dshPath === 'env' ? envNote('dshPath', 'DSH_BIN')
+            : `<button onclick="go('pick-dsh')">${tr('Выбрать…', 'Choose…')}</button>${next.dshBin ? ` <button onclick="set('dshPath', '')">${tr('Авто', 'Auto')}</button>` : ''}`}</div>
+        <div class="row"><span>${tr('Профиль', 'Profile')}</span>
+          <input id="profile" value="${esc(next.src.profile === 'env' ? (profileFromArgs(next.args) || '') : next.profile)}" onchange="set('profile', this.value)"${locked('profile')}>
+          ${envNote('profile', 'DSH_ARGS')}</div>
+        <div class="row"><span>${tr('Рабочая папка', 'Working folder')}</span> <code class="val">${esc(next.cwd)}</code>
+          ${next.src.cwd === 'env' ? envNote('cwd', 'DSH_CWD')
+            : `<button onclick="go('pick-cwd')">${tr('Выбрать…', 'Choose…')}</button>${next.src.cwd === 'settings' ? ` <button onclick="set('cwd', '')">${tr('Домашняя', 'Home')}</button>` : ''}`}</div>
+        <div class="row"><span>${tr('Порт', 'Port')}</span>
+          <input id="port" type="number" min="1024" max="65535" value="${next.port}" onchange="set('port', this.value)"${locked('port')}>
+          ${envNote('port', 'DSH_PORT')}</div>
+
+        <h4>${tr('Графика', 'Graphics')}</h4>
+        <div class="row"><span>${tr('GPU-ускорение', 'GPU acceleration')}</span>
+          ${sel('gpu', next.noGpu ? 'off' : 'auto', [['auto', tr('Авто', 'Auto')], ['off', tr('Выключено', 'Off')]])}
+          ${envNote('gpu', 'DSH_LAUNCHER_NO_GPU')}</div>
+        <div class="row"><span class="hint">${tr('Сейчас:', 'Now:')} ${esc(gpuStatusText(gpu))}</span>
+          ${gpu.marker ? `<button onclick="location.href='dshlauncher://dialog/gpu-enable/'">${tr('Включить GPU снова', 'Re-enable GPU')}</button>` : ''}</div>
+        <div class="row"><span>${tr('Окно на Wayland', 'Window on Wayland')}</span>
+          ${sel('ozone', next.ozone, [['auto', tr('Авто', 'Auto')], ['wayland', 'Wayland'], ['x11', tr('X11 (XWayland) — если окна не видно', 'X11 (XWayland) — if the window is invisible')]])}
+          ${envNote('ozone', 'DSH_LAUNCHER_OZONE')}</div>
+      </div>
+      <div class="actions">${dialogCloseButton()}</div>
+      <script>
+        function set(k, v) { location.href = 'dshlauncher://settings/set/?k=' + encodeURIComponent(k) + '&v=' + encodeURIComponent(v); }
+        function go(r) { location.href = 'dshlauncher://settings/' + r + '/'; }
+      </script>`;
+    dialogPage(title, body);
+  };
+  dialogShow(gen, render);
 }
 
 /* ---------------- окно-диалог: «О программе», «Проверить обновления» ---------------- */
@@ -3138,6 +3444,12 @@ async function onReady() {
       if (route.startsWith('/dialog/logs/')) { void openLogsFolder(); return noContentResponse(); }
       if (route.startsWith('/dialog/log-refresh/')) { if (dialogRender) dialogRender(false); return noContentResponse(); }
       if (route.startsWith('/menu/log/')) { showLogDialog(); return noContentResponse(); }
+      if (route.startsWith('/menu/settings/')) { showSettingsDialog(); return noContentResponse(); }
+      if (route.startsWith('/settings/set/')) return onSettingsSet(request.url);
+      if (route.startsWith('/settings/pick-dsh/')) return onSettingsPick('dshPath');
+      if (route.startsWith('/settings/pick-cwd/')) return onSettingsPick('cwd');
+      if (route.startsWith('/settings/reset-updates/')) return onSettingsResetUpdates();
+      if (route.startsWith('/settings/relaunch/')) { relaunchLauncher(); return noContentResponse(); }
       if (route.startsWith('/menu/close-context/')) { if (openContextMenu) openContextMenu.closePopup(); return noContentResponse(); }
       if (route.startsWith('/dialog/gpu-enable/')) return onDialogGpuEnable();
       if (route.startsWith('/menu/restart-dsh/')) { void restartDsh({ confirm: false }); return noContentResponse(); }
