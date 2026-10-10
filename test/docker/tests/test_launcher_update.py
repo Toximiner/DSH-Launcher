@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import time
 
 from helpers.env import CONF, FAKE, INSTALLED, LATEST, LATEST_DEB, LATEST_PKG, LATEST_RE, NO_PROMPTS, UPD
 from helpers.procs import as_tester, dpkg_version, fakedsh_starts, sh, wait_exit, wait_for, wait_port
@@ -72,6 +73,24 @@ def test_launcher_update_nopkexec(start, prompt):
     prompt.wait(rf'pkexec was not found.*sudo apt install -y {re.escape(UPD)}/{re.escape(LATEST_DEB)}', 400)
     prompt.later()
     assert wait_port(60), '«Не сейчас» — dsh запускается'
+    launcher.term()
+
+
+def test_whats_new_stale_cache(start, gui, drv):
+    """Список релизов в кэше (свежий, до часа) получен до выхода установленной
+    версии — «Что нового» запрашивает его заново и показывает изменения, а не
+    только ссылку."""
+    as_tester(f"mkdir -p {CONF} && echo '{{\"version\":\"1.0.0-1\"}}' > {CONF}/last-version.json")
+    old = [{'tag_name': 'v1.0.0-14', 'body': 'old', 'draft': False, 'prerelease': False, 'assets': [], 'html_url': ''}]
+    as_tester(f"cat > {CONF}/releases-cache.json <<'EOF'\n" +
+              json.dumps({'etag': None, 'list': old, 'fetchedAt': int(time.time() * 1000)}) + "\nEOF")
+    launcher = start(FAKE, NO_PROMPTS)
+    gui.wait()
+
+    whats_new = WhatsNewDialog(drv)
+    whats_new.wait_text(rf'updated: 1\.0\.0-1 → {re.escape(INSTALLED)} .*What.s new: 1\.1\.0 ', 30)
+    assert f'в кэше релизов нет {INSTALLED} — запрашиваю список заново' in launcher.log()
+    whats_new.close()
     launcher.term()
 
 

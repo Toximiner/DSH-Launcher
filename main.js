@@ -2705,7 +2705,16 @@ async function maybeShowWhatsNew() {
   const scheme = process.execPath.startsWith('/opt/dsh-launcher/') ? 'deb' : 'semver';
   if (!shouldShowWhatsNew(last, current, scheme)) { saveLastVersion(current); return; }
   if (NO_UPDATE_CHECK) { saveLastVersion(current); return; } // в сеть ходить нельзя — молча
-  const latest = await updateChecks.launcher;
+  let latest = await updateChecks.launcher;
+  // Список релизов из кэша (до часа) мог быть получен до выхода этой версии
+  // (например, пакет поставили через apt) — тогда её описания в нём нет:
+  // запросить заново, мимо кэша.
+  const hasCurrent = (l) => l && Array.isArray(l.releases) && l.releases.some((r) =>
+    (scheme === 'deb' ? tagToPackageVersion(r.version) : r.version) === current);
+  if (latest && !hasCurrent(latest)) {
+    console.log(`[launcher] в кэше релизов нет ${current} — запрашиваю список заново`);
+    latest = (await timedCheck(fetchLauncherLatest({ force: true }), UPDATE_CHECK_TIMEOUT)) || latest;
+  }
   if (!latest || !latest.releases) return; // нет ответа GitHub — покажем в следующий раз
   const items = notesBetween(latest.releases, last, current, scheme);
   console.log(`[launcher] обновлён ${last} → ${current} — показываю «Что нового» (${items.length})`);

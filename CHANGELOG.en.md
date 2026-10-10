@@ -5,6 +5,14 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- **“What’s new” without notes.** When the cached release list (up to an
+  hour old) predated the installed version, the window showed only a GitHub
+  link. The list is now fetched again.
+
 ## [1.8.0] — 2026-10-10
 
 ### Added
