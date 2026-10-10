@@ -9,7 +9,9 @@ from .procs import alive, sh, wait_exit, wait_for
 
 def launcher_pids():
     """Главные процессы лаунчера (без --type= — это не служебные процессы Chromium)."""
-    out = subprocess.run(['pgrep', '-u', 'tester', '-f', 'electron/electron /opt/dsh-launcher'],
+    # по пути к программе: порядок аргументов у перезапущенного экземпляра другой
+    # («electron --remote-debugging-port=… /opt/dsh-launcher»)
+    out = subprocess.run(['pgrep', '-u', 'tester', '-f', '^/opt/dsh-launcher/electron/electron '],
                          capture_output=True, text=True).stdout
     pids = []
     for p in out.split():

@@ -2929,7 +2929,7 @@ const DIM_CSS = `
     animation: dshl-dim .15s ease-out; }`;
 
 async function dimMain(on) {
-  if (!win || win.isDestroyed()) return;
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed() || stopping) return;
   const wc = win.webContents;
   try {
     if (on && !dimKey) dimKey = await wc.insertCSS(DIM_CSS);
