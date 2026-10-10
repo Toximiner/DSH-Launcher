@@ -1,7 +1,6 @@
 """Установленный лаунчер (/usr/bin/dsh-launcher) от пользователя tester с CDP
 на порту 9222."""
 import subprocess
-import time
 import urllib.request
 
 from .env import GITHUB_TOKEN, HOME, LAUNCHER_OUT
@@ -80,11 +79,11 @@ class Launcher:
     def wait_exit(self, timeout=15):
         return wait_exit(self.pid, timeout)
 
-    def successor(self, wait=3):
+    def successor(self, timeout=20):
         """Новый экземпляр после самообновления (другой pid) или None."""
-        time.sleep(wait)
-        pids = [p for p in launcher_pids() if p != self.pid]
-        return pids[0] if pids else None
+        found = []
+        wait_for(lambda: found.extend(p for p in launcher_pids() if p != self.pid) or found, timeout)
+        return found[0] if found else None
 
     def last_context_menu(self):
         """Последняя строка «контекстное меню: …» из лога (что показали по правому клику)."""

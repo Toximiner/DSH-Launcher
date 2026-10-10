@@ -5,7 +5,6 @@
 умеет); маршрут отвечает 204 — страница, с которой перешли, остаётся на месте.
 """
 import json
-import time
 
 from .env import GUI_URL
 from .procs import wait_for
@@ -56,15 +55,26 @@ class Gui:
         self.eval(f'document.body.innerHTML = {json.dumps(html)}; 1')
 
     def select_text_of(self, element_id):
+        """Выделить текст элемента; вернуть, когда выделение действительно стоит."""
+        js_id = json.dumps(element_id)
         self.eval(f"""(() => {{ const r = document.createRange();
-            r.selectNodeContents(document.getElementById({json.dumps(element_id)}));
+            r.selectNodeContents(document.getElementById({js_id}));
             getSelection().removeAllRanges(); getSelection().addRange(r); return 1; }})()""")
+        assert wait_for(lambda: self.eval(f"getSelection().toString() === document.getElementById({js_id}).textContent"),
+                        5, 0.1), 'выделение не встало'
 
     def select_input(self, element_id):
-        self.eval(f"(() => {{ const i = document.getElementById({json.dumps(element_id)}); i.focus(); i.select(); return 1; }})()")
+        """Фокус в поле и выделить всё; вернуть, когда выделение стоит."""
+        js_id = json.dumps(element_id)
+        self.eval(f"(() => {{ const i = document.getElementById({js_id}); i.focus(); i.select(); return 1; }})()")
+        assert wait_for(lambda: self.eval(f"(() => {{ const i = document.getElementById({js_id}); "
+                                          f"return document.activeElement === i && i.selectionEnd - i.selectionStart === i.value.length; }})()"),
+                        5, 0.1), 'выделение в поле не встало'
 
     def clear_selection(self):
         self.eval('getSelection().removeAllRanges(); document.activeElement && document.activeElement.blur(); 1')
+        assert wait_for(lambda: self.eval("getSelection().toString() === '' && document.activeElement === document.body"),
+                        5, 0.1), 'выделение не снято'
 
     def right_click(self, x, y):
         self.drv.right_click(x, y, page=GUI_URL)
@@ -207,12 +217,13 @@ class FindBar:
         повторяем ввод с паузой. Поле перед повтором НЕ очищаем: пустая строка
         останавливает поиск (stopFindInPage), и это асинхронно может отменить
         следующий запрос."""
-        time.sleep(1)  # панель только что открылась — дать ей устояться
+        # панель только что открылась: дождаться, что фокус — в поле поиска
+        assert wait_for(lambda: self.drv.eval("document.activeElement && document.activeElement.id === 'q'",
+                                              page=self.PAGE), 5, 0.1), 'фокус не в поле поиска'
         for _ in range(tries):
             self.type(text)
             if self.wait_count(expect, 4):
                 return True
-            time.sleep(1)
         return False
 
     def next(self):
@@ -230,6 +241,15 @@ class UpdatePrompt:
 
     def text(self):
         return self.drv.text()
+
+    def url(self):
+        return self.drv.url()
+
+    def mark(self):
+        self.drv.eval('window.__mark = 42; 1')
+
+    def not_reloaded(self):
+        return self.drv.eval('window.__mark') == 42
 
     def click_release_link(self):
         self.drv.eval("document.querySelector('a[target=_blank]').click()")

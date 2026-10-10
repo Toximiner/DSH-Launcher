@@ -1,6 +1,4 @@
 """Инструменты страницы: контекстное меню по правому клику и поиск (Ctrl+F)."""
-import time
-
 from helpers.env import FAKE, NOUPD
 from helpers.procs import dsh_tree_gone, wait_for
 
@@ -20,11 +18,11 @@ def test_context_menu(start, gui):
     gui.set_body(FIXTURE)
 
     def menu_at(x, y, prepare):
-        """prepare() — выделение и т. п. прямо перед кликом: предыдущее нативное
-        меню ещё может быть открыто и сбить подготовленное раньше."""
+        """prepare() — выделение и т. п. прямо перед кликом (предыдущее нативное
+        меню ещё может быть открыто и сбить подготовленное раньше); prepare
+        возвращается, когда выделение действительно стоит."""
         shown = launcher.context_menus_shown()
         prepare()
-        time.sleep(0.5)
         gui.right_click(x, y)
         wait_for(lambda: launcher.context_menus_shown() > shown, 5, 0.25)
         return launcher.last_context_menu()

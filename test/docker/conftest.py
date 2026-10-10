@@ -11,14 +11,13 @@ adopt_detached). `--list-scenarios` печатает все имена (run.sh �
 """
 import os
 import subprocess
-import time
 
 import pytest
 
 from helpers.cdp import Driver
 from helpers.env import FAKEDSH_LOG
 from helpers.launcher import Launcher, launcher_log, launcher_pids
-from helpers.procs import as_tester, sh
+from helpers.procs import as_tester, pgrep, sh, wait_for
 from helpers.windows import Gui, UpdatePrompt
 
 
@@ -63,7 +62,9 @@ def container_env(request):
     polkitd = next(p for p in ('/usr/lib/polkit-1/polkitd', '/usr/libexec/polkitd') if os.path.exists(p))
     subprocess.Popen(f'{polkitd} --no-debug >/tmp/polkitd.log 2>&1', shell=True)
     subprocess.Popen('Xvfb :99 -screen 0 1280x800x24 -nolisten tcp >/dev/null 2>&1', shell=True)
-    time.sleep(1.5)
+    assert wait_for(lambda: os.path.exists('/tmp/.X11-unix/X99'), 15, 0.1), 'Xvfb не поднял дисплей :99'
+    assert wait_for(lambda: os.path.exists('/run/dbus/system_bus_socket'), 15, 0.1), 'нет системной шины D-Bus'
+    assert wait_for(lambda: pgrep('polkitd'), 15, 0.1), 'polkitd не запустился'
     # Вопрос про маркет в тестах не нужен.
     as_tester('mkdir -p ~/.config/dsh-launcher && echo \'{"dontAsk":true}\' > ~/.config/dsh-launcher/market-prompt.json')
     if os.path.exists(FAKEDSH_LOG):

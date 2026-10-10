@@ -5,10 +5,9 @@ import json
 import os
 import re
 import shutil
-import time
 
 from helpers.env import CONF, FAKE, INSTALLED, LATEST, LATEST_DEB, LATEST_PKG, LATEST_RE, NO_PROMPTS, UPD
-from helpers.procs import as_tester, dpkg_version, fakedsh_starts, sh, wait_exit, wait_port
+from helpers.procs import as_tester, dpkg_version, fakedsh_starts, sh, wait_exit, wait_for, wait_port
 from helpers.windows import WhatsNewDialog
 
 
@@ -31,9 +30,11 @@ def test_launcher_update(start, prompt):
     prompt.wait(rf'Update DSH Launcher.*Version {LATEST_RE} is available \(installed: {re.escape(INSTALLED)}\s*\)')
     # «Что нового»: от последней версии вниз до 1.1.1 (первая после 1.1.0)
     prompt.wait(rf'What.s new: {LATEST_RE} .*1\.1\.1 ', 5)
+    page_url = prompt.url()
+    prompt.mark()
     prompt.click_release_link()
-    time.sleep(1.5)
-    prompt.wait('Update DSH Launcher', 3)  # ссылка открывается снаружи, окно остаётся на вопросе
+    # ссылка открывается снаружи (shell.openExternal), окно остаётся на вопросе
+    assert prompt.url() == page_url and prompt.not_reloaded(), 'клик по ссылке релиза не увёл окно'
 
     prompt.install()
 
@@ -88,8 +89,11 @@ def test_whats_new(start, gui, drv):
     whats_new.close()
     launcher.term()
 
+    decided_before = os.stat(last_version).st_mtime_ns
     launcher = start(FAKE, NO_PROMPTS)
     gui.wait()
-    time.sleep(5)
+    # решение «показывать или нет» лаунчер принимает после загрузки GUI и
+    # переписывает last-version.json — ждём этого, а потом проверяем
+    assert wait_for(lambda: os.stat(last_version).st_mtime_ns != decided_before, 15, 0.2), 'лаунчер проверил версию'
     assert not whats_new.is_open(), 'повторный запуск — окна «Что нового» нет'
     launcher.term()

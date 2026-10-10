@@ -3,12 +3,10 @@
 Во всех случаях лаунчер должен остановить запущенный им dsh вместе с
 потомками (у фейкового dsh — sleep 7777 в той же группе процессов).
 """
-import time
-
 import pytest
 
 from helpers.env import FAKE, NOUPD
-from helpers.procs import dsh_tree_alive, dsh_tree_gone, fakedsh_events, pgrep, sh, wait_port
+from helpers.procs import dsh_tree_alive, dsh_tree_gone, fakedsh_events, pgrep, sh, wait_for, wait_port
 
 
 def test_close(start, gui):
@@ -52,12 +50,11 @@ def test_sigterm_double(start, gui):
     gui.wait()
 
     sh(f'kill -TERM {launcher.pid}')
-    time.sleep(0.5)
+    assert launcher.wait_log('SIGTERM — ', 5), 'первый SIGTERM принят (лаунчер останавливает dsh)'
     sh(f'kill -TERM {launcher.pid}')
 
     assert launcher.wait_exit(5) is not None, 'после повторного SIGTERM — выход сразу'
-    time.sleep(0.5)
-    assert dsh_tree_gone(), 'дерево dsh остановлено'
+    assert wait_for(dsh_tree_gone, 5), 'дерево dsh остановлено'
 
 
 @pytest.mark.parametrize('detached', [
