@@ -96,4 +96,19 @@ assert.strictEqual(proxyUrlFromRule('SOCKS5 127.0.0.1:1080'), null, 'SOCKS не 
 assert.strictEqual(proxyUrlFromRule('SOCKS5 s:1; PROXY p:3128'), 'http://p:3128', 'SOCKS пропускаем, берём HTTP');
 assert.strictEqual(proxyUrlFromRule('proxy p:1'), 'http://p:1', 'регистр не важен');
 
+// ---- DSH_LAUNCHER_GITHUB_TOKEN: только для CI, наружу не уходит ----
+{
+  const { mainSrc } = require('./_extract');
+  const del = mainSrc.indexOf('delete process.env.DSH_LAUNCHER_GITHUB_TOKEN');
+  assert.ok(del > 0, 'переменная токена удаляется из окружения');
+  const firstChild = Math.min(...['execFileSync(', 'spawn(', 'execFileAsync(']
+    .map((k) => mainSrc.indexOf(k, mainSrc.indexOf("require('child_process')") + 30)).filter((x) => x > 0));
+  assert.ok(del < firstChild, 'токен убран из окружения до первого запуска дочернего процесса');
+  const uses = mainSrc.match(/Bearer \$\{GITHUB_TOKEN\}/g) || [];
+  assert.strictEqual(uses.length, 1, 'токен подставляется в одном месте');
+  const fn = mainSrc.slice(mainSrc.indexOf('async function githubReleases('), mainSrc.indexOf('async function fetchLauncherLatest('));
+  assert.ok(fn.includes('Bearer ${GITHUB_TOKEN}'), '— и это запрос списка релизов (api.github.com)');
+  assert.ok(!/console\.(log|error)\([^)]*\$\{GITHUB_TOKEN\}/.test(mainSrc), 'значение токена не печатается');
+}
+
 console.log('OK: parsing — все проверки прошли');

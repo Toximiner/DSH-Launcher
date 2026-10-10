@@ -117,6 +117,9 @@ one() {
   local os=$1 sc=$2 extra=""
   [ "$sc" = launcher_update_denied ] && extra="-e POLKIT=no"
   extra="$extra -e LATEST=$LATEST"
+  # токен CI для запросов лаунчера к GitHub API (лимит 5000/ч): -e ИМЯ — значение
+  # docker берёт из окружения, в командную строку оно не попадает
+  [ -n "${DSH_LAUNCHER_GITHUB_TOKEN:-}" ] && extra="$extra -e DSH_LAUNCHER_GITHUB_TOKEN"
   local name="dshl-test-${os//./}-$sc-$$"
   # --init: PID 1 в контейнере — tini, и SIGTERM от timeout доходит до
   # pytest (сам он как PID 1 сигналы без обработчика не получает).
@@ -131,6 +134,7 @@ one() {
   [ $rc -eq 124 ] || [ $rc -eq 137 ] && echo "  [FAIL] сценарий не уложился в 10 минут" >>"$WORK/results/$os-$sc.log"
   echo "$([ $rc -eq 0 ] && echo PASS || echo "FAIL") $os $sc"
 }
+[ -n "${GITHUB_TOKEN:-}" ] && export DSH_LAUNCHER_GITHUB_TOKEN="$GITHUB_TOKEN"
 export -f one; export WORK LATEST
 echo ">> сценарии (параллельно: $JOBS)"
 for os in $OSES; do for sc in $SCENARIOS; do echo "$os $sc"; done; done \

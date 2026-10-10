@@ -31,6 +31,13 @@ const path = require('path');
 
 const execFileAsync = promisify(execFile);
 
+// Только для разработки и тестов (CI): токен GitHub для запроса списка
+// релизов — лимит 5000 запросов в час вместо 60 без авторизации. Читаем и
+// убираем из окружения первым делом — до любого запуска дочерних процессов:
+// его не унаследуют dsh, npm и плагины. Значение нигде не печатается.
+const GITHUB_TOKEN = process.env.DSH_LAUNCHER_GITHUB_TOKEN || '';
+delete process.env.DSH_LAUNCHER_GITHUB_TOKEN;
+
 // Разбор строки аргументов как в shell: пробелы разделяют, '…' и "…"
 // группируют, \ экранирует следующий символ (внутри '…' — нет).
 /* ===== splitArgs (чистая функция, тест test/parsing.js) ===== */
@@ -1308,6 +1315,7 @@ async function githubReleases({ force = false } = {}) {
   if (mode === 'cache') return entry.list;
   const headers = { 'User-Agent': 'dsh-launcher', 'Accept': 'application/vnd.github+json' };
   if (mode === 'revalidate') headers['If-None-Match'] = entry.etag;
+  if (GITHUB_TOKEN) headers.Authorization = `Bearer ${GITHUB_TOKEN}`; // только api.github.com
   const res = await httpGet(`https://api.github.com/repos/${UPDATE_GITHUB_REPO}/releases?per_page=20`, { headers });
   let body = '';
   res.setEncoding('utf8');
@@ -1444,6 +1452,7 @@ let updateChecks = { launcher: null, dsh: null };
 
 // При старте — оба запроса в параллель (здесь не ждём их завершения).
 function startUpdateChecks() {
+  if (GITHUB_TOKEN) console.log('[launcher] запросы к GitHub API — с токеном (DSH_LAUNCHER_GITHUB_TOKEN)');
   if (NO_UPDATE_CHECK) {
     console.log('[launcher] проверка обновлений отключена (DSH_LAUNCHER_NO_UPDATE_CHECK)');
     return;

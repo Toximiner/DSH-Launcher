@@ -4,8 +4,8 @@ import subprocess
 import time
 import urllib.request
 
-from .env import HOME, LAUNCHER_OUT
-from .procs import alive, quote, sh, wait_exit, wait_for
+from .env import GITHUB_TOKEN, HOME, LAUNCHER_OUT
+from .procs import alive, sh, wait_exit, wait_for
 
 
 def launcher_pids():
@@ -35,10 +35,17 @@ class Launcher:
     def __init__(self, env):
         base = {'HOME': HOME, 'USER': 'tester', 'LANG': 'C.UTF-8', 'DISPLAY': ':99',
                 'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'}
+        if GITHUB_TOKEN:
+            base['DSH_LAUNCHER_GITHUB_TOKEN'] = GITHUB_TOKEN
         base.update(env)
-        args = ' '.join(f'{k}={quote(v)}' for k, v in base.items())
-        subprocess.Popen(f'runuser -u tester -- env -i {args} /usr/bin/dsh-launcher '
-                         f'--remote-debugging-port=9222 >{LAUNCHER_OUT} 2>&1', shell=True)
+        # Окружение — целиком своё (env=base), а не аргументами `env -i A=B`:
+        # командную строку любого процесса видно в /proc/*/cmdline.
+        # От tester средствами Python (pytest в контейнере — root): окружение
+        # процесса — ровно base, без добавок runuser/PAM.
+        with open(LAUNCHER_OUT, 'w') as out:
+            subprocess.Popen(['/usr/bin/dsh-launcher', '--remote-debugging-port=9222'], cwd=HOME,
+                             user='tester', group='tester', extra_groups=[],
+                             env=base, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
         self.pid = None
 
         def ready():

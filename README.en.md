@@ -274,21 +274,36 @@ dsh log in the installed version: `~/.local/state/dsh-launcher/dsh.log`.
 ### Tests
 
 ```sh
-npm test            # unit tests: version comparison, pid by listening port
-test/docker/run.sh  # scenarios of the installed .deb in Docker on Ubuntu 24.04 and 26.04
+npm test            # unit tests of main.js functions (test/*.js)
+test/docker/run.sh  # scenarios of the installed .deb in Docker: Ubuntu 24.04, 26.04, Debian 13
 ```
 
-`test/docker/run.sh` builds a `.deb` from the current code (as version
-1.1.0-1), installs it into clean containers and runs scenarios under Xvfb:
-closing the window and signals, the “adopted” dsh, updating dsh via npm and
-the launcher itself (the real latest GitHub release via pkexec). Needs
-Docker, a downloaded Electron and network access; takes ~15 minutes. Only
-some scenarios: `test/docker/run.sh close sigterm`, only one system:
-`OSES=26.04`. Logs go to `test/docker/.work/results/`.
+The Docker scenarios are written with **pytest** (`test/docker/`):
+
+- `tests/` — the tests by topic (shutdown, updates, menu windows, context
+  menu and find, window size and proxy); a scenario = a test;
+- `helpers/` — window objects (`windows.py`: main window, “About”, update
+  check, log, find bar, update prompt), launching the launcher, processes,
+  the CDP driver;
+- `fakes/` — a fake dsh and an HTTP proxy;
+- `conftest.py` — fixtures (`start`, `gui`, `prompt`, `drv`) and scenario
+  selection: `pytest --scenario <name>`, `--list-scenarios`.
+
+`run.sh` builds a `.deb` from the current code (as version 1.1.0-1),
+installs it into clean containers and runs one scenario per container under
+Xvfb; the window is driven over the Chromium debugging protocol (CDP). Needs
+Docker, a downloaded Electron and network access. Only some scenarios:
+`test/docker/run.sh close find`, only one system: `OSES=26.04`. Logs and
+JUnit reports go to `test/docker/.work/results/`.
 
 In CI `npm test` runs before every package build (a failing test blocks the
 release), and the Docker scenarios are a separate `docker-tests` workflow,
-run manually: Actions → docker-tests → Run workflow.
+run manually: Actions → docker-tests → Run workflow. Each system is a
+separate job (in parallel, ~7 minutes), image layers are cached; the result
+table is in the run's Summary tab. In tests the launcher's GitHub API
+requests carry the run's temporary token (`DSH_LAUNCHER_GITHUB_TOKEN` — for
+development only; the launcher removes it from its environment and never
+prints it) so as not to hit the 60 requests/hour limit.
 
 ## About `--no-sandbox`
 

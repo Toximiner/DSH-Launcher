@@ -20,6 +20,10 @@ NOUPD = {'DSH_LAUNCHER_NO_UPDATE_CHECK': '1'}                       # без п�
 NO_PROMPTS = {'DSH_LAUNCHER_FAKE_LAUNCHER_LATEST': '1.0.0',         # проверка идёт, но «последние»
               'DSH_LAUNCHER_FAKE_DSH_LATEST': '0.0.1'}              # версии старые — без вопросов
 
+# Токен CI для запросов лаунчера к GitHub API: убираем из окружения pytest при
+# импорте — дочерние процессы теста его не наследуют; лаунчеру передаётся явно.
+GITHUB_TOKEN = os.environ.pop('DSH_LAUNCHER_GITHUB_TOKEN', '')
+
 # Пакет лаунчера в образе собран версией 1.1.0-1 — «старее» любого релиза.
 INSTALLED = '1.1.0-1'
 # Последний релиз лаунчера на GitHub (передаёт run.sh): тег vX.Y.Z → пакет X.Y.Z-1.
