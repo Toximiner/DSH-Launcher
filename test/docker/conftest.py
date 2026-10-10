@@ -17,7 +17,7 @@ import pytest
 from helpers.cdp import Driver
 from helpers.env import FAKEDSH_LOG
 from helpers.launcher import Launcher, launcher_log, launcher_pids
-from helpers.procs import as_tester, pgrep, sh, wait_for
+from helpers.procs import as_tester, fakedsh_events, pgrep, sh, wait_for
 from helpers.windows import Gui, UpdatePrompt
 
 
@@ -112,3 +112,5 @@ def pytest_runtest_makereport(item, call):
     """В отчёт об ошибке — хвост лога лаунчера."""
     if call.when == 'call' and call.excinfo is not None:
         item.add_report_section('call', 'хвост лога лаунчера', '\n'.join(launcher_log().splitlines()[-25:]))
+        item.add_report_section('call', 'журнал фейкового dsh', fakedsh_events() or '(пусто)')
+        item.add_report_section('call', 'процессы', sh('ps -eo pid,ppid,user,stat,etime,args --width 220')[1])

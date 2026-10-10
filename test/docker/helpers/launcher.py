@@ -92,3 +92,6 @@ class Launcher:
 
     def context_menus_shown(self):
         return launcher_log().count('контекстное меню:')
+
+    def context_menus_closed(self):
+        return launcher_log().count('контекстное меню закрыто')

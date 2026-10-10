@@ -18,10 +18,15 @@ def test_context_menu(start, gui):
     gui.set_body(FIXTURE)
 
     def menu_at(x, y, prepare):
-        """prepare() — выделение и т. п. прямо перед кликом (предыдущее нативное
-        меню ещё может быть открыто и сбить подготовленное раньше); prepare
-        возвращается, когда выделение действительно стоит."""
+        """Показанное по правому клику меню. Нативное меню от прошлого клика в
+        контейнере само не закрывается и мешает выделению — сначала закрываем его
+        и ждём события закрытия; prepare() (выделение) возвращается, когда
+        выделение действительно стоит."""
         shown = launcher.context_menus_shown()
+        if shown > launcher.context_menus_closed():
+            closed = launcher.context_menus_closed()
+            gui.close_context_menu()
+            assert wait_for(lambda: launcher.context_menus_closed() > closed, 5, 0.1), 'прошлое меню закрылось'
         prepare()
         gui.right_click(x, y)
         wait_for(lambda: launcher.context_menus_shown() > shown, 5, 0.25)

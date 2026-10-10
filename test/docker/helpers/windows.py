@@ -82,6 +82,10 @@ class Gui:
     def right_click(self, x, y):
         self.drv.right_click(x, y, page=GUI_URL)
 
+    def close_context_menu(self):
+        """Закрыть открытое контекстное меню (в контейнере оно само не закроется)."""
+        self.go('dshlauncher://menu/close-context/')
+
     def press(self, key):
         """Нажатие клавиши в главном окне (например, «Ctrl+Equal»)."""
         self.drv.key(key, page=GUI_URL)

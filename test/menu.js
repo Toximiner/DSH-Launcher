@@ -59,11 +59,11 @@ function fakeEnv({ destroyed = false } = {}) {
   const win = { webContents: wc, isDestroyed: () => destroyed };
   const env = { calls, win, template: null, popupOpts: null };
   const Menu = {
-    buildFromTemplate: (t) => { env.template = t; return { popup: (o) => { env.popupOpts = o; calls.push('popup'); } }; },
+    buildFromTemplate: (t) => { env.template = t; return { once: () => {}, popup: (o) => { env.popupOpts = o; calls.push('popup'); } }; },
   };
   const clipboard = { writeText: (t) => calls.push('clipboard:' + t) };
   env.logs = [];
-  env.show = extract('showContextMenu', { win, Menu, clipboard, contextMenuItems: ctx, console: { log: (m) => env.logs.push(m) } });
+  env.show = extract('showContextMenu', { win, Menu, clipboard, contextMenuItems: ctx, console: { log: (m) => env.logs.push(m) }, openContextMenu: null });
   return env;
 }
 const byLabel = (env, label) => env.template.find((i) => i.label === label);

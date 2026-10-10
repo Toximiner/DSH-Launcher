@@ -2100,6 +2100,11 @@ function contextMenuItems(params) {
 }
 /* ===== end contextMenuItems ===== */
 
+// Открытое контекстное меню — закрыть его по маршруту /menu/close-context/
+// (Docker-сценарии: события CDP идут в страницу мимо нативного меню, и само
+// оно в контейнере не закрывается).
+let openContextMenu = null;
+
 /* ===== showContextMenu (тест test/menu.js, с подставными win/Menu/clipboard) ===== */
 function showContextMenu(params, w = win) {
   if (!w || w.isDestroyed()) return;
@@ -2121,7 +2126,13 @@ function showContextMenu(params, w = win) {
     items.map((i) => (i.type ? '|' : i.label + (i.enabled ? '' : ' (off)'))).join(', '));
   const template = items.map((i) =>
     i.type ? i : { label: i.label, enabled: i.enabled, click: () => run[i.action](i) });
-  Menu.buildFromTemplate(template).popup({ window: w });
+  const menu = Menu.buildFromTemplate(template);
+  openContextMenu = menu;
+  menu.once('menu-will-close', () => {
+    if (openContextMenu === menu) openContextMenu = null;
+    console.log('[launcher] контекстное меню закрыто');
+  });
+  menu.popup({ window: w });
 }
 /* ===== end showContextMenu ===== */
 
@@ -3127,6 +3138,7 @@ async function onReady() {
       if (route.startsWith('/dialog/logs/')) { void openLogsFolder(); return noContentResponse(); }
       if (route.startsWith('/dialog/log-refresh/')) { if (dialogRender) dialogRender(false); return noContentResponse(); }
       if (route.startsWith('/menu/log/')) { showLogDialog(); return noContentResponse(); }
+      if (route.startsWith('/menu/close-context/')) { if (openContextMenu) openContextMenu.closePopup(); return noContentResponse(); }
       if (route.startsWith('/dialog/gpu-enable/')) return onDialogGpuEnable();
       if (route.startsWith('/menu/restart-dsh/')) { void restartDsh({ confirm: false }); return noContentResponse(); }
       if (route.startsWith('/dialog/close/')) return onDialogClose();
