@@ -235,6 +235,33 @@ class SettingsDialog(Dialog):
         self.go('dshlauncher://settings/relaunch/')
 
 
+class UpdateToast:
+    """Плашка «Доступна … X» в углу главного окна (своя страница CDP)."""
+    TITLE = '^update-toast$'
+
+    def __init__(self, drv):
+        self.drv = drv
+
+    def text(self):
+        return ' '.join((self.drv.eval('document.body ? document.body.innerText : ""', page=self.TITLE) or '').split())
+
+    def wait_shown(self, timeout=30):
+        assert wait_for(lambda: self.drv.page(self.TITLE) is not None and 'Details' in self.text(), timeout, 0.25), \
+            'плашка обновления не появилась'
+        return self
+
+    def is_shown(self):
+        return self.drv.page(self.TITLE) is not None
+
+    def details(self, kind):
+        """«Подробнее…» — окно «Обновить … до X…»; плашка закрывается."""
+        self.drv.go(f'dshlauncher://toast/open/?k={kind}', page=self.TITLE)
+        return UpdateNowDialog(self.drv, kind).wait_loaded()
+
+    def close(self):
+        self.drv.go('dshlauncher://toast/close/', page=self.TITLE)
+
+
 class UpdateNowDialog(Dialog):
     """Окно «Обновить … до X…»: что нового, предупреждение, «Обновить сейчас» / «Позже»."""
 

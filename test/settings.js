@@ -74,7 +74,8 @@ assert.ok(settingValue('cwd', 'relative/dir').error, 'относительная
 assert.deepStrictEqual(settingValue('checkUpdates', 'false'), { value: false }, 'галочка');
 assert.deepStrictEqual(settingValue('spellcheck', 'true'), { value: true }, 'галочка');
 assert.deepStrictEqual(settingValue('pollUpdates', 'false'), { value: false }, 'галочка');
-assert.ok(settingValue('market', 'yes').error, 'галочка — только true/false');
+assert.ok(settingValue('spellcheck', 'yes').error, 'галочка — только true/false');
+assert.ok(settingValue('market', 'true').error, 'галочки маркета в настройках нет');
 assert.deepStrictEqual(settingValue('lang', 'auto'), { value: 'auto' }, 'язык');
 assert.ok(settingValue('lang', 'de').error, 'неизвестный язык');
 assert.deepStrictEqual(settingValue('gpu', 'off'), { value: 'off' }, 'GPU');

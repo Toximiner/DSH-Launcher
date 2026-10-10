@@ -18,7 +18,7 @@
  *    SIGKILL лаунчеру перехватить нельзя — тот случай остаётся незакрытым.
  */
 
-const { app, BrowserWindow, WebContentsView, Menu, Notification, protocol, net: electronNet, session, screen, dialog, shell, clipboard } = require('electron');
+const { app, BrowserWindow, WebContentsView, Menu, protocol, net: electronNet, session, screen, dialog, shell, clipboard } = require('electron');
 const { spawn, execFile, execFileSync } = require('child_process');
 const { promisify } = require('util');
 const nodeNet = require('net');
@@ -2456,6 +2456,7 @@ function openFind() {
   }
   placeFind();
   findView.setVisible(true);
+  placeToast();
   findView.webContents.focus();
   findView.webContents.executeJavaScript("document.getElementById('q') && document.getElementById('q').select()").catch(() => {});
 }
@@ -2476,6 +2477,7 @@ function closeFind() {
   if (!findView || !win || win.isDestroyed()) return;
   win.webContents.stopFindInPage('keepSelection');
   findView.setVisible(false);
+  placeToast();
   win.webContents.focus();
 }
 
@@ -2747,7 +2749,6 @@ function settingValue(key, raw) {
     case 'checkUpdates':
     case 'pollUpdates':
     case 'spellcheck':
-    case 'market':
       if (v !== 'true' && v !== 'false') return { error: 'bad value' };
       return { value: v === 'true' };
     case 'lang':
@@ -2809,10 +2810,7 @@ function onSettingsSet(url) {
     try {
       if (key === 'lang') setLanguage(r.value);
       else if (key === 'spellcheck') setSpellcheck(r.value);
-      else if (key === 'market') {
-        fs.mkdirSync(path.dirname(marketPrefFile()), { recursive: true });
-        fs.writeFileSync(marketPrefFile(), JSON.stringify({ dontAsk: !r.value }));
-      } else if (key === 'gpu' || key === 'ozone') saveSettings({ [key]: r.value === 'auto' ? null : r.value });
+      else if (key === 'gpu' || key === 'ozone') saveSettings({ [key]: r.value === 'auto' ? null : r.value });
       else if (key === 'port') saveSettings({ port: r.value === DEFAULT_PORT ? null : r.value });
       else if (key === 'profile') saveSettings({ profile: r.value === DEFAULT_PROFILE ? null : r.value });
       else if (key === 'checkUpdates') saveSettings({ checkUpdates: r.value ? null : false });
@@ -2910,7 +2908,6 @@ function showSettingsDialog() {
           ${envNote('pollUpdates', 'DSH_LAUNCHER_NO_UPDATE_CHECK')}</div>
         <div class="row"><span>${dismissed.length ? tr('Не спрашивать: ', 'Don’t ask: ') + esc(dismissed.join(', ')) : tr('Отложенных обновлений нет', 'No postponed updates')}</span>
           ${dismissed.length ? `<button onclick="go('reset-updates')">${tr('Снова спрашивать', 'Ask again')}</button>` : ''}</div>
-        <div class="row">${check('market', !marketPromptDisabled(), tr('Предлагать установить плагин маркета', 'Offer to install the marketplace plugin'))}</div>
 
         <h4>${tr('Запуск dsh', 'Starting dsh')}</h4>
         <div class="row"><span>${tr('Программа dsh', 'dsh program')}</span> <code class="val">${esc(dshShown)}</code>
@@ -3183,17 +3180,17 @@ function announceUpdates(found, dismissed, notified) {
 
 // Пока лаунчер работает — раз в 12 часов та же проверка, что при запуске.
 // Ставить обновление посреди работы нельзя без спроса (перезапуск оборвёт
-// ответ агента): только уведомление и пункт «Обновить … до X…» в «Справке»;
+// ответ агента): только плашка в окне и пункт «Обновить … до X…» в «Справке»;
 // его окно — «Что нового» и «Обновить сейчас» (перезапуск с UPDATE_NOW).
 const UPDATE_POLL_MS = updatePollMs(process.env);
 let availableUpdates = {};      // kind → { version, installed, releases? }
 const notifiedUpdates = {};     // kind → версия, о которой уже уведомили
-let lastNotification = null;    // ссылка, чтобы уведомление (и его click) не собрал GC
 
 const updateName = (kind) => (kind === 'launcher' ? 'DSH Launcher' : 'dsh');
 
-async function findUpdates() {
-  const [l, d] = await Promise.all([
+// checks — ответы проверки при запуске (updateChecks), иначе — запросить заново.
+async function findUpdates(checks) {
+  const [l, d] = await Promise.all(checks ? [checks.launcher, checks.dsh] : [
     timedCheck(fetchLauncherLatest(), UPDATE_CHECK_TIMEOUT),
     timedCheck(fetchDshLatest(), UPDATE_CHECK_TIMEOUT),
   ]);
@@ -3212,7 +3209,7 @@ async function findUpdates() {
   return found;
 }
 
-// Найденное → пункты меню; notify — ещё и системные уведомления.
+// Найденное → пункты меню; notify — ещё и плашка в окне.
 function setAvailableUpdates(found, notify) {
   const versions = { launcher: found.launcher && found.launcher.version, dsh: found.dsh && found.dsh.version };
   const a = announceUpdates(versions, updatePrefs(), notifiedUpdates);
@@ -3224,17 +3221,15 @@ function setAvailableUpdates(found, notify) {
     }
     buildAppMenu();
   }
-  for (const kind of a.notify) {
-    notifiedUpdates[kind] = versions[kind];
-    if (notify) showUpdateNotification(kind, versions[kind]);
-  }
+  for (const kind of a.notify) notifiedUpdates[kind] = versions[kind];
+  if (notify && a.notify.length) showUpdateToast(a.notify);
 }
 
 // После вопросов при старте: отложенное («Не сейчас») — пунктом в меню, без
 // уведомления (о нём только что спросили).
 async function refreshAvailableUpdates() {
   if (NO_UPDATE_CHECK) return;
-  try { setAvailableUpdates(await findUpdates(), false); }
+  try { setAvailableUpdates(await findUpdates(updateChecks), false); }
   catch (e) { console.error('[launcher] проверка обновлений:', e.message); }
 }
 
@@ -3263,19 +3258,76 @@ async function pollUpdates() {
   }
 }
 
-function showUpdateNotification(kind, version) {
-  console.log(`[launcher] уведомление: доступна ${updateName(kind)} ${version}`);
-  if (!Notification.isSupported()) return;
-  const n = new Notification({
-    title: tr(`Доступна ${updateName(kind)} ${version}`, `${updateName(kind)} ${version} is available`),
-    body: tr('Нажмите, чтобы посмотреть, что нового, и обновить.', 'Click to see what’s new and update.'),
-  });
-  n.on('click', () => {
-    if (win && !win.isDestroyed()) { win.show(); win.focus(); }
-    showUpdateNowDialog(kind);
-  });
-  n.show();
-  lastNotification = n;
+// Плашка «Доступна … X» в правом верхнем углу окна, поверх страницы dsh (как
+// панель поиска — WebContentsView; под ней, если поиск открыт). Висит, пока
+// не закроют: пользователь мог отойти. «Подробнее…» — окно «Обновить … до X…».
+const TOAST_W = 400;
+const TOAST_H = 58;
+let toastView = null;
+let toastResizeHooked = false;
+
+function toastUrl(kinds) {
+  const u = kinds.map((k) => availableUpdates[k]).filter(Boolean);
+  const title = kinds.length === 1
+    ? tr(`Доступна ${updateName(kinds[0])} ${u[0].version}`, `${updateName(kinds[0])} ${u[0].version} is available`)
+    : tr('Доступны обновления', 'Updates are available');
+  const sub = kinds.length === 1
+    ? tr(`установлена ${u[0].installed}`, `installed: ${u[0].installed}`)
+    : kinds.map((k) => `${updateName(k)} ${availableUpdates[k].version}`).join(', ');
+  const css = `html,body{margin:0;height:100%;background:#151a23;color:#d7dce3;overflow:hidden;
+    font:13px system-ui,'Segoe UI',Roboto,Ubuntu,sans-serif}
+    body{display:flex;align-items:center;gap:8px;padding:0 8px 0 14px;box-sizing:border-box;
+    border:1px solid #3b82f6;border-radius:10px}
+    .t{flex:1;min-width:0}
+    .t b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .t span{color:#9aa4b2;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+    button{background:#1f2836;border:0;border-radius:7px;color:#d7dce3;height:30px;cursor:pointer;font-size:13px;padding:0 12px}
+    button:hover{background:#2a3550}
+    button.x{width:28px;padding:0;font-size:14px}`;
+  const html = `<!doctype html><html lang="${UI_LANG}"><head><meta charset="utf-8"><title>update-toast</title><style>${css}</style></head><body>
+    <div class="t"><b>${esc(title)}</b><span>${esc(sub)}</span></div>
+    <button onclick="location.href='dshlauncher://toast/open/?k=${kinds[0]}'">${esc(tr('Подробнее…', 'Details…'))}</button>
+    <button class="x" title="${esc(tr('Закрыть', 'Close'))}" onclick="location.href='dshlauncher://toast/close/'">&#10005;</button>
+    </body></html>`;
+  return 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+}
+
+function placeToast() {
+  if (!toastView || !win || win.isDestroyed()) return;
+  const [cw] = win.getContentSize();
+  const y = 10 + (findView && findView.getVisible() ? FIND_H + 8 : 0);
+  toastView.setBounds({ x: Math.max(0, cw - TOAST_W - 18), y, width: Math.min(TOAST_W, cw), height: TOAST_H });
+}
+
+function showUpdateToast(kinds) {
+  console.log(`[launcher] уведомление: доступна ${kinds.map((k) => `${updateName(k)} ${availableUpdates[k].version}`).join(', ')}`);
+  if (!win || win.isDestroyed() || stopping) return;
+  closeUpdateToast();
+  toastView = new WebContentsView({ webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: false } });
+  toastView.setBackgroundColor('#00000000');
+  toastView.webContents.loadURL(toastUrl(kinds)).catch(() => {});
+  win.contentView.addChildView(toastView);
+  if (!toastResizeHooked) { win.on('resize', placeToast); toastResizeHooked = true; }
+  placeToast();
+}
+
+function closeUpdateToast() {
+  if (!toastView) return;
+  const v = toastView;
+  toastView = null;
+  if (win && !win.isDestroyed()) win.contentView.removeChildView(v);
+  try { v.webContents.close(); } catch { /* уже закрыта */ }
+}
+
+function onToastRequest(route, url) {
+  if (route.startsWith('/toast/open/')) {
+    closeUpdateToast();
+    showUpdateNowDialog(new URL(url).searchParams.get('k'));
+  } else if (route.startsWith('/toast/close/')) {
+    console.log('[launcher] уведомление закрыто');
+    closeUpdateToast();
+  }
+  return noContentResponse();
 }
 
 // Окно «Обновить … до X…»: что нового и предупреждение о перезапуске.
@@ -3665,6 +3717,7 @@ async function onReady() {
       if (route.startsWith('/menu/about/')) { void showAboutDialog(); return noContentResponse(); }
       if (route.startsWith('/menu/check/')) { void showUpdateCheckDialog(); return noContentResponse(); }
       if (route.startsWith('/menu/update/')) { showUpdateNowDialog(new URL(request.url).searchParams.get('k')); return noContentResponse(); }
+      if (route.startsWith('/toast/')) return onToastRequest(route, request.url);
       if (route.startsWith('/update-now/')) { updateNow(new URL(request.url).searchParams.get('k')); return noContentResponse(); }
       if (route.startsWith('/find/')) return onFindRequest(route, request.url);
       if (route.startsWith('/dialog/logs/')) { void openLogsFolder(); return noContentResponse(); }

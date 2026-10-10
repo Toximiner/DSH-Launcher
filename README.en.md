@@ -62,7 +62,7 @@ A small Electron app: a window that opens **DeepSeek Harness**
     `DSH_LAUNCHER_NO_UPDATE_CHECK=1`. Requests go through the system proxy
     (GNOME/KDE settings or `HTTPS_PROXY`) when one is set.
   - While the launcher runs, the check repeats every 12 hours. A new version
-    found mid-work interrupts nothing: a desktop notification (once per
+    found mid-work interrupts nothing: a notice in the window corner (once per
     version) and a “Help → Update … to X…” item. Its window shows “What’s
     new” and “Update now”: the launcher restarts (dsh stops) and installs
     the update right away, without asking again. The same buttons are in

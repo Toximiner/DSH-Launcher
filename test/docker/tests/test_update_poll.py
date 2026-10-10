@@ -6,13 +6,14 @@ import json
 import os
 
 from helpers.env import CONF, FAKE, NO_PROMPTS
-from helpers.procs import fakedsh_starts, wait_exit
+from helpers.procs import fakedsh_starts, wait_exit, wait_for
+from helpers.windows import UpdateToast
 
 # «последняя» версия dsh на npm — из файла: тест «выпускает» новую на ходу
 DSH_LATEST = '/tmp/dsh-latest'
 
 
-def test_update_poll(start, gui):
+def test_update_poll(start, gui, drv):
     with open(DSH_LATEST, 'w') as f:
         f.write('0.0.1')          # при запуске новой версии нет — вопроса нет
     os.chmod(DSH_LATEST, 0o644)
@@ -25,12 +26,17 @@ def test_update_poll(start, gui):
     with open(DSH_LATEST, 'w') as f:
         f.write('99.0.0')         # вышла новая версия dsh
 
-    assert launcher.wait_log('уведомление: доступна dsh 99.0.0', 30), 'системное уведомление'
+    assert launcher.wait_log('уведомление: доступна dsh 99.0.0', 30), 'уведомление'
     assert launcher.wait_log('доступно обновление dsh 99.0.0 — пункт в меню «Справка»', 5), 'пункт меню'
     gui.mark()
 
+    # плашка в окне: «Подробнее…» — окно обновления, плашка закрывается
+    toast = UpdateToast(drv).wait_shown()
+    assert 'dsh 99.0.0 is available' in toast.text() and 'installed: 0.2.0-rc.2' in toast.text(), toast.text()
+    upd = toast.details('dsh')
+    assert wait_for(lambda: not toast.is_shown(), 10), 'плашка закрылась'
+
     # «Позже» — ничего не происходит: dsh работает, GUI не перезагружался
-    upd = gui.open_update_now('dsh')
     upd.wait_text(r'Version 99\.0\.0 is available \(installed: 0\.2\.0-rc\.2\)', 5)
     upd.wait_text('The launcher will restart and dsh will be stopped', 5)
     upd.later()
