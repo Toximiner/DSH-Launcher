@@ -5,7 +5,7 @@ import json
 import os
 
 from helpers.env import CONF, FAKE, NOUPD
-from helpers.procs import fakedsh_events, wait_for, wait_exit
+from helpers.procs import fakedsh_events, wait_exit, wait_for, wait_port
 
 SETTINGS = f'{CONF}/settings.json'
 
@@ -41,9 +41,12 @@ def test_settings_apply(start, gui):
     # журнал фейкового dsh: «start pgid=… cwd=<папка> args=<аргументы>»
     assert wait_for(lambda: 'cwd=/tmp args=--profile second --no-open' in fakedsh_events(), 60), \
         f'новый dsh — в папке /tmp и с профилем second:\n{fakedsh_events()}'
-    gui.wait()
+    # GUI нового экземпляра через CDP не проверить: его запускает старый, и порт
+    # отладки 9222 остаётся занят унаследованным сокетом (только в тестах —
+    # у пользователей порта отладки нет). Проверяем по результату: dsh отвечает.
+    assert wait_port(30), 'новый экземпляр поднял dsh'
     os.kill(new, 15)
-    wait_exit(new, 15)
+    assert wait_exit(new, 15) is not None, 'новый экземпляр штатно завершился'
 
 
 def test_settings_env_locked(start, gui):
