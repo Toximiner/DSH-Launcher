@@ -26,7 +26,7 @@ SCENARIOS=${*:-}
 
 mkdir -p "$WORK/src" "$WORK/ctx" "$WORK/results"
 
-echo ">> сборка .deb из текущего кода (версия 1.1.0-1)"
+echo ">> сборка .deb из текущего кода (номер версии 1.1.0-1 — нарочно ниже любого релиза, для сценариев обновления)"
 rm -rf "$WORK/src"/* && mkdir -p "$WORK/src"
 cp -a "$ROOT/main.js" "$ROOT/package.json" "$ROOT/deb" "$ROOT/build-deb.sh" "$ROOT/icon.png" "$WORK/src/"
 ln -s "$ROOT/node_modules" "$WORK/src/node_modules"
