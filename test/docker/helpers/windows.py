@@ -5,6 +5,7 @@
 умеет); маршрут отвечает 204 — страница, с которой перешли, остаётся на месте.
 """
 import json
+import re
 
 from .env import GUI_URL
 from .procs import wait_for
@@ -56,20 +57,22 @@ class Gui:
 
     def select_text_of(self, element_id):
         """Выделить текст элемента; вернуть, когда выделение действительно стоит."""
+        # Закрывающееся нативное меню от прошлого клика может сбросить
+        # выделение — ставим заново, пока не удержится.
         js_id = json.dumps(element_id)
-        self.eval(f"""(() => {{ const r = document.createRange();
-            r.selectNodeContents(document.getElementById({js_id}));
-            getSelection().removeAllRanges(); getSelection().addRange(r); return 1; }})()""")
-        assert wait_for(lambda: self.eval(f"getSelection().toString() === document.getElementById({js_id}).textContent"),
-                        5, 0.1), 'выделение не встало'
+        select = f"""(() => {{ const s = getSelection();
+            if (s.rangeCount && !s.isCollapsed && s.toString().trim() === document.getElementById({js_id}).textContent.trim()) return true;
+            const r = document.createRange(); r.selectNodeContents(document.getElementById({js_id}));
+            s.removeAllRanges(); s.addRange(r); return false; }})()"""
+        assert wait_for(lambda: self.eval(select), 5, 0.2), 'выделение не встало'
 
     def select_input(self, element_id):
         """Фокус в поле и выделить всё; вернуть, когда выделение стоит."""
         js_id = json.dumps(element_id)
-        self.eval(f"(() => {{ const i = document.getElementById({js_id}); i.focus(); i.select(); return 1; }})()")
-        assert wait_for(lambda: self.eval(f"(() => {{ const i = document.getElementById({js_id}); "
-                                          f"return document.activeElement === i && i.selectionEnd - i.selectionStart === i.value.length; }})()"),
-                        5, 0.1), 'выделение в поле не встало'
+        select = f"""(() => {{ const i = document.getElementById({js_id});
+            if (document.activeElement === i && i.selectionEnd - i.selectionStart === i.value.length) return true;
+            i.focus(); i.select(); return false; }})()"""
+        assert wait_for(lambda: self.eval(select), 5, 0.2), 'выделение в поле не встало'
 
     def clear_selection(self):
         self.eval('getSelection().removeAllRanges(); document.activeElement && document.activeElement.blur(); 1')
@@ -114,10 +117,16 @@ class Dialog:
         self.drv = drv
 
     def text(self):
-        return self.drv.text(page=self.TITLE)
+        """То, что отрисовано (DOM). Адрес страницы при перерисовке меняется
+        раньше, чем загружается новый DOM, — проверять по нему нельзя."""
+        return ' '.join((self.drv.eval('document.body ? document.body.innerText : ""', page=self.TITLE) or '').split())
 
     def wait_text(self, pattern, timeout=30):
-        return self.drv.wait_text(pattern, timeout, page=self.TITLE)
+        rx = re.compile(pattern)
+        last = []
+        ok = wait_for(lambda: last.append(self.text()) or rx.search(last[-1]), timeout, 0.25)
+        assert ok, f'окно {self.TITLE}: не дождались /{pattern}/ за {timeout} с; последнее: {(last or [""])[-1][:600]}'
+        return last[-1]
 
     def is_open(self):
         return self.drv.page(self.TITLE) is not None
