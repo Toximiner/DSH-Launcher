@@ -13,7 +13,7 @@ import subprocess
 import time
 
 from lib import (CONF, DEB_RE, FAKE, FAKEDSH_LOG, GUI, HOME, LATEST, LATEST_PKG, LATEST_RE, NOUPD, T, UPD,
-                 alive, as_tester, fakedsh_starts, launcher_pids, log, port_up, real_dsh_gone, sh, tree_alive,
+                 alive, as_tester, fakedsh_starts, launcher_pids, log, pgrep, port_up, real_dsh_gone, sh, tree_alive,
                  tree_gone, wait_exit, wait_for, wait_log, wait_port)
 
 NO_PROMPTS = {'DSH_LAUNCHER_FAKE_LAUNCHER_LATEST': '1.0.0', 'DSH_LAUNCHER_FAKE_DSH_LATEST': '0.0.1'}
@@ -75,7 +75,7 @@ def _adopt(start, drv, detached):
     gui(drv)
     assert wait_log('перезапустился сам', 30), 'лаунчер усыновил перезапущенный dsh'
     assert wait_port(10), 'перерождённый dsh слушает порт'
-    assert sh("pgrep -f '^sleep 7777'")[0] == 0, 'в старой группе остался sleep 7777'
+    assert pgrep('^sleep 7777'), 'в старой группе остался sleep 7777'
     drv.eval('window.close()')
     assert wait_exit(l.pid, 15) is not None, 'лаунчер завершился после закрытия окна'
     assert tree_gone(), 'усыновлённый dsh и потомки старой группы остановлены'
@@ -269,6 +269,9 @@ def test_find(start, drv):
     drv.eval("document.body.innerHTML = '<p>needle one</p><p>needle two</p><p>needle three</p>'; 1", page=GUI)
     drv.key('Ctrl+KeyF', page=GUI)
     assert wait_for(lambda: drv.page(FIND) is not None, 10), 'Ctrl+F — панель поиска открылась'
+    # страница панели появляется в CDP раньше, чем догружается: ждём поле ввода
+    assert wait_for(lambda: drv.eval("!!document.getElementById('q') && typeof setCount === 'function'", page=FIND), 10), \
+        'панель поиска догрузилась'
     count = lambda: drv.eval("document.getElementById('n').textContent", page=FIND) or ''
     typed = lambda text: drv.eval("(() => { const q = document.getElementById('q'); q.value = %s; "
                                   "q.dispatchEvent(new Event('input')); return 1; })()" % json.dumps(text), page=FIND)

@@ -50,8 +50,10 @@ def wait_for(cond, timeout, step=0.5):
 
 
 def pgrep(pattern, user=None):
-    u = f'-u {user} ' if user else ''
-    return sh(f'pgrep {u}-f {sh_quote(pattern)}')[0] == 0
+    """Есть ли процесс с такой командной строкой. Без оболочки: у `sh -c "pgrep -f X"`
+    в командной строке тоже есть X — pgrep нашёл бы саму оболочку."""
+    args = ['pgrep'] + (['-u', user] if user else []) + ['-f', pattern]
+    return subprocess.run(args, capture_output=True).returncode == 0
 
 
 def tree_alive():
@@ -101,7 +103,8 @@ def fakedsh_starts():
 def launcher_pids():
     """Главные процессы лаунчера (без --type=)."""
     pids = []
-    _, out = sh("pgrep -u tester -f 'electron/electron /opt/dsh-launcher'")
+    out = subprocess.run(['pgrep', '-u', 'tester', '-f', 'electron/electron /opt/dsh-launcher'],
+                         capture_output=True, text=True).stdout
     for p in out.split():
         try:
             with open(f'/proc/{p}/cmdline', 'rb') as f:
