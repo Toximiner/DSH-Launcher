@@ -1,4 +1,4 @@
-"""Размер окна между запусками, «Перезапустить dsh», системный прокси."""
+"""Размер окна между запусками, «Перезапустить dsh», системный прокси, кэш релизов."""
 import os
 import re
 import subprocess
@@ -65,3 +65,27 @@ def test_proxy(start, gui):
     assert 'CONNECT registry.npmjs.org:443' in proxied, 'запрос к npm шёл через прокси'
     assert 'CONNECT api.github.com:443' in proxied, 'запрос к GitHub шёл через прокси'
     launcher.term()
+
+
+def test_releases_cache(start, gui):
+    """Список релизов GitHub запоминается: второй запуск в течение часа в
+    GitHub не ходит (по журналу прокси), npm — спрашивается как обычно."""
+    if os.path.exists(PROXY_LOG):
+        os.remove(PROXY_LOG)
+    subprocess.Popen(f'runuser -u tester -- python3 {PROXY} 3129 >/dev/null 2>&1', shell=True)
+    assert wait_for(lambda: os.path.exists(PROXY_LOG) and 'listening' in open(PROXY_LOG).read(), 5, 0.25), 'прокси запущен'
+    url = 'http://127.0.0.1:3129'
+    via_proxy = {'HTTPS_PROXY': url, 'https_proxy': url, 'HTTP_PROXY': url, 'http_proxy': url}
+    github = lambda: open(PROXY_LOG).read().count('CONNECT api.github.com:443')
+    npm = lambda: open(PROXY_LOG).read().count('CONNECT registry.npmjs.org:443')
+
+    for run in (1, 2):
+        launcher = start(FAKE, NO_PROMPTS, via_proxy)
+        gui.wait()
+        assert launcher.wait_log('последний dsh-launcher', 30), f'запуск {run}: проверка обновлений лаунчера прошла'
+        assert launcher.wait_log('последний @deepseek-ai/dsh', 30), f'запуск {run}: проверка dsh прошла'
+        launcher.term()
+
+    assert github() == 1, f'GitHub спрошен один раз за два запуска ({github()})'
+    assert npm() == 2, f'npm — при каждом запуске ({npm()})'
+    assert os.path.exists(f'{CONF}/releases-cache.json'), 'кэш релизов записан'

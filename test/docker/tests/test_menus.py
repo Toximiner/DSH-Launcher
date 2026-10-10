@@ -4,10 +4,13 @@
 перезагружается. Проверка обновлений при старте включена, «последние» версии
 подменены на старые — без вопросов об обновлении.
 """
+import json
+import os
+
 import pytest
 
-from helpers.env import FAKE, INSTALLED, NO_PROMPTS, NOUPD
-from helpers.procs import wait_for
+from helpers.env import CONF, FAKE, INSTALLED, LATEST, LATEST_RE, NO_PROMPTS, NOUPD, STATE
+from helpers.procs import as_tester, wait_for, wait_port
 
 
 @pytest.fixture
@@ -64,4 +67,56 @@ def test_dsh_log(start, gui):
     assert 'token=abc' not in text, 'настоящего токена в окне нет'
     log.close()
     assert launcher.alive, 'лаунчер жив'
+    launcher.term()
+
+
+def test_update_available(start, gui, prompt):
+    """«Проверить обновления», когда новая версия есть: статус «доступна» и
+    «Что нового» в окне. (Вопрос при старте — «Не сейчас».)"""
+    launcher = start(FAKE)
+    prompt.wait('Update DSH Launcher')
+    prompt.later()
+    gui.wait()
+
+    check = gui.open_update_check()
+
+    assert f'version {LATEST} is available' in check.status('DSH Launcher'), check.rows()
+    check.wait_text(rf'What.s new: {LATEST_RE} ', 5)
+    check.close()
+    launcher.term()
+
+
+def test_dialog_keys(start, gui):
+    """Esc закрывает окно-диалог; Ctrl+= / Ctrl+0 — масштаб (сохраняется)."""
+    zoom = f'{CONF}/zoom-level.json'
+    launcher = start(FAKE, NOUPD)
+    gui.wait()
+
+    about = gui.open_about()
+    about.press('Escape')
+    assert wait_for(lambda: not about.is_open(), 5), 'Esc закрыл «О программе»'
+
+    gui.press('Ctrl+Equal')
+    assert wait_for(lambda: os.path.exists(zoom) and json.load(open(zoom))['zoomLevel'] == 0.5, 5), 'Ctrl+= — масштаб +0.5 сохранён'
+    gui.press('Ctrl+Digit0')
+    assert wait_for(lambda: json.load(open(zoom))['zoomLevel'] == 0, 5), 'Ctrl+0 — масштаб сброшен'
+    assert launcher.alive, 'лаунчер жив'
+    launcher.term()
+
+
+def test_gpu_reenable(start, gui):
+    """GPU отключён после сбоев (маркер) — в «О программе» кнопка «Включить
+    GPU снова» удаляет маркер; GPU — со следующего запуска."""
+    marker = f'{STATE}/gpu-disabled.marker'
+    as_tester(f'mkdir -p {STATE} && echo "GPU process crashed x2 (test)" > {marker}')
+    launcher = start(FAKE, NOUPD)
+    gui.wait()
+
+    about = gui.open_about()
+    assert about.value('GPU acceleration').startswith('off after GPU process crashes'), about.rows()
+    about.reenable_gpu()
+
+    assert wait_for(lambda: not os.path.exists(marker), 5), 'маркер сбоев удалён'
+    about.wait_text('off until the launcher restarts', 5)
+    about.close()
     launcher.term()

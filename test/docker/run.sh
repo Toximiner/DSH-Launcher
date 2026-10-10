@@ -64,6 +64,19 @@ annotate() { # заголовок, текст (многострочный)
 # загрузки с одного IP (429 Too Many Requests), а IP раннеров общие — поэтому
 # 3 попытки с паузой, затем то же с mirror.gcr.io (официальное зеркало
 # Docker Hub от Google).
+# Сборка образа. На CI (DOCKER_GHA_CACHE=1) — buildx с кэшем слоёв в GitHub
+# Actions: пересобираются только изменившиеся слои (пакет лаунчера и тесты —
+# в конце Dockerfile), apt / Node / старый dsh берутся из кэша.
+docker_build() { # <os> <аргументы docker build>
+  local os=$1; shift
+  if [ -n "${DOCKER_GHA_CACHE:-}" ]; then
+    docker buildx build -q --load --cache-from "type=gha,scope=dshl-$os" \
+      --cache-to "type=gha,mode=max,scope=dshl-$os" "$@"
+  else
+    docker build -q "$@"
+  fi
+}
+
 # OS — версия Ubuntu («26.04») или Debian («debian-13» → debian:13).
 base_of() { case "$1" in debian-*) echo "debian:${1#debian-}" ;; *) echo "ubuntu:$1" ;; esac; }
 build_image() {
@@ -71,7 +84,7 @@ build_image() {
   img=$(base_of "$os")
   for base in "$img" "mirror.gcr.io/library/$img"; do
     for try in 1 2 3; do
-      if out=$(docker build -q --build-arg BASE="$base" --build-arg NODE_VER="$NODE_VER" -t "dshl-test:$os" "$WORK/ctx" 2>&1); then
+      if out=$(docker_build "$os" --build-arg BASE="$base" --build-arg NODE_VER="$NODE_VER" -t "dshl-test:$os" "$WORK/ctx" 2>&1); then
         [ "$base" = "$img" ] || echo "   база с зеркала: $base"
         return 0
       fi
@@ -109,9 +122,10 @@ one() {
   # pytest (сам он как PID 1 сигналы без обработчика не получает).
   # Если и так не завершился — kill клиента и docker rm -f.
   timeout -k 30 600 docker run --rm --init --name "$name" --shm-size=1g \
-    --security-opt seccomp=unconfined $extra \
+    --security-opt seccomp=unconfined $extra -v "$WORK/results:/results" \
     dshl-test:$os python3 -m pytest -p no:cacheprovider -q -rf --tb=short --color=no \
-    --rootdir /opt/t /opt/t/tests --scenario "$sc" >"$WORK/results/$os-$sc.log" 2>&1
+    --rootdir /opt/t /opt/t/tests --scenario "$sc" --junitxml "/results/$os-$sc.xml" \
+    >"$WORK/results/$os-$sc.log" 2>&1
   local rc=$?
   docker rm -f "$name" >/dev/null 2>&1 || true
   [ $rc -eq 124 ] || [ $rc -eq 137 ] && echo "  [FAIL] сценарий не уложился в 10 минут" >>"$WORK/results/$os-$sc.log"
@@ -131,4 +145,8 @@ for f in $(grep '^FAIL' "$WORK/results/summary.txt" | awk '{print $2"-"$3}'); do
   echo "---- $f"; echo "$fails"
   annotate "Docker: $f" "$fails"
 done
+# Таблица результатов — в сводку прогона CI (Summary)
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+  python3 "$HERE/summary.py" "$WORK/results" >>"$GITHUB_STEP_SUMMARY" || true
+fi
 [ "$FAILED" -eq 0 ]

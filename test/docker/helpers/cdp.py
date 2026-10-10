@@ -135,7 +135,8 @@ class Driver:
         elif re.fullmatch(r'F\d{1,2}', code):
             vk = 111 + int(code[1:])
         else:
-            vk = {'Escape': 27, 'Enter': 13}.get(code, 0)
+            key, vk = {'Escape': ('Escape', 27), 'Enter': ('Enter', 13),
+                       'Equal': ('=', 187), 'Minus': ('-', 189)}.get(code, (code, 0))
         ev = lambda t: ('Input.dispatchKeyEvent', {'type': t, 'modifiers': modifiers, 'code': code, 'key': key,
                                                    'windowsVirtualKeyCode': vk, 'nativeVirtualKeyCode': vk})
         r = self._call([ev('rawKeyDown'), ev('keyUp')], page)

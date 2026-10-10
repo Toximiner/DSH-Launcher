@@ -7,6 +7,7 @@ HOME = '/home/tester'
 CONF = f'{HOME}/.config/dsh-launcher'          # userData лаунчера
 UPD = f'{CONF}/updates'                        # скачанные .deb обновлений
 LAUNCHER_OUT = '/tmp/launcher.out'             # stdout/stderr лаунчера
+STATE = f'{HOME}/.local/state/dsh-launcher'    # логи лаунчера и dsh (DSH_LOG_DIR из run.sh пакета)
 FAKEDSH = f'{T}/fakes/fakedsh.py'
 FAKEDSH_LOG = '/tmp/fakedsh.log'
 PROXY = f'{T}/fakes/proxy.py'

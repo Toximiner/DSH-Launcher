@@ -68,6 +68,10 @@ class Gui:
     def right_click(self, x, y):
         self.drv.right_click(x, y, page=GUI_URL)
 
+    def press(self, key):
+        """Нажатие клавиши в главном окне (например, «Ctrl+Equal»)."""
+        self.drv.key(key, page=GUI_URL)
+
     # ---- окна меню ----
 
     def open_about(self):
@@ -120,6 +124,10 @@ class Dialog:
         self.go('dshlauncher://dialog/close/')
         assert wait_for(lambda: not self.is_open(), 10), f'окно {self.TITLE} не закрылось'
 
+    def press(self, key):
+        """Нажатие клавиши в окне (например, «Escape»)."""
+        self.drv.key(key, page=self.TITLE)
+
 
 class AboutDialog(Dialog):
     TITLE = '^About$'
@@ -134,6 +142,11 @@ class AboutDialog(Dialog):
     def copy_for_report(self):
         self.go('dshlauncher://dialog/copy/')
         self.wait_text('Copied', 10)
+
+    def reenable_gpu(self):
+        """«Включить GPU снова» (кнопка есть, только если GPU отключён после сбоев)."""
+        self.wait_text('Re-enable GPU', 5)
+        self.go('dshlauncher://dialog/gpu-enable/')
 
 
 class UpdateCheckDialog(Dialog):

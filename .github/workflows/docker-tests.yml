@@ -86,8 +86,14 @@ jobs:
       - name: Download Electron binary
         run: npx install-electron
 
+      # Кэш слоёв Docker-образа в GitHub Actions (run.sh: DOCKER_GHA_CACHE):
+      # buildx и доступ к кэшу Actions для `docker buildx build`.
+      - uses: docker/setup-buildx-action@v4
+      - uses: crazy-max/ghaction-github-runtime@v4
+
       - name: Docker scenarios
         env:
+          DOCKER_GHA_CACHE: '1'
           OSES: ${{ matrix.os }}
           SCENARIOS: ${{ inputs.scenarios }}
           JOBS: '4'
