@@ -6,14 +6,16 @@ import signal
 import subprocess
 import tarfile
 
-from helpers.env import FAKE, INSTALLED, NOUPD
-from helpers.procs import wait_exit
+from helpers.env import CONF, FAKE, INSTALLED, NOUPD
+from helpers.procs import as_tester, wait_exit
 from helpers.windows import ReportDialog, Toast
 
 REPORT = '/tmp/report.tar.gz'
 
 
 def test_report(start, gui, drv):
+    # дамп падения (как от Crashpad) — должен попасть в отчёт
+    as_tester(f'mkdir -p {CONF}/Crashpad/completed && head -c 4096 /dev/urandom > {CONF}/Crashpad/completed/test-crash.dmp')
     launcher = start(FAKE, NOUPD, DSH_LAUNCHER_REPORT_PATH=REPORT)
     gui.wait()
     gui.go('dshlauncher://menu/report/')
@@ -28,6 +30,8 @@ def test_report(start, gui, drv):
     # фейковый dsh печатает «dsh web: …?token=abc»
     assert 'token=***' in files['dsh.log.tail'], 'журнал dsh — в отчёте'
     assert not [n for n, t in files.items() if 'token=abc' in t], 'токен скрыт во всех файлах'
+    assert 'crash-dumps/test-crash.dmp' in files, f'дамп падения — в отчёте: {sorted(files)}'
+    assert launcher.wait_log('отчёт: дампов падений — 1', 5)
     launcher.term()
 
 

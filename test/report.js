@@ -13,3 +13,17 @@ assert.strictEqual(reportInfoText([['x', undefined], ['y', null], ['z', '']]), '
 assert.strictEqual(reportInfoText([['n', 0]]), 'n: 0\n', 'ноль — значение');
 
 console.log('OK: reportFileName, reportInfoText — все проверки прошли');
+
+// ---- pickCrashDumps: какие дампы падений — в отчёт ----
+{
+  const { pickCrashDumps } = require('../src/ui');
+  const D = 86400000; const MB = 1024 * 1024; const now = 100 * D;
+  const f = (name, daysAgo, mb) => ({ path: name, mtimeMs: now - daysAgo * D, size: mb * MB });
+  const files = [f('old', 40, 1), f('a', 1, 2), f('b', 2, 2), f('c', 3, 2), f('d', 4, 2)];
+  assert.deepStrictEqual(pickCrashDumps(files, now).map((x) => x.path), ['a', 'b', 'c'], 'свежие, новые первыми, не больше 3');
+  assert.deepStrictEqual(pickCrashDumps(files, now, 30, 10).map((x) => x.path), ['a', 'b', 'c', 'd'], 'старше 30 дней — нет');
+  assert.deepStrictEqual(pickCrashDumps([f('big', 1, 30), f('s', 2, 1)], now).map((x) => x.path), ['s'], 'больше 25 МБ вместе — пропускаем');
+  assert.deepStrictEqual(pickCrashDumps([], now), [], 'дампов нет');
+  assert.deepStrictEqual(pickCrashDumps(null, now), [], 'нет списка');
+  console.log('OK: pickCrashDumps — все проверки прошли');
+}

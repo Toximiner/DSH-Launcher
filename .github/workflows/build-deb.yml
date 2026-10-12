@@ -18,6 +18,11 @@ on:
     tags: ['v*']
     # Для пушей тегов фильтр путей не применяется — только для веток.
     paths-ignore: ['**.md']
+  # PR (в том числе от Dependabot): юнит-тесты, ESLint и сборка пакета; релиз
+  # выходит только по тегу
+  pull_request:
+    branches: [main]
+    paths-ignore: ['**.md']
   workflow_dispatch:
     inputs:
       tag:

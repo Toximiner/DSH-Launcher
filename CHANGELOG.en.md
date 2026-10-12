@@ -5,6 +5,20 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Added
+
+- **Crash dumps in the report.** If the launcher crashed, “Help → Save
+  report…” adds crash dumps (up to three from the last 30 days) to the
+  archive — they help find the cause. Electron keeps them locally only
+  (`~/.config/dsh-launcher/Crashpad`) and never sends them anywhere.
+
+### Changed
+
+- **Electron 44.7.0** (was 44.5.1) — Chromium fixes. Dependabot proposes
+  dependency updates weekly; PRs are checked by the tests and the build.
+
 ## [1.14.0] — 2026-10-12
 
 ### Added

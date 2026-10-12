@@ -147,7 +147,9 @@ A small Electron app: a window that opens **DeepSeek Harness**
   - “Help → Save report…” (also a button in “About”) — an archive
     `dsh-launcher-report-<date>.tar.gz`: versions, system, session, GPU,
     settings, the launcher log and the tail of the dsh log; tokens and keys
-    hidden. Attach it to an issue on GitHub.
+    hidden. If the launcher crashed — also crash dumps (up to three from the
+    last 30 days): Electron keeps them locally only, in
+    `~/.config/dsh-launcher/Crashpad`, and never sends them anywhere. Attach it to an issue on GitHub.
   - If the launcher closed unexpectedly last time (a crash, `kill -9`, a
     power loss), the next start shows a notice in the window corner with
     “Log…” and “Save report…” buttons.
@@ -390,14 +392,18 @@ Docker, a downloaded Electron and network access. Only some scenarios:
 `test/docker/run.sh close find`, only one system: `OSES=26.04`. Logs and
 JUnit reports go to `test/docker/.work/results/`.
 
-In CI `npm test` runs before every package build (a failing test blocks the
-release), and the Docker scenarios are a separate `docker-tests` workflow,
+In CI `npm test` runs before every package build and on every PR (a failing
+test blocks the release), and the Docker scenarios are a separate `docker-tests` workflow,
 run manually: Actions → docker-tests → Run workflow. Each system is a
 separate job (in parallel, ~7 minutes), image layers are cached; the result
 table is in the run's Summary tab. In tests the launcher's GitHub API
 requests carry the run's temporary token (`DSH_LAUNCHER_GITHUB_TOKEN` — for
 development only; the launcher removes it from its environment and never
 prints it) so as not to hit the 60 requests/hour limit.
+
+Dependabot (`.github/dependabot.yml`) proposes PRs with new versions of
+Electron, ESLint and GitHub actions weekly; such a PR is checked by the unit
+tests and the package build, the Docker scenarios are run manually.
 
 ## About `--no-sandbox`
 

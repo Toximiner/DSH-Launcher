@@ -12,7 +12,7 @@ const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc, redactLog } = require('./util');
-const { reportFileName, reportInfoText } = require('./ui');
+const { reportFileName, reportInfoText, pickCrashDumps } = require('./ui');
 const { loadSettings, CONFIG, DSH_ARGS, CWD, PORT, LOG_FILE, LAUNCHER_LOG_FILE } = require('./env');
 const dialogs = require('./dialogs');
 const dshLog = require('./dsh-log');
@@ -114,6 +114,26 @@ async function reportFacts() {
   ];
 }
 
+// Дампы падений Electron (*.dmp) в userData/Crashpad (crashReporter в main.js).
+function listCrashDumps() {
+  const out = [];
+  const walk = (d, depth) => {
+    let items;
+    try { items = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
+    for (const it of items) {
+      const p = path.join(d, it.name);
+      if (it.isDirectory() && depth < 3) walk(p, depth + 1);
+      else if (it.isFile() && it.name.endsWith('.dmp')) {
+        try { const st = fs.statSync(p); out.push({ path: p, mtimeMs: st.mtimeMs, size: st.size }); } catch { /* исчез */ }
+      }
+    }
+  };
+  let root = null;
+  try { root = app.getPath('crashDumps'); } catch { /* noop */ }
+  if (root) walk(root, 0);
+  return out;
+}
+
 async function saveReport() {
   let dest = process.env.DSH_LAUNCHER_REPORT_PATH || null;
   if (!dest) {
@@ -142,6 +162,13 @@ async function saveReport() {
     if (dshTail !== null) put('dsh.log.tail', dshTail + '\n');
     put('settings.json', JSON.stringify(loadSettings() || {}, null, 2) + '\n');
     try { put('gpu.json', JSON.stringify(app.getGPUFeatureStatus(), null, 2) + '\n'); } catch { /* noop */ }
+    // дампы падений (бинарные, как есть): последние за 30 дней
+    const dumps = pickCrashDumps(listCrashDumps(), Date.now());
+    if (dumps.length) {
+      fs.mkdirSync(path.join(dir, 'crash-dumps'));
+      for (const d of dumps) fs.copyFileSync(d.path, path.join(dir, 'crash-dumps', path.basename(d.path)));
+    }
+    console.log(`[launcher] отчёт: дампов падений — ${dumps.length}`);
     await execFileAsync('tar', ['-czf', dest, '-C', tmp, 'dsh-launcher-report']);
     state.lastReportPath = dest;
     console.log(`[launcher] отчёт сохранён: ${dest}`);

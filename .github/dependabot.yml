@@ -1,0 +1,18 @@
+# Dependabot: раз в неделю — PR с новыми версиями зависимостей (в первую
+# очередь Electron: в патч-версиях — исправления безопасности Chromium) и
+# действий GitHub. PR проверяет build-deb (юнит-тесты, ESLint, сборка);
+# Docker-сценарии запускаются вручную (Actions → docker-tests).
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      eslint:
+        patterns: ['eslint', '@eslint/*', 'globals']
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

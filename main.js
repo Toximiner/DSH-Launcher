@@ -18,7 +18,7 @@
  *    SIGKILL лаунчеру перехватить нельзя — тот случай остаётся незакрытым.
  */
 
-const { app, BrowserWindow, protocol, net: electronNet, screen, shell, clipboard } = require('electron');
+const { app, BrowserWindow, crashReporter, protocol, net: electronNet, screen, shell, clipboard } = require('electron');
 const { spawn, execFileSync } = require('child_process');
 const nodeNet = require('net');
 const fs = require('fs');
@@ -89,6 +89,10 @@ i18n.setLang(LANG_FORCED || (/^ru/i.test(process.env.LC_ALL || process.env.LC_ME
 /* ============================================================== */
 
 app.setName('dsh-launcher');
+// Дампы падений Electron (minidump) — только локально, в userData/Crashpad,
+// никуда не отправляются. Свежие кладутся в «Справка → Сохранить отчёт…»:
+// по ним можно разобрать падение (segfault), которое в журнале — только код.
+crashReporter.start({ uploadToServer: false });
 
 // Диагностика сессии в лог — первое, что смотреть, если «окно не появляется».
 if (process.platform === 'linux') {

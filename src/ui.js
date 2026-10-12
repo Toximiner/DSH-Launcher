@@ -130,4 +130,22 @@ function crashRestart(history, now, code, signal, max = 3, windowMs = 10 * 60 * 
 }
 /* ===== end crashRestart ===== */
 
-module.exports = { crashRestart, agentEvent, WIN_DEFAULT, WIN_MIN, contextMenuItems, keyAction, windowSize, gpuStatus, reportFileName, reportInfoText };
+/* ===== pickCrashDumps (чистая функция, тест test/report.js) =====
+   Какие дампы падений класть в отчёт: files — [{ path, mtimeMs, size }];
+   не старше maxAgeDays, новые первыми, не больше max штук и maxBytes вместе. */
+function pickCrashDumps(files, now, maxAgeDays = 30, max = 3, maxBytes = 25 * 1024 * 1024) {
+  const fresh = (Array.isArray(files) ? files : [])
+    .filter((f) => f && now - f.mtimeMs >= 0 && now - f.mtimeMs <= maxAgeDays * 86400000)
+    .sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const out = [];
+  let total = 0;
+  for (const f of fresh) {
+    if (out.length >= max || total + f.size > maxBytes) continue;
+    out.push(f);
+    total += f.size;
+  }
+  return out;
+}
+/* ===== end pickCrashDumps ===== */
+
+module.exports = { pickCrashDumps, crashRestart, agentEvent, WIN_DEFAULT, WIN_MIN, contextMenuItems, keyAction, windowSize, gpuStatus, reportFileName, reportInfoText };
