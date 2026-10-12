@@ -10,6 +10,7 @@ const { updateStatus, notesBetween } = require('./versions');
 const { LOG_DIR } = require('./env');
 const fileHelp = require('./file-help');
 const menus = require('./menus');
+const { isAltKey } = require('./ui');
 const pages = require('./pages');
 const updatesLive = require('./updates-live');
 const updates = require('./updates');
@@ -53,7 +54,7 @@ function openDialog(title) {
   wc.on('context-menu', (_e, params) => menus.showContextMenu(params, state.win, wc));
   wc.on('before-input-event', (e, input) => {
     if (input.type === 'keyDown' && input.key === 'Escape') { e.preventDefault(); closeDialog(); }
-    if (input.type === 'keyUp' && input.key === 'Alt') e.preventDefault(); // фокус не в строку меню (см. main.js)
+    if (isAltKey(input)) e.preventDefault(); // фокус не в строку меню (см. main.js)
   });
   wc.on('did-finish-load', () => { if (!wc.isDestroyed()) wc.focus(); });
   state.win.contentView.addChildView(v); // поверх всего: GUI, поиска, плашек

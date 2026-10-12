@@ -29,7 +29,7 @@ const i18n = require('./src/i18n');
 const { tr } = i18n;
 const { esc, launcherRoute } = require('./src/util');
 const { envWithBinDir } = require('./src/system');
-const { WIN_MIN, keyAction, windowSize } = require('./src/ui');
+const { WIN_MIN, keyAction, isAltKey, windowSize } = require('./src/ui');
 
 // Параметры запуска и журнал лаунчера — первыми: env.js убирает токен CI из
 // окружения, log.js начинает писать launcher.log.
@@ -629,10 +629,13 @@ async function onReady() {
   } catch { /* noop */ }
   state.win.webContents.on('before-input-event', (event, input) => {
     try {
-      // Одиночный Alt: по его отпусканию Electron на Linux переводит фокус в
-      // строку меню (подсветка «Файл») — из поля ввода dsh. Гасим только это;
-      // Alt+буква и сочетания GUI dsh идут как обычно.
-      if (input.type === 'keyUp' && input.key === 'Alt') { event.preventDefault(); return; }
+      // Alt (обе клавиши, нажатие и отпускание): на Linux он переводит
+      // фокус в строку меню — по нажатию подсвечивает «Файл», по
+      // отпусканию подтверждает фокус. Гасим по code (не по key:
+      // Shift+Alt — смена раскладки — приходит как key="GroupNext");
+      // см. isAltKey в src/ui.js. Сочетания Alt+буква и GUI dsh не
+      // затрагиваются — на них code не AltLeft/AltRight.
+      if (isAltKey(input)) { event.preventDefault(); return; }
       if (input.type !== 'keyDown') return;
       const act = keyAction(input);
       if (!act) return;

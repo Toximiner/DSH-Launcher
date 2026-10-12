@@ -237,6 +237,18 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
   assert.strictEqual(k({ control: true, code: 'KeyC' }), null, 'Ctrl+C — странице (копирование)');
 }
 
+// ---- isAltKey: Alt-клавиши, которых гасим, чтобы меню не перехватывало фокус ----
+{
+  const ia = ui.isAltKey;
+  assert.strictEqual(ia({ type: 'keyDown', key: 'Alt', code: 'AltLeft', alt: true }), true, 'голый Alt (нажатие)');
+  assert.strictEqual(ia({ type: 'keyUp', key: 'Alt', code: 'AltLeft', alt: false }), true, 'голый Alt (отпускание, alt уже false)');
+  assert.strictEqual(ia({ type: 'keyDown', key: 'Alt', code: 'AltRight', alt: true }), true, 'правый Alt');
+  assert.strictEqual(ia({ type: 'keyDown', key: 'GroupNext', code: 'AltLeft', shift: true, alt: true }), true, 'Shift+Alt — смена раскладки (key="GroupNext")');
+  assert.strictEqual(ia({ type: 'keyUp', key: 'GroupNext', code: 'AltLeft', shift: true }), true, 'Shift+Alt (отпускание)');
+  assert.strictEqual(ia({ type: 'keyDown', key: 'a', code: 'KeyA', alt: true }), false, 'прочие клавиши с Alt — странице (altKey-модификатор)');
+  assert.strictEqual(ia({ type: 'keyUp', key: 'Shift', code: 'ShiftLeft', shift: true }), false, 'прочие клавиши');
+}
+
 // ---- windowSize: размер окна из сохранённого состояния ----
 {
   const ws = ui.windowSize;
