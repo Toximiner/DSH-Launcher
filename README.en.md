@@ -405,6 +405,17 @@ Dependabot (`.github/dependabot.yml`) proposes PRs with new versions of
 Electron, ESLint and GitHub actions weekly; such a PR is checked by the unit
 tests and the package build, the Docker scenarios are run manually.
 
+Release: fill in the `## [Unreleased]` section of `CHANGELOG.md` and
+`CHANGELOG.en.md`, then `npm run release 1.16.0` — the section becomes
+`## [1.16.0] — <date>`, the version goes into `package.json`,
+`package-lock.json` and `deb/control`, and a “Версия 1.16.0” commit and a
+`v1.16.0` tag are created (locally). The script refuses if the section is
+empty, the branch isn't `main`, there are uncommitted changes or the version
+isn't higher than the current one. To publish — `git push origin main
+v1.16.0`: on the tag CI builds the package and publishes the release with
+the description from both CHANGELOGs. Only edit the files, no commit or tag:
+`npm run release -- 1.16.0 --no-commit`.
+
 ## About `--no-sandbox`
 
 The launcher starts Electron with `--no-sandbox`. On some desktops (Electron
