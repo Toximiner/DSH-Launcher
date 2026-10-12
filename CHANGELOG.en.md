@@ -5,6 +5,17 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- **Alt no longer moves focus to the menu bar, including the `Shift+Alt`
+  layout switch** (on KWin it doesn't arrive as “Alt”): both Alt keys are
+  suppressed by physical code regardless of the layout; AltGr still types
+  characters. Thanks @MrGnUm (#3).
+- **“Roll back to a previous version…” sees older releases too** — the
+  release list is requested in full (100, not the latest 20).
+
 ## [1.15.0] — 2026-10-12
 
 ### Added

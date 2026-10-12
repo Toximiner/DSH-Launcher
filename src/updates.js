@@ -156,7 +156,9 @@ async function githubReleases({ force = false } = {}) {
   let res;
   let body = '';
   try {
-    res = await httpGet(`https://api.github.com/repos/${UPDATE_GITHUB_REPO}/releases?per_page=20`, { headers });
+  // 100 — максимум GitHub API: «Вернуть предыдущую версию…» и «Что нового» видят
+  // и старые релизы (с 20 они выпадали из списка); ответ кэшируется по ETag
+    res = await httpGet(`https://api.github.com/repos/${UPDATE_GITHUB_REPO}/releases?per_page=100`, { headers });
     res.setEncoding('utf8');
     for await (const c of res) body += c;
     if (res.statusCode !== 200 && !(res.statusCode === 304 && entry)) throw new Error(`GitHub API: HTTP ${res.statusCode}`);
