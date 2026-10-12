@@ -3,7 +3,7 @@ FROM ${BASE}
 ARG NODE_VER
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      xvfb weston dbus polkitd pkexec procps ca-certificates curl xz-utils iproute2 \
+      xvfb weston xdotool x11-xkb-utils dbus polkitd pkexec procps ca-certificates curl xz-utils iproute2 \
       python3 python3-pytest python3-websocket
 # Node 22 — для сценариев с настоящим dsh (npm, nvm, root-префикс).
 COPY node-${NODE_VER}-linux-x64.tar.xz /tmp/
