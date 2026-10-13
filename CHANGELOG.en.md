@@ -5,6 +5,22 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- **If installing dsh from the window fails to start** (npm not found, etc.),
+  the error text now shows up in the log on the install page — before, the
+  log stayed empty.
+
+### Changed (internal)
+
+- Running a command with a live log (installing dsh, the market plugin,
+  update steps) is one shared module instead of three copies; so are the
+  settings files (`update-prefs.json`, `market-prompt.json`, `ui-lang.json`).
+- New test: every `launcher` registry name the modules use is registered in
+  `main.js`.
+
 ## [1.15.2] — 2026-10-13
 
 ### Fixed

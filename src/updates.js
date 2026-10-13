@@ -1,7 +1,6 @@
 'use strict';
 // Обновления при запуске: проверка, вопрос, скачивание и установка лаунчера и dsh.
 const { app, session, clipboard } = require('electron');
-const { spawn } = require('child_process');
 const http = require('http');
 const https = require('https');
 const crypto = require('crypto');
@@ -12,6 +11,8 @@ const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc, timedCheck } = require('./util');
 const { envWithBinDir } = require('./system');
+const { runWithLiveLog } = require('./proc-log');
+const { prefFile, readPref, writePref } = require('./prefs');
 const { compareDebianVer, compareSemVer, tagToPackageVersion, dpkgStatusVersion, notesBetween } = require('./versions');
 const { releaseNotesLang, mdToHtml } = require('./notes');
 const { releasesCacheMode, releasesCacheFresh, proxyUrlFromRule, parseRelease } = require('./updates-logic');
@@ -282,11 +283,11 @@ let updateState = {
   restartTimer: null,
 };
 
-const updatePrefFile = () => path.join(app.getPath('userData'), 'update-prefs.json');
+const UPDATE_PREFS = 'update-prefs.json';
+const updatePrefFile = () => prefFile(UPDATE_PREFS);
 
 function updatePrefs() {
-  try { return JSON.parse(fs.readFileSync(updatePrefFile(), 'utf8')); }
-  catch { return {}; }
+  return readPref(UPDATE_PREFS) || {};
 }
 
 // «Не спрашивать больше» — на версию: отказ от старой не скрывает новую.
@@ -295,15 +296,9 @@ function updateDismissed(kind, version) {
 }
 
 function updateDismiss(kind, version) {
-  try {
-    const p = updatePrefs();
-    p[kind] = version;
-    fs.mkdirSync(path.dirname(updatePrefFile()), { recursive: true });
-    fs.writeFileSync(updatePrefFile(), JSON.stringify(p));
-    console.log(`[launcher] ${kind}: «не спрашивать больше» до версии ${version}`);
-  } catch (e) {
-    console.error('[launcher] update-prefs.json:', e.message);
-  }
+  const p = updatePrefs();
+  p[kind] = version;
+  if (writePref(UPDATE_PREFS, p)) console.log(`[launcher] ${kind}: «не спрашивать больше» до версии ${version}`);
 }
 
 function showUpdatePage(note, noteIsError = false) {
@@ -412,39 +407,12 @@ function onUpdateChoice(choice) {
   return launcher.blankResponse();
 }
 
-// Шаг установки с живым логом на странице (паттерн runMarketInstall).
-async function runUpdateStep(cmd, args, env) {
-  updateState.running = true;
+// Шаг установки с живым логом на странице.
+function runUpdateStep(cmd, args, env) {
   updateState.mode = 'running';
-  updateState.log = [];
   updateState.cmdLine = [cmd, ...args].join(' ');
   console.log(`[launcher] шаг обновления: ${updateState.cmdLine}`);
-  try {
-    const p = spawn(cmd, args, { env: env || process.env, stdio: ['ignore', 'pipe', 'pipe'] });
-    updateState.proc = p;
-    const onData = (d) => {
-      for (const line of d.toString().split('\n')) {
-        const t = line.trim();
-        if (!t) continue;
-        updateState.log.push(t);
-        if (updateState.log.length > 500) updateState.log.shift();
-      }
-    };
-    p.stdout.on('data', onData);
-    p.stderr.on('data', onData);
-    showUpdatePage();
-    updateState.timer = setInterval(() => showUpdatePage(), 800);
-    return await new Promise((resolve) => {
-      let settled = false;
-      const done = (c) => { if (!settled) { settled = true; resolve(c); } };
-      p.on('close', (c) => done(c === null ? -1 : c));
-      p.on('error', (e) => { updateState.log.push(e.message); done(-1); });
-    });
-  } finally {
-    try { clearInterval(updateState.timer); } catch { /* noop */ }
-    updateState.running = false;
-    updateState.proc = null;
-  }
+  return runWithLiveLog(updateState, cmd, args, { env, redraw: () => showUpdatePage() });
 }
 
 // Скачивание .deb из релиза в userData/updates/. Прогресс — в логе на

@@ -19,7 +19,7 @@
  */
 
 const { app, BrowserWindow, crashReporter, protocol, net: electronNet, screen, shell, clipboard } = require('electron');
-const { spawn, execFileSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const nodeNet = require('net');
 const fs = require('fs');
 const path = require('path');
@@ -28,6 +28,7 @@ const state = require('./src/state'); // общее состояние (окно
 const i18n = require('./src/i18n');
 const { tr } = i18n;
 const { esc, launcherRoute } = require('./src/util');
+const { runWithLiveLog } = require('./src/proc-log');
 const { envWithBinDir } = require('./src/system');
 const { WIN_MIN, keyAction, isAltKey, windowSize } = require('./src/ui');
 
@@ -334,8 +335,7 @@ function onPasteRequest(request) {
   } catch (e) {
     console.error('[launcher] paste handler:', e.message);
   }
-  return new Response('<!doctype html><html><body style="background:#0f1115;margin:0"></body></html>',
-    { headers: { 'content-type': 'text/html' } });
+  return blankResponse();
 }
 
 // «Проверить снова» на фатальной странице: если dsh запустили вручную
@@ -378,8 +378,7 @@ async function onRetryRequest() {
   } catch (e) {
     console.error('[launcher] onRetryRequest:', e.message);
   }
-  return new Response('<!doctype html><html><body style="background:#0f1115;margin:0"></body></html>',
-    { headers: { 'content-type': 'text/html' } });
+  return blankResponse();
 }
 
 function blankResponse() {
@@ -440,32 +439,9 @@ async function onInstallRun() {
       showInstallPage(() => tr('Кнопка «Установить» недоступна: глобальный npm prefix требует sudo — выполните команду в терминале.', '“Install” is unavailable: the global npm prefix requires sudo — run the command in a terminal.'), true);
       return blankResponse();
     }
-    installState.running = true;
-    installState.log = [];
     console.log(`[launcher] установка dsh из окна: ${npmInfo.command}`);
-    installState.proc = spawn(npmInfo.npm, ['install', '-g', '@deepseek-ai/dsh'],
-      { env: envWithBinDir(npmInfo.npm), stdio: ['ignore', 'pipe', 'pipe'] });
-    const p = installState.proc;
-    const onData = (d) => {
-      for (const line of d.toString().split('\n')) {
-        const t = line.trim();
-        if (!t) continue;
-        installState.log.push(t);
-        if (installState.log.length > 500) installState.log.shift();
-      }
-    };
-    p.stdout.on('data', onData);
-    p.stderr.on('data', onData);
-    installState.timer = setInterval(() => showInstallPage(), 800);
-    const code = await new Promise((resolve) => {
-      let settled = false;
-      const done = (c) => { if (!settled) { settled = true; resolve(c); } };
-      p.on('close', (c) => done(c === null ? -1 : c));
-      p.on('error', () => done(-1)); // npm не запустился — close может не прийти
-    });
-    clearInterval(installState.timer);
-    installState.running = false;
-    installState.proc = null;
+    const code = await runWithLiveLog(installState, npmInfo.npm, ['install', '-g', '@deepseek-ai/dsh'],
+      { env: envWithBinDir(npmInfo.npm), redraw: () => showInstallPage() });
     if (code === 0) {
       console.log('[launcher] dsh установлен — продолжаю запуск');
       // Если prefix не /usr, бинарник лёг не в /usr/bin — находим и запоминаем фактический путь.
@@ -482,8 +458,6 @@ async function onInstallRun() {
     }
   } catch (e) {
     console.error('[launcher] onInstallRun:', e.message);
-    installState.running = false;
-    try { clearInterval(installState.timer); } catch { /* noop */ }
     showInstallPage(() => tr('Не удалось запустить установку: ' + e.message, 'Failed to start the installation: ' + e.message), true);
   }
   return blankResponse();
@@ -686,16 +660,11 @@ app.on('before-quit', (e) => {
   if (state.stopping) return;
   state.stopping = true;
   e.preventDefault();
-  if (installState.running && installState.proc) {
-    try { installState.proc.kill('SIGTERM'); } catch { /* noop */ }
+  // установка dsh / маркета / шаг обновления: свой процесс и таймер перерисовки
+  for (const st of [installState, marketState, updateState]) {
+    if (st.proc) { try { st.proc.kill('SIGTERM'); } catch { /* noop */ } }
+    clearInterval(st.timer);
   }
-  if (marketState.proc) {
-    try { marketState.proc.kill('SIGTERM'); } catch { /* noop */ }
-  }
-  if (updateState.proc) {
-    try { updateState.proc.kill('SIGTERM'); } catch { /* noop */ }
-  }
-  try { clearInterval(updateState.timer); } catch { /* noop */ }
   if (updateState.restartTimer) {
     clearTimeout(updateState.restartTimer);
     updateState.restartTimer = null;

@@ -1,12 +1,10 @@
 'use strict';
 // Служебные страницы в главном окне: общий вид, статусы, страница вставки токена.
-const { app } = require('electron');
-const fs = require('fs');
-const path = require('path');
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc } = require('./util');
+const { prefFile, readPref, writePref } = require('./prefs');
 const { PLAIN_URL, LANG_FORCED } = require('./env');
 const menus = require('./menus');
 const launcher = require('./launcher'); // общий реестр (наполняет main.js)
@@ -126,23 +124,19 @@ function showPage(render) {
   render();
 }
 
-const langPrefFile = () => path.join(app.getPath('userData'), 'ui-lang.json');
+const LANG_PREFS = 'ui-lang.json';
+const langPrefFile = () => prefFile(LANG_PREFS);
 
 function loadLangPref() {
   if (LANG_FORCED) return;
-  try {
-    const v = JSON.parse(fs.readFileSync(langPrefFile(), 'utf8')).lang;
-    if (v === 'ru' || v === 'en') { i18n.setLang(v); }
-  } catch { /* выбора ещё не было — остаётся язык локали */ }
+  const p = readPref(LANG_PREFS); // выбора ещё не было — остаётся язык локали
+  if (p && (p.lang === 'ru' || p.lang === 'en')) i18n.setLang(p.lang);
 }
 
 function onLangSwitch(lang) {
   if ((lang === 'ru' || lang === 'en') && lang !== i18n.getLang()) {
     i18n.setLang(lang);
-    try {
-      fs.mkdirSync(path.dirname(langPrefFile()), { recursive: true });
-      fs.writeFileSync(langPrefFile(), JSON.stringify({ lang }));
-    } catch (e) { console.error('[launcher] ui-lang.json:', e.message); }
+    writePref(LANG_PREFS, { lang });
     console.log(`[launcher] язык окна: ${lang}`);
   }
   menus.buildAppMenu(); // подписи меню на новом языке

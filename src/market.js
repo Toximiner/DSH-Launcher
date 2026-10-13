@@ -1,7 +1,5 @@
 'use strict';
 // Плагин маркета (dshmarket): вопрос и установка.
-const { app } = require('electron');
-const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -10,6 +8,8 @@ const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc, profileFromArgs } = require('./util');
 const { envWithBinDir } = require('./system');
+const { runWithLiveLog } = require('./proc-log');
+const { prefFile, readPref, writePref } = require('./prefs');
 const { DSH_ARGS, CWD } = require('./env');
 const { dshEnv, findBin, npmInstallInfo } = require('./dsh-install');
 const pages = require('./pages');
@@ -51,11 +51,11 @@ function marketInstalled() {
   }
 }
 
-const marketPrefFile = () => path.join(app.getPath('userData'), 'market-prompt.json');
+const MARKET_PREFS = 'market-prompt.json';
 
 function marketPromptDisabled() {
-  try { return JSON.parse(fs.readFileSync(marketPrefFile(), 'utf8')).dontAsk === true; }
-  catch { return false; }
+  const p = readPref(MARKET_PREFS);
+  return Boolean(p && p.dontAsk === true);
 }
 
 let marketState = { resolve: null, running: false, log: [], timer: null, proc: null, cmdLine: null };
@@ -117,43 +117,16 @@ function marketEnv() {
 }
 
 // Запуск шага установки (pnpm или сам маркет) с живым логом на странице.
-async function runMarketInstall(cmd, args, env) {
-  marketState.running = true;
-  marketState.log = [];
+function runMarketInstall(cmd, args, env) {
   marketState.cmdLine = [cmd, ...args].join(' ');
   console.log(`[launcher] установка: ${marketState.cmdLine}`);
-  try {
-    const p = spawn(cmd, args, { cwd: CWD, env, stdio: ['ignore', 'pipe', 'pipe'] });
-    marketState.proc = p;
-    const onData = (d) => {
-      for (const line of d.toString().split('\n')) {
-        const t = line.trim();
-        if (!t) continue;
-        marketState.log.push(t);
-        if (marketState.log.length > 500) marketState.log.shift();
-      }
-    };
-    p.stdout.on('data', onData);
-    p.stderr.on('data', onData);
-    showMarketPage();
-    marketState.timer = setInterval(() => showMarketPage(), 800);
-    return await new Promise((resolve) => {
-      let settled = false;
-      const done = (c) => { if (!settled) { settled = true; resolve(c); } };
-      p.on('close', (c) => done(c === null ? -1 : c));
-      p.on('error', (e) => { marketState.log.push(e.message); done(-1); });
-    });
-  } finally {
-    clearInterval(marketState.timer);
-    marketState.running = false;
-    marketState.proc = null;
-  }
+  return runWithLiveLog(marketState, cmd, args, { cwd: CWD, env, redraw: () => showMarketPage() });
 }
 
 async function offerMarketIfMissing() {
   if (marketInstalled()) return;
   if (marketPromptDisabled()) {
-    console.log(`[launcher] ${MARKET_PKG} не установлен, вопрос отключён (${marketPrefFile()})`);
+    console.log(`[launcher] ${MARKET_PKG} не установлен, вопрос отключён (${prefFile(MARKET_PREFS)})`);
     return;
   }
   console.log(`[launcher] ${MARKET_PKG} не установлен в профиле ${DSH_PROFILE} — спрашиваю пользователя`);
@@ -163,10 +136,7 @@ async function offerMarketIfMissing() {
     const choice = await askMarket(note, noteIsError);
     if (state.stopping) return;
     if (choice === 'never') {
-      try {
-        fs.mkdirSync(path.dirname(marketPrefFile()), { recursive: true });
-        fs.writeFileSync(marketPrefFile(), JSON.stringify({ dontAsk: true }));
-      } catch (e) { console.error('[launcher] market-prompt.json:', e.message); }
+      writePref(MARKET_PREFS, { dontAsk: true });
       console.log('[launcher] пользователь отказался от маркета навсегда');
       return;
     }

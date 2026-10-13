@@ -20,15 +20,15 @@ module.exports = {
   dialogView: null,          // диалог — слой в главном окне (WebContentsView)
   dialogRender: null,        // перерисовка содержимого диалога: (copied) => void
   dialogCopyText: '',        // текст «Скопировать для отчёта»
-  tray: null, // (перенесено при разбиении main.js)
-  lastReportPath: null, // (перенесено при разбиении main.js)
+  tray: null,                // значок в трее (Tray) или null
+  lastReportPath: null,      // последний сохранённый отчёт («Показать в папке»)
   settingsSection: 'general', // раздел окна «Настройки» (меню слева)
-  availableUpdates: {}, // (перенесено при разбиении main.js)
+  availableUpdates: {},      // найденные обновления: { launcher, dsh } → релиз (.version …)
   updateChecks: { launcher: null, dsh: null }, // проверки обновлений при запуске (промисы)
-  launcherUpdatedOnDisk: false, // (перенесено при разбиении main.js)
-  openContextMenu: null, // (перенесено при разбиении main.js)
-  findView: null, // (перенесено при разбиении main.js)
-  spellcheckOn: true, // (перенесено при разбиении main.js)
-  restartingDsh: false, // (перенесено при разбиении main.js)
+  launcherUpdatedOnDisk: false, // пакет лаунчера обновлён, а работает старый процесс
+  openContextMenu: null,     // открытое контекстное меню (закрыть по маршруту)
+  findView: null,            // панель поиска по странице (Ctrl+F)
+  spellcheckOn: true,        // проверка орфографии в полях ввода
+  restartingDsh: false,      // идёт «Перезапустить dsh»: остановка dsh — не сбой
   dshCrashNotice: null,      // dsh перезапущен после сбоя — плашка, когда GUI загрузится
 };
