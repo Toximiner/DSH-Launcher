@@ -5,6 +5,17 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- **The restart button in the plugin market (dshmarket) works a second time
+  too.** After the first restart from the market, dsh is adopted by systemd,
+  and the systemd service variables (`INVOCATION_ID`, `JOURNAL_STREAM`) the
+  launcher inherits from the GNOME session were passed on to dsh — so the
+  market took it for a systemd service: “Restart failed: self-restart is
+  disabled for this host”. The launcher no longer passes them to dsh.
+
 ## [1.15.1] — 2026-10-12
 
 ### Fixed

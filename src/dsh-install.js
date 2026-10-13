@@ -10,7 +10,7 @@ const path = require('path');
 const execFileAsync = promisify(execFile);
 const state = require('./state');
 const { firstErrLine } = require('./util');
-const { envWithBinDir, writableOrCreatable } = require('./system');
+const { envWithBinDir, withoutUnitEnv, writableOrCreatable } = require('./system');
 const { DSH_BIN_DEFAULT, DSH_BIN_EXPLICIT } = require('./env');
 
 /* ---------------- проверка установки dsh ---------------- */
@@ -18,8 +18,10 @@ const { DSH_BIN_DEFAULT, DSH_BIN_EXPLICIT } = require('./env');
 // Окружение для запуска dsh: каталог бинарника — первым в PATH. dsh — это
 // `#!/usr/bin/env node`-скрипт; установленный через nvm, он должен получить
 // node из того же каталога, а при запуске с ярлыка nvm в PATH нет.
+// Окружение dsh (и npm в его профиле): без переменных службы systemd — см.
+// withoutUnitEnv в system.js.
 function dshEnv(extra) {
-  return envWithBinDir(state.dshBin, extra);
+  return withoutUnitEnv(envWithBinDir(state.dshBin, extra));
 }
 
 

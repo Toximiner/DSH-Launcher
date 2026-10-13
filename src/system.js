@@ -8,6 +8,21 @@ function envWithBinDir(bin, extra) {
   return { ...process.env, PATH: path.dirname(bin) + path.delimiter + (process.env.PATH || ''), ...extra };
 }
 
+// Переменные, которые systemd задаёт главному процессу своей службы. Лаунчеру
+// они достаются по наследству от сеанса рабочего стола (GNOME запускает
+// приложения с INVOCATION_ID и JOURNAL_STREAM своей службы), но dsh — не
+// служба systemd. dshmarket по ним и по родителю-systemd (после своего
+// перезапуска dsh усыновляет systemd --user) решает, что перезапуском
+// владеет systemd, и отвечает «self-restart is disabled for this host».
+const SYSTEMD_UNIT_ENV = ['INVOCATION_ID', 'JOURNAL_STREAM', 'NOTIFY_SOCKET', 'SYSTEMD_EXEC_PID', 'MANAGERPID',
+  'WATCHDOG_PID', 'WATCHDOG_USEC', 'LISTEN_PID', 'LISTEN_FDS', 'LISTEN_FDNAMES'];
+
+function withoutUnitEnv(env) {
+  const out = { ...env };
+  for (const k of SYSTEMD_UNIT_ENV) delete out[k];
+  return out;
+}
+
 function writableOrCreatable(dir) {
   while (!fs.existsSync(dir) && path.dirname(dir) !== dir) dir = path.dirname(dir);
   try { fs.accessSync(dir, fs.constants.W_OK); return true; } catch { return false; }
@@ -71,4 +86,4 @@ function pickKillTargets(portPid, portPgid, selfPgid, oldPgid) {
   return targets;
 }
 
-module.exports = { envWithBinDir, writableOrCreatable, groupAlive, portListenerPid, pgidOf, pickKillTargets };
+module.exports = { envWithBinDir, withoutUnitEnv, writableOrCreatable, groupAlive, portListenerPid, pgidOf, pickKillTargets };

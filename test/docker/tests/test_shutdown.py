@@ -64,14 +64,19 @@ def test_sigterm_double(start, gui):
 def test_adopt(start, gui, detached):
     """dsh перезапустился сам (как после обновления плагина): лаунчер
     «усыновляет» новый процесс и при закрытии останавливает и его, и
-    потомков старого."""
+    потомков старого. Переменные службы systemd из окружения лаунчера (их
+    даёт сеанс GNOME) до dsh не доходят — ни до первого, ни до
+    перерождённого: иначе dshmarket запрещает себе перезапуск."""
     extra = {'FAKE_REBORN_DETACHED': '1'} if detached else {}
-    launcher = start(FAKE, NOUPD, FAKE_SELF_RESTART_AFTER='5', **extra)
+    launcher = start(FAKE, NOUPD, FAKE_SELF_RESTART_AFTER='5', INVOCATION_ID='0123456789abcdef', JOURNAL_STREAM='8:12345', **extra)
     gui.wait()
 
     assert launcher.wait_log('перезапустился сам', 30), 'лаунчер усыновил перезапущенный dsh'
     assert wait_port(10), 'перерождённый dsh слушает порт'
     assert pgrep('^sleep 7777'), 'в старой группе остался sleep 7777'
+    _, envs = sh("for p in $(pgrep -f fakes/fakedsh.py); do tr '\\0' '\\n' < /proc/$p/environ; echo; done")
+    assert 'FAKE_ROLE=reborn' in envs, f'окружение перерождённого dsh прочитано: {envs[:300]!r}'
+    assert 'INVOCATION_ID=' not in envs and 'JOURNAL_STREAM=' not in envs, 'у dsh нет переменных службы systemd'
 
     gui.close()
 

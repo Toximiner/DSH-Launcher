@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Юнит-тесты чистых помощников main.js: splitArgs, launcherRoute,
-// profileFromArgs, firstErrLine, esc, envWithBinDir, marketInPkg.
+// profileFromArgs, firstErrLine, esc, envWithBinDir, withoutUnitEnv, marketInPkg.
 'use strict';
 const path = require('path');
 const assert = require('assert');
@@ -8,7 +8,7 @@ const { extract } = require('./_extract');
 
 // ---- splitArgs: разбор DSH_ARGS как в shell ----
 const { splitArgs, launcherRoute, profileFromArgs, firstErrLine, esc } = require('../src/util');
-const { envWithBinDir } = require('../src/system');
+const { envWithBinDir, withoutUnitEnv } = require('../src/system');
 const { proxyUrlFromRule } = require('../src/updates-logic');
 const { dpkgStatusVersion } = require('../src/versions');
 assert.deepStrictEqual(splitArgs(''), [], 'пустая строка → []');
@@ -71,6 +71,15 @@ assert.strictEqual(esc(''), '');
   } finally {
     process.env.PATH = oldPath;
   }
+}
+
+// ---- withoutUnitEnv: dsh — не служба systemd (dshmarket: «self-restart is disabled») ----
+{
+  const src = { HOME: '/home/u', PATH: '/usr/bin', INVOCATION_ID: 'abc', JOURNAL_STREAM: '8:123', NOTIFY_SOCKET: '/run/n', SYSTEMD_EXEC_PID: '42', DSH_STARTED_BY: 'dsh-launcher' };
+  const env = withoutUnitEnv(src);
+  for (const k of ['INVOCATION_ID', 'JOURNAL_STREAM', 'NOTIFY_SOCKET', 'SYSTEMD_EXEC_PID']) assert.ok(!(k in env), `без ${k}`);
+  assert.deepStrictEqual(env, { HOME: '/home/u', PATH: '/usr/bin', DSH_STARTED_BY: 'dsh-launcher' }, 'остальное — как было');
+  assert.strictEqual(src.INVOCATION_ID, 'abc', 'исходный объект не меняется');
 }
 
 // ---- marketInPkg: плагин маркета в package.json профиля ----
