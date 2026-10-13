@@ -1,5 +1,6 @@
-"""Самообновление лаунчера: настоящий последний релиз с GitHub ставится поверх
-пакета 1.1.0-1 из образа (через pkexec), и «Что нового».
+"""Самообновление лаунчера: последний релиз из подставного GitHub (2.0.0-1,
+из текущего кода) ставится поверх пакета 1.1.0-1 из образа (через pkexec),
+откат на старый релиз и «Что нового».
 """
 import json
 import os
@@ -7,7 +8,8 @@ import re
 import shutil
 import time
 
-from helpers.env import CONF, FAKE, INSTALLED, LATEST, LATEST_DEB, LATEST_PKG, LATEST_RE, NO_PROMPTS, NOUPD, UPD
+from helpers.env import CONF, FAKE, INSTALLED, LATEST, LATEST_DEB, LATEST_PKG, LATEST_RE, NO_PROMPTS, NOUPD, ROLLBACK, UPD
+from helpers.github import github_log, releases, write_releases
 from helpers.procs import as_tester, dpkg_version, fakedsh_starts, sh, wait_exit, wait_for, wait_port
 from helpers.windows import WhatsNewDialog
 
@@ -44,6 +46,25 @@ def test_launcher_update(start, prompt):
     assert dpkg_version() == LATEST_PKG, f'dpkg: установлен {LATEST_PKG}'
     _check_new_instance(launcher)
     assert not [f for f in os.listdir(UPD) if f.endswith('.deb')], 'скачанный .deb удалён'
+
+
+def test_launcher_update_bad_sha(start, prompt):
+    """sha256 скачанного .deb не совпал с digest релиза — пакет не ставится и
+    удаляется; страница с командой для терминала; «Не сейчас» — dsh запускается."""
+    write_releases(releases(latest_digest='sha256:' + '0' * 64))
+    launcher = start(FAKE)
+    prompt.wait('Update DeepSeek Harness Launcher')
+
+    prompt.install()
+
+    prompt.wait(r'Download failed: sha256 не совпадает с релизом \(\w+… ≠ 000000000000…\)', 400)
+    assert f'/files/{LATEST_DEB} 200' in github_log(), 'пакет скачан (через перенаправление)'
+    assert dpkg_version() == INSTALLED, f'dpkg: всё ещё {INSTALLED}'
+    assert 'шаг обновления' not in launcher.log(), 'установка (pkexec) не запускалась'
+    assert not [f for f in os.listdir(UPD) if f.endswith('.deb')], 'скачанный .deb удалён'
+    prompt.later()
+    assert wait_port(60), '«Не сейчас» — dsh запускается'
+    launcher.term()
 
 
 def test_launcher_update_denied(start, prompt):
@@ -121,18 +142,20 @@ def test_whats_new(start, gui, drv):
 def test_rollback(start, gui):
     """«Справка → Вернуть предыдущую версию…»: список прошлых релизов; «Вернуть»
     — перезапуск, новый экземпляр ставит выбранную (более старую) версию через
-    pkexec с понижением; о самой новой версии больше не спрашивает."""
+    pkexec с понижением; о самой новой версии больше не спрашивает. ROLLBACK в
+    списке подставного GitHub — 31-й: виден, только если лаунчер просит больше
+    30 релизов за раз."""
     launcher = start(FAKE, NOUPD)
     gui.wait()
     dlg = gui.open_rollback()
-    dlg.wait_text(rf'Installed: {re.escape(INSTALLED)}\. Choose a version: .*1\.0\.0-14 ', 60)
+    dlg.wait_text(rf'Installed: {re.escape(INSTALLED)}\. Choose a version: .*{re.escape(ROLLBACK)} ', 60)
 
-    dlg.go('dshlauncher://rollback/?v=1.0.0-14')
-    assert launcher.wait_log('перезапуск лаунчера, чтобы вернуть версию 1.0.0-14', 10)
+    dlg.go(f'dshlauncher://rollback/?v={ROLLBACK}')
+    assert launcher.wait_log(f'перезапуск лаунчера, чтобы вернуть версию {ROLLBACK}', 10)
     assert launcher.wait_exit(20) is not None, 'прежний экземпляр завершился'
     assert launcher.successor(), 'лаунчер перезапустился'
-    assert launcher.wait_log(f'откат: ставлю 1.0.0-14 (установлена {INSTALLED})', 60), launcher.log()[-1500:]
-    assert launcher.wait_log('dsh-launcher 1.0.0-14 установлен', 400), launcher.log()[-1500:]
+    assert launcher.wait_log(f'откат: ставлю {ROLLBACK} (установлена {INSTALLED})', 60), launcher.log()[-1500:]
+    assert launcher.wait_log(f'dsh-launcher {ROLLBACK} установлен', 400), launcher.log()[-1500:]
     assert 'совпадает с релизом' in launcher.log(), 'sha256 совпал с digest релиза'
-    assert dpkg_version() == '1.0.0-14', f'dpkg: {dpkg_version()}'
+    assert dpkg_version() == ROLLBACK, f'dpkg: {dpkg_version()}'
     assert json.load(open(f'{CONF}/update-prefs.json')).get('launcher') == LATEST, 'о самой новой версии больше не спрашивать'

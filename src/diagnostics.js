@@ -53,7 +53,7 @@ function checkPreviousRun() {
   try {
     fs.mkdirSync(path.dirname(runMarkerFile()), { recursive: true });
     let version = null;
-    try { version = require('./package.json').version; } catch { /* noop */ }
+    try { version = require('../package.json').version; } catch { /* noop */ }
     fs.writeFileSync(runMarkerFile(), JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString(), version }));
   } catch (e) { console.error('[launcher] running.json:', e.message); }
 }

@@ -3,7 +3,7 @@
 import subprocess
 import urllib.request
 
-from .env import GITHUB_TOKEN, HOME, LAUNCHER_OUT
+from .env import GITHUB_API, GITHUB_TOKEN, HOME, LAUNCHER_OUT
 from .procs import alive, sh, wait_exit, wait_for
 
 
@@ -46,7 +46,8 @@ def launcher_log():
 class Launcher:
     def __init__(self, env):
         base = {'HOME': HOME, 'USER': 'tester', 'LANG': 'C.UTF-8', 'DISPLAY': ':99',
-                'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin'}
+                'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
+                'DSH_LAUNCHER_GITHUB_API': GITHUB_API}  # None — настоящий GitHub
         if GITHUB_TOKEN:
             base['DSH_LAUNCHER_GITHUB_TOKEN'] = GITHUB_TOKEN
         base.update(env)

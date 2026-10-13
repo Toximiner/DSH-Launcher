@@ -14,7 +14,7 @@ from helpers.windows import UpdateToast
 # «последняя» версия dsh на npm — из файла: тест «выпускает» новую на ходу
 DSH_LATEST = '/tmp/dsh-latest'
 # «последняя» версия лаунчера на GitHub — тоже из файла (описания и .deb —
-# настоящего последнего релиза)
+# последнего релиза в подставном GitHub)
 LAUNCHER_LATEST = '/tmp/launcher-latest'
 
 
@@ -88,7 +88,7 @@ def test_update_poll_setting(start, gui):
 def test_update_now_launcher(start, gui, drv):
     """«Обновить сейчас» для самого лаунчера целиком: проверка по таймеру
     нашла новую версию → плашка → окно с «Что нового» → «Обновить сейчас» —
-    перезапуск, новый экземпляр без вопроса скачивает настоящий последний
+    перезапуск, новый экземпляр без вопроса скачивает последний (подставной)
     релиз, сверяет sha256, ставит через pkexec и перезапускается в новую
     версию; она поднимает dsh."""
     with open(LAUNCHER_LATEST, 'w') as f:
@@ -100,7 +100,7 @@ def test_update_now_launcher(start, gui, drv):
     assert 'доступно обновление' not in launcher.log(), 'при запуске обновлений нет'
 
     with open(LAUNCHER_LATEST, 'w') as f:
-        f.write(LATEST)           # «вышел» настоящий последний релиз
+        f.write(LATEST)           # «вышел» последний релиз (подставной GitHub)
 
     toast = UpdateToast(drv).wait_shown()
     assert f'DeepSeek Harness Launcher {LATEST} is available' in toast.text(), toast.text()

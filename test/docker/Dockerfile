@@ -23,8 +23,8 @@ RUN cp -a /opt/node22 /opt/noderoot && PATH=/opt/noderoot/bin:$PATH npm i -g --n
 # Пакет лаунчера и тесты меняются каждый прогон — поэтому в конце: слои выше
 # (apt, Node, старый dsh) берутся из кэша сборки. apt-get update — здесь же:
 # списки пакетов в закэшированном слое могли устареть.
-# Лаунчер из текущего кода, но версией 1.1.0-1 — «старее» релиза на GitHub
-# (сценарии обновления лаунчера ставят настоящий последний релиз).
+# Лаунчер из текущего кода, но версией 1.1.0-1 — «старее» последнего релиза
+# подставного GitHub (2.0.0-1, его .deb подключает run.sh в /opt/github).
 COPY dsh-launcher_1.1.0-1_amd64.deb /tmp/
 RUN apt-get update && apt-get install -y /tmp/dsh-launcher_1.1.0-1_amd64.deb && rm /tmp/dsh-launcher_1.1.0-1_amd64.deb
 COPY t /opt/t/

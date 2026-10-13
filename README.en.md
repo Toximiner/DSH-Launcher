@@ -380,7 +380,10 @@ The Docker scenarios are written with **pytest** (`test/docker/`):
 - `helpers/` — window objects (`windows.py`: main window, dialogs, the
   notice, find bar, update prompt), launching the launcher, processes, the
   CDP driver;
-- `fakes/` — a fake dsh and an HTTP proxy;
+- `fakes/` — a fake dsh, HTTP proxy and GitHub (`github.py`: the launcher's
+  release list with ETag and the `.deb` files — the update and rollback
+  scenarios don't depend on real releases; `run.sh` builds those `.deb` files
+  from the current code as versions 2.0.0-1 and 1.0.0-14);
 - `conftest.py` — fixtures (`start`, `gui`, `prompt`, `drv`, `wayland`) and
   scenario selection: `pytest --scenario <name>`, `--list-scenarios`.
 
@@ -399,7 +402,10 @@ separate job (in parallel, ~7 minutes), image layers are cached; the result
 table is in the run's Summary tab. In tests the launcher's GitHub API
 requests carry the run's temporary token (`DSH_LAUNCHER_GITHUB_TOKEN` — for
 development only; the launcher removes it from its environment and never
-prints it) so as not to hit the 60 requests/hour limit.
+prints it) so as not to hit the 60 requests/hour limit. Only the `proxy`
+scenario talks to the real GitHub; the rest use the fake one
+(`DSH_LAUNCHER_GITHUB_API=http://127.0.0.1:<port>`; the launcher accepts no
+other address).
 
 Dependabot (`.github/dependabot.yml`) proposes PRs with new versions of
 Electron, ESLint and GitHub actions weekly; such a PR is checked by the unit

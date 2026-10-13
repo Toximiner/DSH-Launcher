@@ -16,7 +16,7 @@ const { prefFile, readPref, writePref } = require('./prefs');
 const { compareDebianVer, compareSemVer, tagToPackageVersion, dpkgStatusVersion, notesBetween } = require('./versions');
 const { releaseNotesLang, mdToHtml } = require('./notes');
 const { releasesCacheMode, releasesCacheFresh, proxyUrlFromRule, parseRelease } = require('./updates-logic');
-const { GITHUB_TOKEN, UPDATE_NOW, INSTALL_VERSION, CONFIG } = require('./env');
+const { GITHUB_TOKEN, GITHUB_API, UPDATE_NOW, INSTALL_VERSION, CONFIG } = require('./env');
 const { probeDsh, findBin, MIN_NODE_MAJOR, npmInstallInfo } = require('./dsh-install');
 const pages = require('./pages');
 const settingsWindow = require('./settings-window');
@@ -56,7 +56,9 @@ const launcher = require('./launcher'); // общий реестр (наполн
  *  DSH_LAUNCHER_FAKE_LAUNCHER_LATEST / DSH_LAUNCHER_FAKE_DSH_LATEST —
  *    «будущая» версия для разработки и тестов (у лаунчера .deb всё равно
  *    берётся из настоящего latest-релиза);
- *  DSH_LAUNCHER_FAKE_INSTALLED — «установленная» версия лаунчера (тесты).
+ *  DSH_LAUNCHER_FAKE_INSTALLED — «установленная» версия лаунчера (тесты);
+ *  DSH_LAUNCHER_GITHUB_API=http://127.0.0.1:<порт> — подставной GitHub API
+ *    (Docker-тесты, test/docker/fakes/github.py): список релизов и .deb.
  */
 const DSH_NPM_PKG = '@deepseek-ai/dsh';
 const UPDATE_GITHUB_REPO = 'Toximiner/DSH-Launcher';
@@ -153,13 +155,13 @@ async function githubReleases({ force = false } = {}) {
   if (mode === 'cache') return entry.list;
   const headers = { 'User-Agent': 'dsh-launcher', 'Accept': 'application/vnd.github+json' };
   if (mode === 'revalidate') headers['If-None-Match'] = entry.etag;
-  if (GITHUB_TOKEN) headers.Authorization = `Bearer ${GITHUB_TOKEN}`; // только api.github.com
+  if (GITHUB_TOKEN && GITHUB_API === 'https://api.github.com') headers.Authorization = `Bearer ${GITHUB_TOKEN}`; // только настоящему GitHub
   let res;
   let body = '';
   try {
   // 100 — максимум GitHub API: «Вернуть предыдущую версию…» и «Что нового» видят
   // и старые релизы (с 20 они выпадали из списка); ответ кэшируется по ETag
-    res = await httpGet(`https://api.github.com/repos/${UPDATE_GITHUB_REPO}/releases?per_page=100`, { headers });
+    res = await httpGet(`${GITHUB_API}/repos/${UPDATE_GITHUB_REPO}/releases?per_page=100`, { headers });
     res.setEncoding('utf8');
     for await (const c of res) body += c;
     if (res.statusCode !== 200 && !(res.statusCode === 304 && entry)) throw new Error(`GitHub API: HTTP ${res.statusCode}`);
@@ -195,15 +197,12 @@ async function fetchLauncherLatest({ force = false } = {}) {
   if (!rels.length) throw new Error('GitHub API: нет опубликованных релизов');
   const ver = (r) => String(r.tag_name).replace(/^v/, '');
   const j = rels.reduce((a, b) => (compareDebianVer(tagToPackageVersion(ver(b)), tagToPackageVersion(ver(a))) > 0 ? b : a));
-  const asset = (j.assets || []).find((a) => String(a.name).endsWith('.deb'));
+  const { version, htmlUrl, assetUrl, assetSha256 } = parseRelease(j);
   const meta = {
-    version: ver(j),
-    htmlUrl: j.html_url || null,
-    assetUrl: asset ? asset.browser_download_url : null,
-    // GitHub отдаёт digest ассета вида «sha256:<hex>» (у старых релизов может не быть)
-    assetSha256: asset && /^sha256:[0-9a-f]{64}$/i.test(String(asset.digest || ''))
-      ? String(asset.digest).slice(7).toLowerCase()
-      : null,
+    version,
+    htmlUrl,
+    assetUrl,
+    assetSha256,
     releases: rels.map((r) => ({ version: ver(r), body: String(r.body || '') })),
     all: rels.map(parseRelease), // для «Вернуть предыдущую версию…»
   };

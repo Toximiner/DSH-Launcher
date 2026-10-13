@@ -2,7 +2,7 @@
 # Сценарии установленного лаунчера в Docker на чистых Ubuntu 24.04, 26.04 и
 # Debian 13:
 # закрытие окна и сигналы, «усыновлённый» dsh, обновление dsh (npm) и самого
-# лаунчера (настоящий последний релиз с GitHub через pkexec).
+# лаунчера через pkexec (релизы — от подставного GitHub, test/docker/fakes/github.py).
 #
 #   test/docker/run.sh                 — все сценарии на всех трёх системах
 #   test/docker/run.sh close sigterm   — только указанные
@@ -10,7 +10,7 @@
 #   OSES="debian-13" test/docker/run.sh   — Debian (debian:13)
 #
 # Нужны Docker, собранный Electron (npm install && npx install-electron) и
-# сеть (GitHub, npm, nodejs.org). Контейнеры идут с seccomp=unconfined —
+# сеть (npm, nodejs.org; GitHub — только сценарию proxy). Контейнеры идут с seccomp=unconfined —
 # иначе sandbox Chromium не может создать namespace.
 # Логи: test/docker/.work/results/<os>-<сценарий>.log
 set -eu
@@ -34,12 +34,19 @@ sed -i 's/^Version: .*/Version: 1.1.0-1/' "$WORK/src/deb/control"
 (cd "$WORK/src" && sh build-deb.sh >/dev/null)
 cp -f "$WORK/src/dsh-launcher_1.1.0-1_amd64.deb" "$WORK/ctx/"
 
-# Последний релиз лаунчера — на него сценарии launcher_update* и обновляются.
-AUTH=(); [ -n "${GITHUB_TOKEN:-}" ] && AUTH=(-H "Authorization: Bearer $GITHUB_TOKEN")
-LATEST=$(curl -fsSL "${AUTH[@]}" https://api.github.com/repos/Toximiner/DSH-Launcher/releases/latest \
-  | sed -n 's/.*"tag_name": *"v\{0,1\}\([^"]*\)".*/\1/p' | head -1)
-[ -n "$LATEST" ] || { echo "не удалось узнать последний релиз (GitHub API)" >&2; exit 1; }
-echo ">> последний релиз на GitHub: $LATEST"
+# .deb релизов подставного GitHub (helpers/github.py): тот же код с номерами
+# 2.0.0-1 (последний) и 1.0.0-14 (откат) — из каталога сборки build-deb.sh.
+# gzip -1: пакеты живут один прогон. В контейнер — каталогом /opt/github.
+rm -rf "$WORK/github" && mkdir -p "$WORK/github"
+for pkg in 2.0.0-1 1.0.0-14; do
+  stage=$WORK/stage-$pkg
+  rm -rf "$stage" && cp -a "$WORK/src/build/deb" "$stage"
+  sed -i "s/^Version: .*/Version: $pkg/" "$stage/DEBIAN/control"
+  sed -i "s/^  \"version\": \"[^\"]*\"/  \"version\": \"${pkg%-*}\"/" "$stage/opt/dsh-launcher/package.json"
+  grep -q "\"version\": \"${pkg%-*}\"" "$stage/opt/dsh-launcher/package.json" || { echo "версия в package.json не заменилась" >&2; exit 1; }
+  dpkg-deb --build --root-owner-group -Zgzip -z1 "$stage" "$WORK/github/dsh-launcher_${pkg}_amd64.deb" >/dev/null
+  rm -rf "$stage"
+done
 
 TARBALL=node-$NODE_VER-linux-x64.tar.xz
 if [ ! -f "$WORK/ctx/$TARBALL" ]; then
@@ -116,7 +123,6 @@ rm -f "$WORK/results"/*
 one() {
   local os=$1 sc=$2 extra=""
   [ "$sc" = launcher_update_denied ] && extra="-e POLKIT=no"
-  extra="$extra -e LATEST=$LATEST"
   # токен CI для запросов лаунчера к GitHub API (лимит 5000/ч): -e ИМЯ — значение
   # docker берёт из окружения, в командную строку оно не попадает
   [ -n "${DSH_LAUNCHER_GITHUB_TOKEN:-}" ] && extra="$extra -e DSH_LAUNCHER_GITHUB_TOKEN"
@@ -125,7 +131,7 @@ one() {
   # pytest (сам он как PID 1 сигналы без обработчика не получает).
   # Если и так не завершился — kill клиента и docker rm -f.
   timeout -k 30 600 docker run --rm --init --name "$name" --shm-size=1g \
-    --security-opt seccomp=unconfined $extra -v "$WORK/results:/results" \
+    --security-opt seccomp=unconfined $extra -v "$WORK/results:/results" -v "$WORK/github:/opt/github:ro" \
     dshl-test:$os python3 -m pytest -p no:cacheprovider -q -rf --tb=short --color=no \
     --rootdir /opt/t /opt/t/tests --scenario "$sc" --junitxml "/results/$os-$sc.xml" \
     >"$WORK/results/$os-$sc.log" 2>&1
@@ -135,7 +141,7 @@ one() {
   echo "$([ $rc -eq 0 ] && echo PASS || echo "FAIL") $os $sc"
 }
 [ -n "${GITHUB_TOKEN:-}" ] && export DSH_LAUNCHER_GITHUB_TOKEN="$GITHUB_TOKEN"
-export -f one; export WORK LATEST
+export -f one; export WORK
 echo ">> сценарии (параллельно: $JOBS)"
 for os in $OSES; do for sc in $SCENARIOS; do echo "$os $sc"; done; done \
   | xargs -P "$JOBS" -L 1 bash -c 'one $0 $1' | tee "$WORK/results/summary.txt"

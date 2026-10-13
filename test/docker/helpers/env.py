@@ -24,10 +24,16 @@ NO_PROMPTS = {'DSH_LAUNCHER_FAKE_LAUNCHER_LATEST': '1.0.0',         # прове
 # импорте — дочерние процессы теста его не наследуют; лаунчеру передаётся явно.
 GITHUB_TOKEN = os.environ.pop('DSH_LAUNCHER_GITHUB_TOKEN', '')
 
-# Пакет лаунчера в образе собран версией 1.1.0-1 — «старее» любого релиза.
+# Подставной GitHub (fakes/github.py, helpers/github.py): лаунчер берёт список
+# релизов и .deb у него (кроме сценариев прокси — те ходят к настоящему).
+GITHUB_API = 'http://127.0.0.1:8765'
+
+# Пакет лаунчера в образе собран версией 1.1.0-1 — «старее» последнего релиза.
 INSTALLED = '1.1.0-1'
-# Последний релиз лаунчера на GitHub (передаёт run.sh): тег vX.Y.Z → пакет X.Y.Z-1.
-LATEST = os.environ.get('LATEST', '')
-LATEST_PKG = LATEST if '-' in LATEST else f'{LATEST}-1'
+# Последний релиз в подставном GitHub: тег v2.0.0 → пакет 2.0.0-1 (из текущего
+# кода, собирает run.sh). ROLLBACK — старый релиз с .deb, на него откатываются.
+LATEST = '2.0.0'
+LATEST_PKG = f'{LATEST}-1'
+ROLLBACK = '1.0.0-14'
 LATEST_RE = re.escape(LATEST)
 LATEST_DEB = f'dsh-launcher_{LATEST_PKG}_amd64.deb'

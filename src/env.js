@@ -13,6 +13,15 @@ const { effectiveConfig } = require('./config');
 // его не унаследуют dsh, npm и плагины. Значение нигде не печатается.
 const GITHUB_TOKEN = process.env.DSH_LAUNCHER_GITHUB_TOKEN || '';
 delete process.env.DSH_LAUNCHER_GITHUB_TOKEN;
+// Только для тестов (Docker): подставной GitHub API на этой машине
+// (test/docker/fakes/github.py) — релизы и .deb без настоящего GitHub.
+/* ===== githubApiBase (чистая функция, тест test/parsing.js) =====
+   Принимается только http://127.0.0.1:<порт>, иначе — настоящий GitHub. */
+function githubApiBase(v) {
+  return /^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(String(v || '')) ? v : 'https://api.github.com';
+}
+/* ===== end githubApiBase ===== */
+const GITHUB_API = githubApiBase(process.env.DSH_LAUNCHER_GITHUB_API);
 // «Обновить сейчас» (окно обновления во время работы) перезапускает лаунчер с
 // этой переменной: новый экземпляр сразу ставит обновление, без вопроса.
 const UPDATE_NOW = /^(launcher|dsh)$/.test(process.env.DSH_LAUNCHER_UPDATE_NOW || '') ? process.env.DSH_LAUNCHER_UPDATE_NOW : null;
@@ -67,6 +76,6 @@ const LANG_FORCED = (() => {
 })();
 
 module.exports = {
-  GITHUB_TOKEN, UPDATE_NOW, INSTALL_VERSION, SETTINGS_FILE, loadSettings, CONFIG, DSH_BIN_DEFAULT, DSH_BIN_EXPLICIT, DSH_ARGS, CWD,
+  GITHUB_TOKEN, GITHUB_API, UPDATE_NOW, INSTALL_VERSION, SETTINGS_FILE, loadSettings, CONFIG, DSH_BIN_DEFAULT, DSH_BIN_EXPLICIT, DSH_ARGS, CWD,
   HOST, PORT, PLAIN_URL, START_TIMEOUT, LOG_DIR, LOG_FILE, LAUNCHER_LOG_FILE, MAX_LOG_BYTES, LANG_FORCED,
 };

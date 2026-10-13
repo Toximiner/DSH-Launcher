@@ -138,4 +138,15 @@ assert.strictEqual(proxyUrlFromRule('proxy p:1'), 'http://p:1', 'регистр 
   assert.strictEqual(v(null, 'dsh-launcher'), null, 'нет файла');
 }
 
+// ---- githubApiBase: подставной GitHub API — только http://127.0.0.1:<порт> ----
+{
+  const g = extract('githubApiBase');
+  const real = 'https://api.github.com';
+  assert.strictEqual(g('http://127.0.0.1:8765'), 'http://127.0.0.1:8765', 'локальный подставной');
+  for (const v of [undefined, '', 'http://127.0.0.1', 'http://127.0.0.1:8765/', 'https://127.0.0.1:8765',
+    'http://localhost:8765', 'http://10.0.0.1:8765', 'http://127.0.0.1:8765@evil.example', 'http://127.0.0.1.evil.example:80']) {
+    assert.strictEqual(g(v), real, `не принимается: ${v}`);
+  }
+}
+
 console.log('OK: parsing — все проверки прошли');

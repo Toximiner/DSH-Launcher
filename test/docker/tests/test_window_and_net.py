@@ -4,6 +4,7 @@ import re
 import subprocess
 
 from helpers.env import CONF, FAKE, NO_PROMPTS, NOUPD, PROXY, PROXY_LOG
+from helpers.github import github_log
 from helpers.procs import as_tester, dsh_tree_alive, dsh_tree_gone, fakedsh_events, fakedsh_starts, wait_for
 
 
@@ -57,7 +58,8 @@ def test_proxy(start, gui):
     subprocess.Popen(f'runuser -u tester -- python3 {PROXY} 3129 >/dev/null 2>&1', shell=True)
     assert wait_for(lambda: os.path.exists(PROXY_LOG) and 'listening' in open(PROXY_LOG).read(), 5, 0.25), 'прокси запущен'
     url = 'http://127.0.0.1:3129'
-    launcher = start(FAKE, NO_PROMPTS, HTTPS_PROXY=url, https_proxy=url, HTTP_PROXY=url, http_proxy=url)
+    launcher = start(FAKE, NO_PROMPTS, HTTPS_PROXY=url, https_proxy=url, HTTP_PROXY=url, http_proxy=url,
+                     DSH_LAUNCHER_GITHUB_API=None)  # настоящий GitHub: проверяем туннель к нему
     gui.wait()  # localhost — мимо прокси
 
     assert launcher.wait_log('последний @deepseek-ai/dsh', 30), 'проверка обновлений npm прошла'
@@ -71,16 +73,11 @@ def test_releases_cache(start, gui):
     """Список релизов GitHub запоминается с меткой ETag: следующий запуск
     спрашивает с If-None-Match — 304 «не изменилось» (лимит GitHub не
     расходуется, новый релиз виден сразу); GitHub недоступен — список из
-    кэша (если он не старше часа)."""
-    if os.path.exists(PROXY_LOG):
-        os.remove(PROXY_LOG)
-    subprocess.Popen(f'runuser -u tester -- python3 {PROXY} 3129 >/dev/null 2>&1', shell=True)
-    assert wait_for(lambda: os.path.exists(PROXY_LOG) and 'listening' in open(PROXY_LOG).read(), 5, 0.25), 'прокси запущен'
-    proxy = lambda url: {'HTTPS_PROXY': url, 'https_proxy': url, 'HTTP_PROXY': url, 'http_proxy': url}
-    github = lambda: open(PROXY_LOG).read().count('CONNECT api.github.com:443')
+    кэша (если он не старше часа). GitHub — подставной: запросы видны в его логе."""
+    github = lambda: github_log().count('/releases?per_page=100 ')
 
     for run in (1, 2):
-        launcher = start(FAKE, NO_PROMPTS, proxy('http://127.0.0.1:3129'))
+        launcher = start(FAKE, NO_PROMPTS)
         gui.wait()
         assert launcher.wait_log('последний dsh-launcher', 30), f'запуск {run}: проверка обновлений лаунчера прошла'
         assert launcher.wait_log('последний @deepseek-ai/dsh', 30), f'запуск {run}: проверка dsh прошла'
@@ -88,9 +85,10 @@ def test_releases_cache(start, gui):
             assert 'релизы GitHub: не изменились (304' in launcher.log(), 'второй запуск — 304 по метке ETag'
         launcher.term()
     assert github() == 2, f'GitHub спрошен при каждом запуске ({github()})'
+    assert github_log().count('/releases?per_page=100 304') == 1, 'второй раз — 304'
 
-    # GitHub недоступен (прокси не отвечает) — список из недавнего кэша
-    launcher = start(FAKE, NO_PROMPTS, proxy('http://127.0.0.1:3199'))
+    # GitHub недоступен (на порту никого) — список из недавнего кэша
+    launcher = start(FAKE, NO_PROMPTS, DSH_LAUNCHER_GITHUB_API='http://127.0.0.1:8799')
     gui.wait()
     assert launcher.wait_log('— список из кэша', 30), launcher.log()[-1500:]
     assert launcher.wait_log('последний dsh-launcher', 10), 'проверка лаунчера — по кэшу'

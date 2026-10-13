@@ -16,6 +16,7 @@ import pytest
 
 from helpers.cdp import Driver
 from helpers.env import FAKEDSH_LOG, STATE
+from helpers.github import DEBS, PORT, RELEASES, SERVER, github_log, releases, write_releases
 from helpers.launcher import Launcher, launcher_log, launcher_pids
 from helpers.procs import as_tester, fakedsh_events, pgrep, sh, wait_for
 from helpers.windows import Gui, UpdatePrompt
@@ -69,6 +70,10 @@ def container_env(request):
     as_tester('mkdir -p ~/.config/dsh-launcher && echo \'{"dontAsk":true}\' > ~/.config/dsh-launcher/market-prompt.json')
     if os.path.exists(FAKEDSH_LOG):
         os.remove(FAKEDSH_LOG)
+    # Подставной GitHub: список релизов и .deb (сценарий может подменить список).
+    write_releases(releases())
+    subprocess.Popen(f'runuser -u tester -- python3 {SERVER} {PORT} {RELEASES} {DEBS} >/tmp/github.out 2>&1', shell=True)
+    assert wait_for(lambda: 'listening' in github_log(), 5, 0.1), 'подставной GitHub не запустился'
     yield
 
 
