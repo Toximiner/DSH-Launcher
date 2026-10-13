@@ -21,6 +21,10 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
   repository: every refusal, `--no-commit`, the commit and tag); new unit test
   cases — prerelease version order, settings validation, “What's new”, why
   the GPU is disabled.
+- New Docker scenarios: the marketplace plugin prompt (install together with
+  pnpm, a failed install, “Don't ask again”), the “Token required” page with
+  pasting a token, “Failed to start dsh” and switching to the GUI once dsh
+  comes up after all.
 
 ## [1.15.5] — 2026-10-13
 

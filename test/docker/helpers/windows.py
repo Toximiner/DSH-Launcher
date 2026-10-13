@@ -403,3 +403,25 @@ class UpdatePrompt:
 
     def recheck(self):
         self.drv.go('dshlauncher://update/recheck/')
+
+
+class MarketPrompt(UpdatePrompt):
+    """Вопрос «Установить dshmarket?» (служебная страница главного окна)."""
+
+    def install(self):
+        self.drv.go('dshlauncher://market/install/')
+
+    def skip(self):
+        self.drv.go('dshlauncher://market/skip/')
+
+    def never(self):
+        self.drv.go('dshlauncher://market/never/')
+
+
+class PastePage(UpdatePrompt):
+    """«Нужен токен»: dsh уже запущен, а у окна нет сессионного куки."""
+
+    def paste(self, value):
+        """Вставить ссылку или токен в поле и нажать Enter — как пользователь."""
+        self.drv.eval(f"(() => {{ const el = document.getElementById('u'); el.value = {json.dumps(value)};"
+                      " el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); return 1; })()")
