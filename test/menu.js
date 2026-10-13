@@ -273,6 +273,7 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
   assert.deepStrictEqual(g({ ...base, markerAgeMs: 1000 }), { on: true, reason: null, marker: true, daysLeft: 30 }, 'падал в этой сессии — отключится со следующего');
   assert.strictEqual(g({ ...base, markerAgeMs: 31 * DAY }).marker, false, 'маркер старше 30 дней не действует');
   assert.strictEqual(g({ ...base, noGpuRequested: true, disabledByMarker: true }).reason, 'env', 'переменная окружения важнее маркера');
+  assert.strictEqual(g({ ...base, noGpuRequested: true, noGpuBySettings: true }).reason, 'setting', 'отключено в «Настройках»');
   assert.strictEqual(g({ ...base, hasRenderNode: false }).reason, 'norender', 'нет render-узлов');
   assert.strictEqual(g({ ...base, hasEgl: false }).reason, 'noegl', 'нет EGL');
 }
@@ -284,6 +285,7 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
     ['replace', 'replace', 'replace', 'replace', 'replace', 'addWord', '|', 'cut', 'copy', 'paste', '|', 'selectAll'],
     'слово с ошибкой: до 5 вариантов и «Добавить в словарь» первой группой');
   assert.deepStrictEqual(acts(ctx({ ...word, dictionarySuggestions: [] })).slice(0, 2), ['none-', 'addWord'], 'вариантов нет — неактивный пункт');
+  assert.deepStrictEqual(acts(ctx({ ...word, dictionarySuggestions: undefined })).slice(0, 2), ['none-', 'addWord'], 'списка вариантов нет вовсе — так же');
   const env = fakeEnv();
   const replaced = []; const added = [];
   env.win.webContents.replaceMisspelling = (w) => replaced.push(w);

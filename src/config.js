@@ -82,7 +82,7 @@ function settingValue(key, raw) {
       return { value: n };
     }
     case 'profile':
-      if (!/^[\w.-]+$/.test(v)) return { error: tr('Профиль — латинские буквы, цифры, «.», «_», «-».', 'The profile may contain Latin letters, digits, “.”, “_”, “-”.') };
+      if (!/^[\w.-]+$/.test(v) || /^\.+$/.test(v)) return { error: tr('Профиль — латинские буквы, цифры, «.», «_», «-».', 'The profile may contain Latin letters, digits, “.”, “_”, “-”.') };
       return { value: v };
     case 'dshPath':
     case 'cwd':

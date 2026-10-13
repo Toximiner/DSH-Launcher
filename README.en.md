@@ -409,7 +409,12 @@ Xvfb (the `wayland_*` scenarios — under a headless weston, on Ubuntu 26.04
 only); the window is driven over the Chromium debugging protocol (CDP). Needs
 Docker, a downloaded Electron and network access. Only some scenarios:
 `test/docker/run.sh close find`, only one system: `OSES=26.04`. Logs and
-JUnit reports go to `test/docker/.work/results/`.
+JUnit reports go to `test/docker/.work/results/`. In the scenarios the
+launcher records coverage of its own code (`NODE_V8_COVERAGE` of the Electron
+main process); across all scenarios `run.sh` builds a c8 report —
+`results/coverage.txt` and HTML in `test/docker/.work/coverage/`, in CI — in
+the Summary tab of the `docker-tests` run. This covers all of `main.js` and
+`src/`, not only the pure functions like `npm run coverage`.
 
 In CI `npm test` runs before every package build and on every PR (a failing
 test blocks the release), and the Docker scenarios are a separate `docker-tests` workflow,

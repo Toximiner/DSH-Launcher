@@ -65,7 +65,14 @@ const HOME = '/home/u';
 assert.deepStrictEqual(settingValue('port', ' 3090 '), { value: 3090 }, 'порт');
 for (const bad of ['80', '70000', 'abc', '', '30.5']) assert.ok(settingValue('port', bad).error, `порт «${bad}» — ошибка`);
 assert.deepStrictEqual(settingValue('profile', 'my-profile_2.0'), { value: 'my-profile_2.0' }, 'профиль');
-for (const bad of ['', 'a b', 'x;rm -rf', '../etc']) assert.ok(settingValue('profile', bad).error, `профиль «${bad}» — ошибка`);
+for (const bad of ['', 'a b', 'x;rm -rf', '../etc', '.', '..', '...']) assert.ok(settingValue('profile', bad).error, `профиль «${bad}» — ошибка`);
+assert.deepStrictEqual(settingValue('profile', '.web'), { value: '.web' }, 'профиль с точкой в начале — можно');
+assert.ok(settingValue('port', null).error && settingValue('port', undefined).error, 'порт: нет значения — ошибка');
+for (const [k, ok, bad] of [['gpu', 'off', 'on'], ['ozone', 'x11', 'xorg'], ['lang', 'en', 'de'], ['spellcheck', 'false', 'no']]) {
+  assert.ok(!settingValue(k, ok).error, `${k}: «${ok}» — можно`);
+  assert.strictEqual(settingValue(k, bad).error, 'bad value', `${k}: «${bad}» — ошибка`);
+}
+assert.ok(/unknown setting/.test(settingValue('nope', 'x').error), 'неизвестная настройка');
 assert.deepStrictEqual(settingValue('dshPath', '/usr/local/bin/dsh'), { value: '/usr/local/bin/dsh' }, 'путь');
 assert.deepStrictEqual(settingValue('dshPath', ''), { value: '' }, 'пустой путь — «авто»');
 assert.ok(settingValue('cwd', 'relative/dir').error, 'относительная папка — ошибка');

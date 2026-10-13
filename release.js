@@ -54,7 +54,8 @@ function today(d = new Date()) {
 }
 /* ===== end release ===== */
 
-function main(argv) {
+// root — каталог репозитория (тест test/release.js — временный репозиторий)
+function main(argv, root = __dirname) {
   const args = argv.slice(2);
   const commit = !args.includes('--no-commit');
   const di = args.indexOf('--date');
@@ -62,7 +63,6 @@ function main(argv) {
   const version = args.find((a, i) => !a.startsWith('--') && (di < 0 || i !== di + 1));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date || ''))) throw new Error(`дата «${date}» не в формате ГГГГ-ММ-ДД`);
 
-  const root = __dirname;
   const file = (n) => path.join(root, n);
   const read = (n) => fs.readFileSync(file(n), 'utf8');
   const git = (...a) => execFileSync('git', a, { cwd: root, encoding: 'utf8' }).trim();
@@ -106,4 +106,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { checkVersion, releaseChangelog, setControlVersion, setJsonVersion, today };
+module.exports = { main, checkVersion, releaseChangelog, setControlVersion, setJsonVersion, today };

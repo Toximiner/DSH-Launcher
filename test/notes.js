@@ -64,6 +64,8 @@ assert.deepStrictEqual(vers(notesBetween([{ version: '1.5.1-2', body: '' }, ...r
 // ---- mdToHtml ----
 assert.strictEqual(mdToHtml('### Fixed'), '<h4>Fixed</h4>', 'заголовок');
 assert.strictEqual(mdToHtml('- one\n- two'), '<ul><li>one</li><li>two</li></ul>', 'список');
+assert.strictEqual(mdToHtml('Intro\n- a\n- b\nafter'), '<p>Intro</p><ul><li>a</li><li>b</li></ul><p>after</p>',
+  'список сразу после абзаца и абзац сразу после списка — без пустых строк');
 assert.strictEqual(mdToHtml('- **Bold** item\n  continued here\n- next'),
   '<ul><li><b>Bold</b> item continued here</li><li>next</li></ul>', 'перенос строки внутри пункта');
 assert.strictEqual(mdToHtml('use `npm i -g x` now'), '<p>use <code>npm i -g x</code> now</p>', 'код');

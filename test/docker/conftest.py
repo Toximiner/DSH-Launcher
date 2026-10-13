@@ -9,13 +9,15 @@ adopt_detached). `--list-scenarios` печатает все имена (run.sh �
 Окружение контейнера: system dbus, polkitd (правило «tester — разрешить /
 запретить» по POLKIT=yes|no), Xvfb; лаунчер — от tester с CDP на 9222.
 """
+import json
 import os
 import subprocess
+import uuid
 
 import pytest
 
 from helpers.cdp import Driver
-from helpers.env import FAKEDSH_LOG, STATE
+from helpers.env import FAKEDSH_LOG, STATE, V8_COVERAGE
 from helpers.github import DEBS, PORT, RELEASES, SERVER, github_log, releases, write_releases
 from helpers.launcher import Launcher, launcher_log, launcher_pids
 from helpers.procs import as_tester, fakedsh_events, pgrep, sh, wait_for
@@ -74,7 +76,31 @@ def container_env(request):
     write_releases(releases())
     subprocess.Popen(f'runuser -u tester -- python3 {SERVER} {PORT} {RELEASES} {DEBS} >/tmp/github.out 2>&1', shell=True)
     assert wait_for(lambda: 'listening' in github_log(), 5, 0.1), 'подставной GitHub не запустился'
+    as_tester(f'mkdir -p {V8_COVERAGE}')
     yield
+    collect_coverage()
+
+
+LAUNCHER_SRC = 'file:///opt/dsh-launcher/'
+
+
+def collect_coverage():
+    """Покрытие от процессов лаунчера (NODE_V8_COVERAGE) — в /results: только
+    его собственные файлы (main.js, src/), без Electron и других процессов
+    Node (npm, dsh). Отчёт по всем сценариям строит run.sh."""
+    if not os.path.isdir(V8_COVERAGE) or not os.path.isdir('/results'):
+        return
+    for name in os.listdir(V8_COVERAGE):
+        try:
+            with open(os.path.join(V8_COVERAGE, name)) as f:
+                result = json.load(f).get('result', [])
+        except (OSError, ValueError):
+            continue  # процесс убили посреди записи
+        own = [r for r in result if r.get('url', '').startswith(LAUNCHER_SRC)
+               and not r['url'].startswith(LAUNCHER_SRC + 'electron/')]
+        if own:
+            with open(f'/results/coverage-{uuid.uuid4().hex}.json', 'w') as f:
+                json.dump({'result': own}, f)
 
 
 # ---------------- фикстуры тестов ----------------

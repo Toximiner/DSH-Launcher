@@ -404,6 +404,11 @@ Docker-сценарии написаны на **pytest** (`test/docker/`):
 управляет протокол отладки Chromium (CDP). Нужны Docker, собранный Electron
 и сеть. Только часть сценариев: `test/docker/run.sh close find`, только одна
 система: `OSES=26.04`. Логи и отчёты JUnit — в `test/docker/.work/results/`.
+Лаунчер в сценариях пишет покрытие своего кода (`NODE_V8_COVERAGE`
+main-процесса Electron); по всем сценариям `run.sh` строит отчёт c8 —
+`results/coverage.txt` и HTML в `test/docker/.work/coverage/`, на CI — во
+вкладке Summary прогона `docker-tests`. Это покрытие всего `main.js` и `src/`,
+а не только чистых функций, как у `npm run coverage`.
 
 В CI `npm test` идёт перед каждой сборкой пакета и на каждый PR (упавший
 тест не даёт выпустить релиз), а Docker-сценарии — отдельный workflow `docker-tests`,

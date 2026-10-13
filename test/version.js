@@ -23,6 +23,18 @@ assert.strictEqual(compareDebianVer('weird', '1.0.0'), 0, 'debian: не расп
 assert.strictEqual(compareSemVer('0.2.0-rc.2', '0.2.0-rc.2'), 0, 'semver: равные');
 assert.ok(compareSemVer('0.2.0', '0.2.0-rc.2') > 0, 'semver: релиз > rc');
 assert.ok(compareSemVer('0.2.0-rc.2', '0.2.0') < 0, 'semver: rc < релиз');
+// порядок prerelease по semver: числа — как числа, короче — раньше, числа раньше слов
+assert.ok(compareSemVer('0.1.7-rc.2', '0.1.7-rc.10') < 0, 'semver: rc.2 < rc.10 (не по строке)');
+assert.ok(compareSemVer('0.1.7-rc.10', '0.1.7-rc.2') > 0, 'semver: rc.10 > rc.2');
+assert.ok(compareSemVer('1.0.0-rc', '1.0.0-rc.1') < 0, 'semver: короче — раньше');
+assert.ok(compareSemVer('1.0.0-rc.1', '1.0.0-rc') > 0, 'semver: длиннее — позже');
+assert.ok(compareSemVer('1.0.0-alpha', '1.0.0-beta') < 0, 'semver: alpha < beta');
+assert.ok(compareSemVer('1.0.0-beta', '1.0.0-alpha') > 0, 'semver: beta > alpha');
+assert.ok(compareSemVer('1.0.0-1', '1.0.0-alpha') < 0, 'semver: число раньше слова');
+assert.ok(compareSemVer('1.0.0-alpha', '1.0.0-1') > 0, 'semver: слово позже числа');
+assert.ok(compareSemVer('1.0.0-alpha.1', '1.0.0-alpha.beta') < 0, 'semver: alpha.1 < alpha.beta');
+assert.strictEqual(compareSemVer('x', '1.0.0'), 0, 'semver: не распознано → 0');
+assert.ok(compareSemVer('0.2.0-rc.2', '0.2.0') < 0, 'semver: rc < релиз');
 assert.ok(compareSemVer('0.2.1-rc.1', '0.2.0') > 0, 'semver: rc следующего upstream выше');
 assert.ok(compareSemVer('0.2.0-rc.10', '0.2.0-rc.2') > 0, 'semver: rc.10 > rc.2 (число, не строка)');
 assert.ok(compareSemVer('0.2.0-alpha', '0.2.0-1') > 0, 'semver: буквенный сегмент > числовой');

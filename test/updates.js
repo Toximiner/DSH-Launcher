@@ -41,6 +41,10 @@ console.log('OK: updatePollMs, announceUpdates — все проверки пр�
   assert.deepStrictEqual(rel('v1.2.0'), { version: '1.2.0', date: '2026-10-01', htmlUrl: 'https://x/v1.2.0', assetUrl: 'https://dl/v1.2.0', assetSha256: sha }, 'разбор релиза');
   assert.strictEqual(rel('v1.0.0', true, '').assetSha256, null, 'старый релиз без digest');
   assert.strictEqual(rel('v1.0.0', false).assetUrl, null, 'без .deb');
+  assert.deepStrictEqual(parseRelease({ tag_name: '1.3.0' }), { version: '1.3.0', date: null, htmlUrl: null, assetUrl: null, assetSha256: null },
+    'тег без «v», ни даты, ни ссылки, ни ассетов');
+  assert.strictEqual(parseRelease({ tag_name: 'v1.3.0', assets: [{ name: 'x.deb', browser_download_url: 'u', digest: 'sha256:' + 'A'.repeat(64) }] }).assetSha256,
+    'a'.repeat(64), 'digest в верхнем регистре — приводится к нижнему');
 
   const all = ['v1.12.0', 'v1.11.1', 'v1.11.0', 'v1.10.0', 'v1.9.0', 'v1.8.1', 'v1.8.0', 'v1.0.0-14'].map((t) => rel(t));
   assert.deepStrictEqual(rollbackCandidates(all, '1.11.1-1').map((r) => r.version), ['1.11.0', '1.10.0', '1.9.0', '1.8.1', '1.8.0'],

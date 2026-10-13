@@ -9,3 +9,4 @@ dsh.desktop
 # test/docker: сборка .deb, tarball Node, логи прогонов
 test/docker/.work/
 __pycache__/
+coverage/

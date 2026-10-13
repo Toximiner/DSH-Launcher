@@ -106,5 +106,8 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: docker-test-logs-${{ matrix.os }}
-          path: test/docker/.work/results/
+          # results/ — логи, JUnit, coverage.txt; coverage/ — HTML-отчёт покрытия
+          path: |
+            test/docker/.work/results/
+            test/docker/.work/coverage/
           if-no-files-found: ignore

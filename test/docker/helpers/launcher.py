@@ -3,7 +3,7 @@
 import subprocess
 import urllib.request
 
-from .env import GITHUB_API, GITHUB_TOKEN, HOME, LAUNCHER_OUT, ROUTE_KEY
+from .env import GITHUB_API, GITHUB_TOKEN, HOME, LAUNCHER_OUT, ROUTE_KEY, V8_COVERAGE
 from .procs import alive, sh, wait_exit, wait_for
 
 
@@ -48,7 +48,8 @@ class Launcher:
         base = {'HOME': HOME, 'USER': 'tester', 'LANG': 'C.UTF-8', 'DISPLAY': ':99',
                 'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
                 'DSH_LAUNCHER_GITHUB_API': GITHUB_API,  # None — настоящий GitHub
-                'DSH_LAUNCHER_ROUTE_KEY': ROUTE_KEY}
+                'DSH_LAUNCHER_ROUTE_KEY': ROUTE_KEY,
+                'NODE_V8_COVERAGE': V8_COVERAGE}
         if GITHUB_TOKEN:
             base['DSH_LAUNCHER_GITHUB_TOKEN'] = GITHUB_TOKEN
         base.update(env)

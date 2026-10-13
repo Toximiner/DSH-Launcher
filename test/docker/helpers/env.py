@@ -29,6 +29,11 @@ GITHUB_TOKEN = os.environ.pop('DSH_LAUNCHER_GITHUB_TOKEN', '')
 # в тестах задаём сами (DSH_LAUNCHER_ROUTE_KEY), драйвер подставляет его в адрес.
 ROUTE_KEY = secrets.token_hex(16)
 
+# Покрытие кода лаунчера сценариями: main-процесс Electron пишет его сюда
+# (NODE_V8_COVERAGE, при штатном выходе); conftest после сценария оставляет
+# только файлы лаунчера и кладёт в /results, отчёт строит run.sh (c8).
+V8_COVERAGE = '/tmp/v8-coverage'
+
 # Подставной GitHub (fakes/github.py, helpers/github.py): лаунчер берёт список
 # релизов и .deb у него (кроме сценариев прокси — те ходят к настоящему).
 GITHUB_API = 'http://127.0.0.1:8765'

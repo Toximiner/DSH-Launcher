@@ -10,7 +10,9 @@
 const assert = require('assert');
 const fs = require('fs');
 const path = require('path');
-const { checkVersion, releaseChangelog, setControlVersion, setJsonVersion, today } = require('../release');
+const os = require('os');
+const { execFileSync } = require('child_process');
+const { main, checkVersion, releaseChangelog, setControlVersion, setJsonVersion, today } = require('../release');
 
 // ---- checkVersion ----
 checkVersion('1.16.0', '1.15.1');
@@ -76,5 +78,74 @@ for (const n of ['CHANGELOG.md', 'CHANGELOG.en.md']) {
 
 // ---- today ----
 assert.strictEqual(today(new Date(2026, 0, 5)), '2026-01-05', 'дата с нулями');
+
+// ---- main: весь выпуск на временном git-репозитории ----
+{
+  // свой git без глобальных настроек пользователя (подпись коммитов, хуки …)
+  Object.assign(process.env, { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1',
+    GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' });
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dshl-release-'));
+  const git = (...a) => execFileSync('git', a, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+  const write = (n, t) => { fs.mkdirSync(path.dirname(path.join(dir, n)), { recursive: true }); fs.writeFileSync(path.join(dir, n), t); };
+  const read = (n) => fs.readFileSync(path.join(dir, n), 'utf8');
+  const json = (v) => JSON.stringify({ name: 'x', version: v }, null, 2) + '\n';
+  const lock = (v) => JSON.stringify({ name: 'x', version: v, lockfileVersion: 3, packages: { '': { name: 'x', version: v } } }, null, 2) + '\n';
+  const files = () => ['CHANGELOG.md', 'CHANGELOG.en.md', 'package.json', 'package-lock.json', 'deb/control'].map(read).join('\0');
+  const run = (...a) => main(['node', 'release.js', ...a], dir);
+  const quiet = (fn) => { const log = console.log; console.log = () => {}; try { return fn(); } finally { console.log = log; } };
+  try {
+    git('init', '-q', '-b', 'main');
+    write('CHANGELOG.md', CL);
+    write('CHANGELOG.en.md', CL);
+    write('package.json', json('1.15.1'));
+    write('package-lock.json', lock('1.15.1'));
+    write('deb/control', 'Package: x\nVersion: 1.15.1-1\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'init');
+
+    assert.throws(() => run('1.15.1'), /не выше/, 'та же версия');
+    assert.throws(() => run('1.16'), /X\.Y\.Z/, 'не X.Y.Z');
+    assert.throws(() => run('1.16.0', '--date', '13.10.2026'), /ГГГГ-ММ-ДД/, 'дата не ISO');
+    git('checkout', '-q', '-b', 'feature');
+    assert.throws(() => run('1.16.0'), /из main, а сейчас ветка feature/, 'не из main');
+    git('checkout', '-q', 'main');
+    write('dirty.txt', 'x');
+    assert.throws(() => run('1.16.0'), /незакоммиченные/, 'грязное дерево');
+    fs.unlinkSync(path.join(dir, 'dirty.txt'));
+    git('tag', 'v1.16.0');
+    assert.throws(() => run('1.16.0'), /тег v1\.16\.0 уже есть/, 'тег уже есть');
+    git('tag', '-d', 'v1.16.0');
+    // ошибка в одном файле — не меняется ни один
+    write('CHANGELOG.en.md', CL.replace('- Что-то.\n', ''));
+    git('commit', '-q', '-am', 'en: пустой Unreleased');
+    const snap = files();
+    assert.throws(() => run('1.16.0'), /пуст/, 'пустой Unreleased в CHANGELOG.en.md');
+    assert.strictEqual(files(), snap, 'при ошибке не изменён ни один файл (и CHANGELOG.md, проверенный первым)');
+    write('CHANGELOG.en.md', CL);
+    git('commit', '-q', '-am', 'en: снова с изменениями');
+    assert.strictEqual(git('log', '--oneline').split('\n').length, 3, 'отказы не создают коммитов');
+
+    // --no-commit: только файлы
+    quiet(() => run('1.16.0', '--no-commit', '--date', '2026-10-13'));
+    assert.ok(read('CHANGELOG.md').includes('## [1.16.0] — 2026-10-13'), '--no-commit: CHANGELOG');
+    assert.ok(git('status', '--porcelain'), '--no-commit: изменения не закоммичены');
+    assert.strictEqual(git('tag', '--list'), '', '--no-commit: тега нет');
+    git('checkout', '-q', '--', '.');
+
+    // выпуск: файлы, коммит и тег
+    quiet(() => run('--date', '2026-10-13', '1.16.0'));
+    assert.strictEqual(git('log', '-1', '--format=%s'), 'Версия 1.16.0', 'коммит «Версия X.Y.Z»');
+    assert.strictEqual(git('tag', '--list'), 'v1.16.0', 'тег vX.Y.Z');
+    assert.strictEqual(git('rev-parse', 'v1.16.0^{commit}'), git('rev-parse', 'HEAD'), 'тег — на коммите версии');
+    assert.strictEqual(git('status', '--porcelain'), '', 'всё закоммичено');
+    for (const n of ['CHANGELOG.md', 'CHANGELOG.en.md']) assert.ok(read(n).includes('## [1.16.0] — 2026-10-13\n\n### Исправлено'), `${n}: раздел версии`);
+    assert.strictEqual(JSON.parse(read('package.json')).version, '1.16.0', 'package.json');
+    assert.strictEqual(JSON.parse(read('package-lock.json')).packages[''].version, '1.16.0', 'package-lock.json');
+    assert.ok(read('deb/control').includes('Version: 1.16.0-1'), 'deb/control');
+    assert.throws(() => run('1.16.1'), /нет раздела/, 'второй выпуск без нового Unreleased — отказ');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 console.log('OK: release — все проверки прошли');

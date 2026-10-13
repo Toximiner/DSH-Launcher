@@ -159,4 +159,23 @@ done
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
   python3 "$HERE/summary.py" "$WORK/results" >>"$GITHUB_STEP_SUMMARY" || true
 fi
+
+# Покрытие кода лаунчера сценариями (conftest.py: coverage-*.json от
+# main-процесса). Пути пакета /opt/dsh-launcher/ → файлы репозитория (пакет
+# собран из них же), отчёт — c8: test/docker/.work/coverage/ (HTML) и
+# coverage.txt; на CI — в Summary. Без c8 (npm install не делали) — пропуск.
+if ls "$WORK/results"/coverage-*.json >/dev/null 2>&1 && [ -x "$ROOT/node_modules/.bin/c8" ]; then
+  rm -rf "$WORK/v8" "$WORK/coverage" && mkdir -p "$WORK/v8"
+  for f in "$WORK/results"/coverage-*.json; do
+    sed "s#file:///opt/dsh-launcher/#file://$ROOT/#g" "$f" >"$WORK/v8/$(basename "$f")"
+  done
+  (cd "$ROOT" && node_modules/.bin/c8 report --temp-directory "$WORK/v8" --reports-dir "$WORK/coverage" \
+    --all --src . --include main.js --include 'src/**' \
+    --reporter text --reporter text-summary --reporter html) >"$WORK/results/coverage.txt" 2>&1 || true
+  echo ">> покрытие кода лаунчера сценариями ($(ls "$WORK/v8" | wc -l) процессов):"
+  grep -A6 '^=* Coverage summary' "$WORK/results/coverage.txt" || tail -5 "$WORK/results/coverage.txt"
+  if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    { echo "### Покрытие кода лаунчера сценариями ($OSES)"; echo '```'; cat "$WORK/results/coverage.txt"; echo '```'; } >>"$GITHUB_STEP_SUMMARY"
+  fi
+fi
 [ "$FAILED" -eq 0 ]

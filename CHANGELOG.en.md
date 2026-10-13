@@ -5,6 +5,23 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- The settings no longer accept `.` or `..` as the profile: the profile
+  directory would point at `~/.dsh` itself or above it.
+
+### Changed (internal)
+
+- The Docker scenarios measure coverage of the launcher's code
+  (`NODE_V8_COVERAGE` of the main process, c8 report) — in the Summary tab of
+  the `docker-tests` run.
+- A test of the whole `npm run release` (`main()` on a temporary git
+  repository: every refusal, `--no-commit`, the commit and tag); new unit test
+  cases — prerelease version order, settings validation, “What's new”, why
+  the GPU is disabled.
+
 ## [1.15.5] — 2026-10-13
 
 ### Security
