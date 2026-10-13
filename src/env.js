@@ -5,7 +5,9 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { effectiveConfig } = require('./config');
+const { validRouteKey } = require('./util');
 
 // Только для разработки и тестов (CI): токен GitHub для запроса списка
 // релизов — лимит 5000 запросов в час вместо 60 без авторизации. Читаем и
@@ -13,6 +15,12 @@ const { effectiveConfig } = require('./config');
 // его не унаследуют dsh, npm и плагины. Значение нигде не печатается.
 const GITHUB_TOKEN = process.env.DSH_LAUNCHER_GITHUB_TOKEN || '';
 delete process.env.DSH_LAUNCHER_GITHUB_TOKEN;
+// Ключ маршрутов dshlauncher://… (см. withRouteKey в util.js) — случайный на
+// каждый запуск. DSH_LAUNCHER_ROUTE_KEY — только для тестов (Docker): ключ
+// известен заранее, и драйвер окон ходит по маршрутам. Перезапущенный
+// экземпляр наследует переменную и тот же ключ.
+const ROUTE_KEY = validRouteKey(process.env.DSH_LAUNCHER_ROUTE_KEY)
+  ? process.env.DSH_LAUNCHER_ROUTE_KEY : crypto.randomBytes(16).toString('hex');
 // Только для тестов (Docker): подставной GitHub API на этой машине
 // (test/docker/fakes/github.py) — релизы и .deb без настоящего GitHub.
 /* ===== githubApiBase (чистая функция, тест test/parsing.js) =====
@@ -76,6 +84,6 @@ const LANG_FORCED = (() => {
 })();
 
 module.exports = {
-  GITHUB_TOKEN, GITHUB_API, UPDATE_NOW, INSTALL_VERSION, SETTINGS_FILE, loadSettings, CONFIG, DSH_BIN_DEFAULT, DSH_BIN_EXPLICIT, DSH_ARGS, CWD,
+  GITHUB_TOKEN, GITHUB_API, ROUTE_KEY, UPDATE_NOW, INSTALL_VERSION, SETTINGS_FILE, loadSettings, CONFIG, DSH_BIN_DEFAULT, DSH_BIN_EXPLICIT, DSH_ARGS, CWD,
   HOST, PORT, PLAIN_URL, START_TIMEOUT, LOG_DIR, LOG_FILE, LAUNCHER_LOG_FILE, MAX_LOG_BYTES, LANG_FORCED,
 };

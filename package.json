@@ -5,11 +5,12 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "eslint . && node test/version.js && node test/port.js && node test/menu.js && node test/pages.js && node test/parsing.js && node test/fs-helpers.js && node test/kill-targets.js && node test/http.js && node test/notes.js && node test/settings.js && node test/updates.js && node test/report.js && node test/agent.js && node test/release.js && node test/proc-log.js && node test/registry.js",
+    "test": "eslint . && node test/version.js && node test/port.js && node test/menu.js && node test/pages.js && node test/parsing.js && node test/fs-helpers.js && node test/kill-targets.js && node test/http.js && node test/notes.js && node test/settings.js && node test/updates.js && node test/report.js && node test/agent.js && node test/release.js && node test/proc-log.js && node test/registry.js && node test/markers.js",
     "icon": "node make-icon.js",
     "banner": "electron make-banner.js --no-sandbox",
     "lint": "eslint .",
-    "release": "node release.js"
+    "release": "node release.js",
+    "coverage": "node --test --experimental-test-coverage test/*.js"
   },
   "license": "MIT",
   "devDependencies": {

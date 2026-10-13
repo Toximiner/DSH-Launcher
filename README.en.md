@@ -158,6 +158,16 @@ A small Electron app: a window that opens **DeepSeek Harness**
   own pages: in a text field “Cut”, “Copy”, “Paste”, “Select all”; on
   selected text — “Copy”; on a link — “Copy link address”. Labels follow the
   window language.
+- **Protection from foreign pages in the window.** The dsh GUI shows model
+  output and plugin UIs, so:
+  - launcher commands (`dshlauncher://…`: settings, updates, restart) are
+    accepted only from the launcher's own pages — their links carry a random
+    key, new on every launch; a request without the key is rejected (a line
+    in the log);
+  - a link to another site opens in the system browser, not in the window;
+  - browser permissions — only clipboard writes and fullscreen; microphone,
+    camera, geolocation, notifications are denied (the log says which
+    permission and for which page).
 
 ## System requirements
 
@@ -356,9 +366,14 @@ restarts, shutdown. Everything else is in `src/` modules:
 | `updates.js`, `updates-live.js`, `whats-new.js`, `updates-logic.js`, `versions.js`, `notes.js` | updates at startup and while running, “What’s new”, versions, release notes |
 | `dialogs.js`, `settings-window.js`, `dsh-log.js`, `diagnostics.js` | dialog windows, Settings, the dsh log, the report and the crash notice |
 | `menus.js`, `view.js`, `file-help.js`, `window-state.js`, `tray.js` | menus, “View” and find, “File/Help”, window size, tray |
-| `util.js`, `system.js`, `ui.js` | pure functions: argument parsing, processes and ports, menu items, shortcuts |
+| `util.js`, `system.js`, `ui.js` | pure functions: argument parsing, route key, processes and ports, menu items, shortcuts |
+| `guard.js`, `proc-log.js`, `prefs.js` | window protection (navigation, permissions), commands with a live log, settings files |
 
-The pure functions are covered by unit tests (`test/*.js`). Modules require
+The pure functions are covered by unit tests (`test/*.js`). Functions from
+modules that need electron are taken by the tests from the source text by
+marker blocks `/* ===== name (тест test/X.js) */` … `/* ===== end name ===== */`;
+`test/markers.js` checks that each block has its pair, the name is unique and
+the named test exists and checks that function. Modules require
 each other as usual and call `pages.showPage()` and the like; shared state
 is `state.<field>`. Stateful modules extend their `module.exports` instead of
 replacing it, so cycles between them don't get in the way. The few things
@@ -368,6 +383,7 @@ that live in `main.js` reach modules through the `launcher.<name>` registry.
 
 ```sh
 npm test            # static check (ESLint) and unit tests of the src/ modules (test/*.js)
+npm run coverage    # unit test coverage (also in CI — the build's Summary tab)
 npm run lint        # ESLint only: unknown names, unused imports and the like
 test/docker/run.sh  # scenarios of the installed .deb in Docker: Ubuntu 24.04, 26.04, Debian 13
 ```

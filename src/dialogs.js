@@ -2,6 +2,7 @@
 // Окно-диалог поверх главного: открытие, содержимое, закрытие, «О программе», «Проверить обновления…».
 const { WebContentsView, shell, clipboard } = require('electron');
 const os = require('os');
+const { guardNavigation } = require('./guard');
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
@@ -51,6 +52,7 @@ function openDialog(title) {
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
+  guardNavigation(wc); // ссылка без target=_blank — тоже в браузере, не в слое
   wc.on('context-menu', (_e, params) => menus.showContextMenu(params, state.win, wc));
   wc.on('before-input-event', (e, input) => {
     if (input.type === 'keyDown' && input.key === 'Escape') { e.preventDefault(); closeDialog(); }

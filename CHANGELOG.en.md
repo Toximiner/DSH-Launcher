@@ -5,6 +5,30 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Security
+
+- **Launcher commands are accepted only from its own pages.** Before, any page
+  in the window — the dsh GUI with model output, a plugin UI or a site opened
+  from a link — could navigate to `dshlauncher://…` and, for example, change
+  the dsh path in the settings and restart the launcher. Now the launcher's
+  page links carry a random key, new on every launch; a request without the
+  key is rejected and logged.
+- **A link to another site opens in the system browser**, not in the window
+  (before, only links opening a new tab did).
+- **Only the browser permissions that are needed:** clipboard writes and
+  fullscreen. Microphone, camera, geolocation and notifications are denied
+  (before, Electron silently granted them to any page).
+- A token in the `Authorization` header is not sent to another address on a
+  redirect.
+
+### Changed (internal)
+
+- `npm run coverage` — unit test coverage report (in CI — the build's Summary
+  tab); `test/markers.js` checks the marker blocks of functions the tests take
+  from module source.
+
 ## [1.15.4] — 2026-10-13
 
 ### Fixed

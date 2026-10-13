@@ -159,6 +159,17 @@ jobs:
         # останавливает сборку — пакет и релиз не выйдут.
         run: npm test
 
+      - name: Unit test coverage
+        # Отчёт о покрытии модулей, которые тесты подключают напрямую (функции
+        # в блоках-маркеров проверяет test/markers.js) — во вкладку Summary.
+        run: |
+          {
+            echo '### Покрытие юнит-тестами'
+            echo '```'
+            npm run -s coverage 2>&1 | sed -n '/start of coverage report/,/end of coverage report/p' | sed 's/^ℹ //'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Download Electron binary
         # Electron 44+ не скачивает бинарник из postinstall — только вручную
         run: npx install-electron

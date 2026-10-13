@@ -27,14 +27,15 @@ const path = require('path');
 const state = require('./src/state'); // общее состояние (окно, процесс dsh, флаги)
 const i18n = require('./src/i18n');
 const { tr } = i18n;
-const { esc, launcherRoute } = require('./src/util');
+const { esc, launcherRoute, stripRouteKey } = require('./src/util');
 const { runWithLiveLog } = require('./src/proc-log');
+const { guardNavigation, restrictPermissions } = require('./src/guard');
 const { envWithBinDir } = require('./src/system');
 const { WIN_MIN, keyAction, isAltKey, windowSize } = require('./src/ui');
 
 // Параметры запуска и журнал лаунчера — первыми: env.js убирает токен CI из
 // окружения, log.js начинает писать launcher.log.
-const { CONFIG, DSH_BIN_DEFAULT, DSH_ARGS, HOST, PORT, PLAIN_URL, START_TIMEOUT, LOG_DIR, LANG_FORCED } = require('./src/env');
+const { CONFIG, DSH_BIN_DEFAULT, DSH_ARGS, HOST, PORT, PLAIN_URL, START_TIMEOUT, LOG_DIR, LANG_FORCED, ROUTE_KEY } = require('./src/env');
 const { startLauncherLog } = require('./src/log');
 startLauncherLog();
 const { launchDsh } = require('./src/launch');
@@ -325,9 +326,9 @@ function startWatchdog() {
 // склеиваем обратно: dshlauncher://install/run/ -> '/install/run/'.
 
 
-function onPasteRequest(request) {
+function onPasteRequest(route) {
   try {
-    const pasted = decodeURIComponent(launcherRoute(request.url).replace(/^\/paste\//, ''));
+    const pasted = decodeURIComponent(route.replace(/^\/paste\//, ''));
     if (/^https?:\/\//i.test(pasted) && state.win && !state.win.isDestroyed()) {
       console.log('[launcher] loading pasted URL');
       state.win.loadURL(pasted).catch((e) => console.error('[launcher] loadURL:', e.message));
@@ -482,9 +483,17 @@ async function onReady() {
   if (CONFIG.pollUpdates) setUpdatePolling(true);
   if (closeToTrayOn()) setTray(true);
   setInterval(() => { void pollAgentState(); }, AGENT_POLL_MS);
+  restrictPermissions(); // до первого окна
   protocol.handle('dshlauncher', (request) => {
+    let route;
     try {
-      const route = launcherRoute(request.url);
+      // Без ключа запуска — не со страницы лаунчера (GUI dsh, плагин, внешний
+      // сайт в окне): ничего не делаем. В журнал — только путь, без параметров.
+      route = stripRouteKey(launcherRoute(request.url), ROUTE_KEY);
+      if (route === null) {
+        console.error(`[launcher] dshlauncher: запрос без ключа запуска — отклонён: ${launcherRoute(request.url).slice(0, 80)}`);
+        return noContentResponse();
+      }
       if (route.startsWith('/retry/')) return onRetryRequest();
       if (route.startsWith('/lang/')) return onLangSwitch(route.split('/')[2]);
       if (route.startsWith('/install/copy/')) return onInstallCopy();
@@ -532,8 +541,8 @@ async function onReady() {
       if (route.startsWith('/menu/restart-dsh/')) { void restartDsh({ confirm: false }); return noContentResponse(); }
       if (route.startsWith('/dialog/close/')) return onDialogClose();
       if (route.startsWith('/dialog/copy/')) return onDialogCopy();
-    } catch { /* noop */ }
-    return onPasteRequest(request);
+    } catch { return blankResponse(); } // как раньше: сбой обработчика — пустая страница
+    return onPasteRequest(route);
   });
 
   const size = windowSize(loadWindowState(), screen.getPrimaryDisplay().workAreaSize);
@@ -560,6 +569,7 @@ async function onReady() {
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
+  guardNavigation(state.win.webContents, { gui: true }); // чужие сайты — в браузере
   // Правый клик — контекстное меню (копировать / вставить …): своего у
   // Electron нет. И в GUI dsh, и на служебных страницах лаунчера.
   state.win.webContents.on('context-menu', (_e, params) => showContextMenu(params));

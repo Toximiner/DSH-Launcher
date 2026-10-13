@@ -63,6 +63,24 @@ function launcherRoute(url) {
   return '/' + u.host + u.pathname;
 }
 
+// Ключ маршрутов: команды dshlauncher://… принимаются только со страниц самого
+// лаунчера. Каждый запуск — свой случайный ключ (env.js, ROUTE_KEY); страницы
+// лаунчера получают его в каждой ссылке (withRouteKey: dshlauncher://<ключ>/…),
+// а GUI dsh, плагины и внешние сайты в окне его не знают — их запросы
+// stripRouteKey отбрасывает (null).
+function withRouteKey(html, key) {
+  return String(html).split('dshlauncher://').join(`dshlauncher://${key}/`);
+}
+
+function stripRouteKey(route, key) {
+  const p = `/${key}/`;
+  return validRouteKey(key) && String(route).startsWith(p) ? route.slice(p.length - 1) : null;
+}
+
+function validRouteKey(key) {
+  return /^[0-9a-f]{32,}$/.test(String(key || ''));
+}
+
 function redactLog(text) {
   return String(text || '')
     // eslint-disable-next-line no-control-regex -- ESC: убираем цветовые коды терминала
@@ -74,4 +92,4 @@ function redactLog(text) {
     .replace(/((?:api[_-]?key|apikey|secret|password|passwd|access[_-]?token|auth[_-]?token)["']?\s*[:=]\s*["']?)[^\s"'&,;]+/gi, '$1***');
 }
 
-module.exports = { splitArgs, firstErrLine, esc, profileFromArgs, timedCheck, launcherRoute, redactLog };
+module.exports = { splitArgs, firstErrLine, esc, profileFromArgs, timedCheck, launcherRoute, withRouteKey, stripRouteKey, validRouteKey, redactLog };

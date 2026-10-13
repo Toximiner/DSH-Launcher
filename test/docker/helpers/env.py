@@ -1,6 +1,7 @@
 """Пути, переменные окружения и версии, общие для всех сценариев."""
 import os
 import re
+import secrets
 
 T = '/opt/t'                                   # каталог тестов в контейнере
 HOME = '/home/tester'
@@ -23,6 +24,10 @@ NO_PROMPTS = {'DSH_LAUNCHER_FAKE_LAUNCHER_LATEST': '1.0.0',         # прове
 # Токен CI для запросов лаунчера к GitHub API: убираем из окружения pytest при
 # импорте — дочерние процессы теста его не наследуют; лаунчеру передаётся явно.
 GITHUB_TOKEN = os.environ.pop('DSH_LAUNCHER_GITHUB_TOKEN', '')
+
+# Ключ маршрутов dshlauncher://… (без него лаунчер команды не принимает):
+# в тестах задаём сами (DSH_LAUNCHER_ROUTE_KEY), драйвер подставляет его в адрес.
+ROUTE_KEY = secrets.token_hex(16)
 
 # Подставной GitHub (fakes/github.py, helpers/github.py): лаунчер берёт список
 # релизов и .deb у него (кроме сценариев прокси — те ходят к настоящему).

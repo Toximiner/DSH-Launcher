@@ -2,13 +2,14 @@
 // Обновления во время работы: проверка раз в 12 часов, плашка, пункт меню, «Обновить сейчас».
 const { WebContentsView, shell } = require('electron');
 const fs = require('fs');
+const { guardNavigation } = require('./guard');
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
-const { esc, timedCheck } = require('./util');
+const { esc, timedCheck, withRouteKey } = require('./util');
 const { compareDebianVer, compareSemVer, tagToPackageVersion, notesBetween } = require('./versions');
 const { updatePollMs, announceUpdates } = require('./updates-logic');
-const { LOG_DIR, LAUNCHER_LOG_FILE } = require('./env');
+const { LOG_DIR, LAUNCHER_LOG_FILE, ROUTE_KEY } = require('./env');
 const { probeDsh } = require('./dsh-install');
 const diagnostics = require('./diagnostics');
 const dialogs = require('./dialogs');
@@ -126,7 +127,7 @@ function toastPageUrl({ title, sub, buttons }) {
     ${buttons.map((b) => `<button onclick="location.href='${b.href}'">${esc(b.label)}</button>`).join('')}
     <button class="x" title="${esc(tr('Закрыть', 'Close'))}" onclick="location.href='dshlauncher://toast/close/'">&#10005;</button>
     </body></html>`;
-  return 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+  return 'data:text/html;charset=utf-8,' + encodeURIComponent(withRouteKey(html, ROUTE_KEY));
 }
 
 function updateToastUrl(kinds) {
@@ -159,6 +160,7 @@ function showToast(url) {
   closeUpdateToast();
   toastView = new WebContentsView({ webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: false } });
   toastView.setBackgroundColor('#00000000');
+  guardNavigation(toastView.webContents);
   toastView.webContents.loadURL(url).catch(() => {});
   state.win.contentView.addChildView(toastView);
   if (!toastResizeHooked) { state.win.on('resize', placeToast); toastResizeHooked = true; }

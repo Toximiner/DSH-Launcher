@@ -31,8 +31,8 @@ class Gui:
     def eval(self, js):
         return self.drv.eval(js, page=GUI_URL)
 
-    def go(self, route):
-        self.drv.go(route, page=GUI_URL)
+    def go(self, route, keyed=True):
+        self.drv.go(route, page=GUI_URL, keyed=keyed)
 
     def close(self):
         """Закрыть окно из страницы (window.close())."""

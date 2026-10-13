@@ -27,6 +27,24 @@ assert.deepStrictEqual(splitArgs('""'), [''], 'пустой кавычный т�
 assert.deepStrictEqual(splitArgs('--profile web --no-open'), ['--profile', 'web', '--no-open']);
 assert.deepStrictEqual(splitArgs("a'b'"), ['ab'], 'кавычки без пробелов склеиваются с текстом');
 
+// ---- ключ маршрутов: withRouteKey / stripRouteKey / validRouteKey ----
+{
+  const { withRouteKey, stripRouteKey, validRouteKey } = require('../src/util');
+  const K = '0123456789abcdef'.repeat(2);
+  assert.strictEqual(withRouteKey(`<a href="dshlauncher://lang/ru/">x</a><b onclick="location.href='dshlauncher://paste/' + v">`, K),
+    `<a href="dshlauncher://${K}/lang/ru/">x</a><b onclick="location.href='dshlauncher://${K}/paste/' + v">`, 'ключ — в каждую ссылку');
+  assert.strictEqual(stripRouteKey(launcherRoute(`dshlauncher://${K}/settings/set/?k=port&v=1`), K), '/settings/set/', 'с ключом — маршрут без ключа');
+  assert.strictEqual(stripRouteKey(launcherRoute('dshlauncher://settings/set/?k=dshPath&v=/tmp/x'), K), null, 'без ключа — отказ');
+  assert.strictEqual(stripRouteKey(launcherRoute(`dshlauncher://${K.slice(1)}0/menu/about/`), K), null, 'чужой ключ — отказ');
+  assert.strictEqual(stripRouteKey(`/${K}`, K), null, 'только ключ, без маршрута — отказ');
+  assert.strictEqual(stripRouteKey(launcherRoute(`dshlauncher://${K}/paste/http%3A%2F%2Fx%2F`), K), '/paste/http%3A%2F%2Fx%2F', 'вставка');
+  for (const bad of ['', undefined, 'abc', 'g'.repeat(32), K.toUpperCase()]) {
+    assert.strictEqual(validRouteKey(bad), false, `негодный ключ: ${bad}`);
+    assert.strictEqual(stripRouteKey(`/${bad}/menu/about/`, bad), null, `с негодным ключом ничего не принимается: ${bad}`);
+  }
+  assert.strictEqual(validRouteKey(K), true, '32 hex');
+}
+
 // ---- launcherRoute: dshlauncher://host/path → /host/path ----
 assert.strictEqual(launcherRoute('dshlauncher://install/run/'), '/install/run/');
 assert.strictEqual(launcherRoute('dshlauncher://menu/about/'), '/menu/about/');
@@ -146,6 +164,23 @@ assert.strictEqual(proxyUrlFromRule('proxy p:1'), 'http://p:1', 'регистр 
   for (const v of [undefined, '', 'http://127.0.0.1', 'http://127.0.0.1:8765/', 'https://127.0.0.1:8765',
     'http://localhost:8765', 'http://10.0.0.1:8765', 'http://127.0.0.1:8765@evil.example', 'http://127.0.0.1.evil.example:80']) {
     assert.strictEqual(g(v), real, `не принимается: ${v}`);
+  }
+}
+
+// ---- navAction: куда пускать переход внутри окна ----
+{
+  const nav = extract('navAction');
+  const GUI = 'http://127.0.0.1:3080';
+  assert.strictEqual(nav('http://127.0.0.1:3080/chat/1', 'http://127.0.0.1:3080/', GUI), 'allow', 'внутри GUI dsh');
+  assert.strictEqual(nav('http://127.0.0.1:3080/', 'data:text/html,x', GUI), 'allow', 'со страницы лаунчера — в GUI');
+  assert.strictEqual(nav('dshlauncher://k/menu/about/', 'http://127.0.0.1:3080/', GUI), 'allow', 'маршрут лаунчера (ключ проверит обработчик)');
+  assert.strictEqual(nav('https://example.com/', 'http://127.0.0.1:3080/', GUI), 'external', 'чужой сайт — в браузер');
+  assert.strictEqual(nav('http://127.0.0.1:3081/', 'http://127.0.0.1:3080/', GUI), 'external', 'другой порт — чужой');
+  assert.strictEqual(nav('https://example.com/b', 'https://example.com/a', GUI), 'allow', 'внутри страницы, открытой через «Вставить ссылку»');
+  assert.strictEqual(nav('https://example.com/', 'data:text/html,x', null), 'external', 'окно лаунчера: http — в браузер');
+  assert.strictEqual(nav('https://example.com/b', 'https://example.com/a', null), 'external', 'окно лаунчера: «своего» сайта нет');
+  for (const u of ['file:///etc/passwd', 'javascript:alert(1)', 'data:text/html,x', 'chrome://gpu', 'не url']) {
+    assert.strictEqual(nav(u, 'http://127.0.0.1:3080/', GUI), 'deny', `запрещено: ${u}`);
   }
 }
 

@@ -3,10 +3,12 @@
 const { app, WebContentsView, session } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const { guardNavigation } = require('./guard');
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
-const { esc } = require('./util');
+const { esc, withRouteKey } = require('./util');
+const { ROUTE_KEY } = require('./env');
 const menus = require('./menus');
 const settingsWindow = require('./settings-window');
 const updatesLive = require('./updates-live');
@@ -86,7 +88,7 @@ function findBarUrl() {
       });
       window.setCount = (t) => { document.getElementById('n').textContent = t; };
     </script></body></html>`;
-  return 'data:text/html;charset=utf-8,' + encodeURIComponent(html);
+  return 'data:text/html;charset=utf-8,' + encodeURIComponent(withRouteKey(html, ROUTE_KEY));
 }
 
 function placeFind() {
@@ -105,6 +107,7 @@ function openFind() {
   if (!state.findView) {
     state.findView = new WebContentsView({ webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: false } });
     state.findView.setBackgroundColor('#00000000');
+    guardNavigation(state.findView.webContents);
     state.findView.webContents.loadURL(findBarUrl()).catch(() => {});
     state.win.contentView.addChildView(state.findView);
     state.win.on('resize', placeFind);

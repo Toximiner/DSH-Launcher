@@ -19,8 +19,9 @@ const { extract } = require('./_extract');
   assert.ok(retryButton().includes('Проверить снова'), 'RU-подпись');
 
   // ---- pageHtml: разметка служебной страницы ----
-  const { esc } = require('../src/util');
-  const pageHtml = extract('pageHtml', { i18n: { getLang: () => 'ru' }, esc, PAGE_CSS: 'CSS' });
+  const { esc, withRouteKey } = require('../src/util');
+  const KEY = 'ab'.repeat(16);
+  const pageHtml = extract('pageHtml', { i18n: { getLang: () => 'ru' }, esc, PAGE_CSS: 'CSS', withRouteKey, ROUTE_KEY: KEY });
   const prefix = 'data:text/html;charset=utf-8,';
   const htmlOf = (data) => decodeURIComponent(data.slice(prefix.length));
 
@@ -30,13 +31,14 @@ const { extract } = require('./_extract');
   assert.ok(html.includes('<html lang="ru">'), 'html lang из UI_LANG');
   assert.ok(html.includes('<title>Название</title>'), 'title');
   assert.ok(html.includes('<div class="wrap">'), 'без ошибки → без err-класса');
-  assert.ok(html.includes('dshlauncher://lang/ru/') && html.includes('class="on"'), 'активный язык помечен');
+  assert.ok(html.includes(`dshlauncher://${KEY}/lang/ru/`) && html.includes('class="on"'), 'активный язык помечен');
+  assert.ok(!html.replaceAll(`dshlauncher://${KEY}/`, '').includes('dshlauncher://'), 'все ссылки страницы — с ключом запуска');
   assert.ok(html.includes('<p>тело</p>'), 'body не экранируется (доверенный HTML)');
 
   // Режим окна-диалога: без переключателя языка, класс dlg на body
   const dlg = htmlOf(pageHtml('About', '<p>x</p>', false, { dialog: true }));
   assert.ok(dlg.includes('<body class="dlg">'), 'диалог: class="dlg"');
-  assert.ok(!dlg.includes('dshlauncher://lang/'), 'диалог: без переключателя RU | EN');
+  assert.ok(!dlg.includes('/lang/'), 'диалог: без переключателя RU | EN');
   assert.ok(dlg.includes('<title>About</title>') && dlg.includes('<p>x</p>'), 'диалог: заголовок и тело');
   assert.ok(html.includes('<body><div class="lang">'), 'обычная страница: body без класса');
 

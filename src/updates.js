@@ -113,7 +113,8 @@ async function proxyAgentFor(u) {
 
 /* ===== httpGet (тест test/http.js, с подставным агентом) =====
    GET с переходами по редиректам (ассеты релизов GitHub отдаются через 302)
-   → поток ответа (http.IncomingMessage): statusCode, headers, данные. */
+   → поток ответа (http.IncomingMessage): statusCode, headers, данные.
+   Authorization — только в пределах исходного адреса (origin). */
 async function httpGet(url, { headers = {}, maxRedirects = 5, timeoutMs = 30000 } = {}) {
   const u = new URL(url);
   const agent = await proxyAgentFor(u);
@@ -125,7 +126,12 @@ async function httpGet(url, { headers = {}, maxRedirects = 5, timeoutMs = 30000 
   if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
     res.resume();
     if (maxRedirects <= 0) throw new Error('слишком много перенаправлений');
-    return httpGet(new URL(res.headers.location, u).toString(), { headers, maxRedirects: maxRedirects - 1, timeoutMs });
+    const next = new URL(res.headers.location, u);
+    // токен — только тому адресу, которому его давали: на другой хост, порт
+    // или схему заголовок Authorization не уходит (как у curl и браузеров)
+    const nextHeaders = next.origin === u.origin ? headers
+      : Object.fromEntries(Object.entries(headers).filter(([k]) => k.toLowerCase() !== 'authorization'));
+    return httpGet(next.toString(), { headers: nextHeaders, maxRedirects: maxRedirects - 1, timeoutMs });
   }
   return res;
 }

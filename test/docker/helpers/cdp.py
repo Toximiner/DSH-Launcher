@@ -14,6 +14,8 @@ import urllib.request
 
 import websocket  # python3-websocket (websocket-client)
 
+from .env import ROUTE_KEY
+
 CDP = 'http://127.0.0.1:9222'
 
 
@@ -90,8 +92,11 @@ class Driver:
         r = self._call([('Runtime.evaluate', {'expression': expr, 'returnByValue': True})], page)
         return ((r or {}).get('result') or {}).get('result', {}).get('value')
 
-    def go(self, url, page=None):
-        """Переход страницы на URL (маршруты dshlauncher://…)."""
+    def go(self, url, page=None, keyed=True):
+        """Переход страницы на URL (маршруты dshlauncher://…: с ключом запуска,
+        keyed=False — без него, как у чужой страницы)."""
+        if keyed and url.startswith('dshlauncher://'):
+            url = f'dshlauncher://{ROUTE_KEY}/' + url[len('dshlauncher://'):]
         self.eval(f'(() => {{ location.href = {json.dumps(url)}; return 1; }})()', page)
 
     def _wait(self, get, pattern, timeout):

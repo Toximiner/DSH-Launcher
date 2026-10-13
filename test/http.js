@@ -21,8 +21,14 @@ const text = async (res) => { let b = ''; res.setEncoding('utf8'); for await (co
     if (m) { const n = Number(m[1]); s.writeHead(302, { location: n > 1 ? `/r/${n - 1}` : '/final' }); s.end(); return; }
     if (q.url === '/loop') { s.writeHead(301, { location: '/loop' }); s.end(); return; }
     if (q.url === '/hang') return; // не отвечаем
+    if (q.url === '/auth') { s.end('auth:' + (q.headers.authorization || '-')); return; }
+    if (q.url === '/to-auth') { s.writeHead(302, { location: '/auth' }); s.end(); return; }
+    if (q.url === '/cross') { s.writeHead(302, { location: `${otherBase}/auth` }); s.end(); return; }
     s.writeHead(404); s.end('nope');
   });
+  // Другой сервер (другой порт — другой origin): что пришло в Authorization
+  const other = http.createServer((q, s) => { s.end('auth:' + (q.headers.authorization || '-')); });
+  const otherBase = `http://127.0.0.1:${await listen(other)}`;
   const tport = await listen(target);
   const base = `http://127.0.0.1:${tport}`;
 
@@ -39,6 +45,12 @@ const text = async (res) => { let b = ''; res.setEncoding('utf8'); for await (co
   assert.strictEqual(res.statusCode, 404, 'код ошибки отдаётся вызывающему');
   await text(res);
 
+  // Токен — только исходному адресу: редирект на тот же origin — с ним, на другой — без
+  const auth = { 'User-Agent': 'x', Authorization: 'Bearer t0ken' };
+  assert.strictEqual(await text(await direct(`${base}/to-auth`, { headers: auth })), 'auth:Bearer t0ken', 'тот же origin — с токеном');
+  assert.strictEqual(await text(await direct(`${base}/cross`, { headers: auth })), 'auth:-', 'другой origin — без токена');
+  assert.strictEqual(auth.Authorization, 'Bearer t0ken', 'заголовки вызывающего не меняются');
+
   await assert.rejects(direct(`${base}/loop`), /слишком много перенаправлений/, 'петля редиректов → ошибка');
   await assert.rejects(direct(`${base}/hang`, { timeoutMs: 200 }), /таймаут/, 'нет ответа → таймаут');
 
@@ -49,7 +61,7 @@ const text = async (res) => { let b = ''; res.setEncoding('utf8'); for await (co
   const [maj, min] = process.versions.node.split('.').map(Number);
   if (maj < 24 || (maj === 24 && min < 5)) {
     console.log(`  (прокси: пропущено — Node ${process.versions.node} без proxyEnv, нужен 24.5+)`);
-    target.closeAllConnections(); target.close();
+    other.closeAllConnections(); other.close(); target.closeAllConnections(); target.close();
     console.log('OK: httpGet — все проверки прошли');
     return;
   }
@@ -69,6 +81,6 @@ const text = async (res) => { let b = ''; res.setEncoding('utf8'); for await (co
   assert.strictEqual(await text(res), 'ok:p', 'через прокси, с редиректом');
   assert.strictEqual(proxied, 2, 'оба запроса (редирект и цель) прошли через прокси');
 
-  target.closeAllConnections(); target.close(); proxy.close();
+  other.closeAllConnections(); other.close(); target.closeAllConnections(); target.close(); proxy.close();
   console.log('OK: httpGet — все проверки прошли');
 })().catch((e) => { console.error(e); process.exit(1); });
