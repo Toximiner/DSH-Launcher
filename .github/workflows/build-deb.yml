@@ -44,7 +44,7 @@ jobs:
     permissions:
       contents: write # создание Release (и тега — при ручном запуске)
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # история и теги — для поиска предыдущего релиза
 
