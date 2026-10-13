@@ -5,6 +5,25 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- The run marker (how the launcher learns that the previous run crashed)
+  records the launcher version again: since the code moved to `src/`, the log
+  showed “?” instead of the crashed run's version.
+
+### Changed (internal)
+
+- **The Docker update and rollback scenarios no longer depend on real GitHub
+  releases:** the release list and the `.deb` files come from a fake GitHub
+  (`test/docker/fakes/github.py`, with ETag and paging like GitHub's). New
+  scenario: a `.deb` with a wrong sha256 is not installed. The test address is
+  `DSH_LAUNCHER_GITHUB_API`; the launcher only accepts
+  `http://127.0.0.1:<port>`.
+- The latest release is parsed by the same function as the rollback list.
+- `actions/checkout` v7 (Dependabot, PR #4).
+
 ## [1.15.3] — 2026-10-13
 
 ### Fixed
