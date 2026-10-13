@@ -6,7 +6,7 @@
 import pytest
 
 from helpers.env import FAKE, NOUPD
-from helpers.procs import dsh_tree_alive, dsh_tree_gone, fakedsh_events, pgrep, sh, wait_for, wait_port
+from helpers.procs import as_tester, dsh_tree_alive, dsh_tree_gone, fakedsh_events, pgrep, sh, wait_for, wait_port
 
 
 def test_close(start, gui):
@@ -74,7 +74,9 @@ def test_adopt(start, gui, detached):
     assert launcher.wait_log('перезапустился сам', 30), 'лаунчер усыновил перезапущенный dsh'
     assert wait_port(10), 'перерождённый dsh слушает порт'
     assert pgrep('^sleep 7777'), 'в старой группе остался sleep 7777'
-    _, envs = sh("for p in $(pgrep -f fakes/fakedsh.py); do tr '\\0' '\\n' < /proc/$p/environ; echo; done")
+    # от tester (root в контейнере без CAP_SYS_PTRACE чужой environ не читает);
+    # [f]akedsh — чтобы шаблон не совпал с командной строкой самого sh
+    _, envs = as_tester("for p in $(pgrep -u tester -f '[f]akedsh.py'); do tr '\\0' '\\n' < /proc/$p/environ; echo; done")
     assert 'FAKE_ROLE=reborn' in envs, f'окружение перерождённого dsh прочитано: {envs[:300]!r}'
     assert 'INVOCATION_ID=' not in envs and 'JOURNAL_STREAM=' not in envs, 'у dsh нет переменных службы systemd'
 
