@@ -57,7 +57,7 @@ const { loadWindowState, trackWindowState } = require('./src/window-state');
 const { dshInstallCheck } = require('./src/dsh-install');
 const { killGroup, dshLeaderExited, stopDsh, adoptedTargets, stopAdoptedDsh } = require('./src/dsh-stop');
 const { checkPreviousRun, clearRunMarker, maybeShowCrashNotice, saveReport } = require('./src/diagnostics');
-const { closeToTrayOn, setTray, setTrayAttention, showMainWindow, onMainWindowClose, AGENT_POLL_MS, pollAgentState } = require('./src/tray');
+const { closeToTrayOn, setTray, setTrayAttention, clearAgentNotification, showMainWindow, onMainWindowClose, AGENT_POLL_MS, pollAgentState } = require('./src/tray');
 // ---- реестр launcher: имена, нужные модулям (генерируется) ----
 const launcher = require('./src/launcher');
 Object.defineProperties(launcher, {
@@ -563,7 +563,7 @@ async function onReady() {
   if (size.maximized) state.win.maximize();
   trackWindowState(state.win);
   state.win.on('close', onMainWindowClose);
-  state.win.on('focus', () => { state.win.flashFrame(false); setTrayAttention(false); });
+  state.win.on('focus', () => { state.win.flashFrame(false); setTrayAttention(false); clearAgentNotification(); });
   initSpellcheck();
   state.win.webContents.setWindowOpenHandler(({ url }) => {
     if (/^https?:/i.test(url)) shell.openExternal(url);

@@ -84,6 +84,7 @@ function showMainWindow() {
   if (state.win.isMinimized()) state.win.restore();
   state.win.focus();
   state.win.flashFrame(false);
+  clearAgentNotification();
   setTrayAttention(false);
   if (wasHidden) console.log('[launcher] окно показано из трея');
 }
@@ -105,8 +106,19 @@ function onMainWindowClose(e) {
 // в GNOME его нет) и, если включён, звук.
 const AGENT_POLL_MS = 2000;
 let agent = { running: false, waiting: null }; // что было при прошлой проверке
-// eslint-disable-next-line no-unused-vars -- только держит ссылку: иначе уведомление (и его click) соберёт GC
+// Последнее уведомление (ссылка нужна и затем, чтобы его click не собрал GC).
+// Оно одно: новое заменяет прежнее, а когда окно открыли — закрывается.
+// Иначе уведомления копятся в списке GNOME, и док-панель Ubuntu считает их
+// непрочитанными: счётчик на значке растёт 1, 2, … хотя окно уже открывали.
 let agentNotification = null;
+
+function clearAgentNotification() {
+  if (!agentNotification) return;
+  const n = agentNotification;
+  agentNotification = null;
+  try { n.close(); } catch { /* уже закрыто */ }
+  console.log('[launcher] уведомление агента закрыто');
+}
 
 function agentSessionTitle() {
   try {
@@ -131,6 +143,7 @@ function notifyAgent(ev) {
   const title = agentNotice(ev);
   console.log(`[launcher] уведомление: ${agentWhat(ev)}`);
   if (!Notification.isSupported()) return;
+  clearAgentNotification(); // не копить: одно, самое свежее
   const n = new Notification({
     title,
     body: agentSessionTitle() || 'DeepSeek Harness',
@@ -192,4 +205,4 @@ async function pollAgentState() {
   if (attentionSoundOn()) playAgentSound();
 }
 
-Object.assign(module.exports, { closeToTrayOn, attentionOn, attentionSoundOn, trayMenu, setTray, setTrayAttention, showMainWindow, onMainWindowClose, AGENT_POLL_MS, playAgentSound, pollAgentState }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { closeToTrayOn, attentionOn, attentionSoundOn, trayMenu, setTray, setTrayAttention, clearAgentNotification, showMainWindow, onMainWindowClose, AGENT_POLL_MS, playAgentSound, pollAgentState }); // дополняем, а не заменяем: модули подключают друг друга по кругу

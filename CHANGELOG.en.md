@@ -5,6 +5,21 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- **The counter on the dock icon no longer keeps growing.** The “The agent has
+  finished” notification stayed in the GNOME notification list even after the
+  window was opened — the Ubuntu dock counted it as unread, and the next one
+  showed “2”, “3”… Now there is only one notification (a new one replaces the
+  old one), and it is closed as soon as the window is opened.
+
+### Changed
+
+- The package recommends `libnotify4`: without it system notifications are
+  not shown (a regular desktop has it anyway).
+
 ## [1.15.6] — 2026-10-13
 
 ### Fixed

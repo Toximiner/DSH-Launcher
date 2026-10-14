@@ -4,7 +4,7 @@ ARG NODE_VER
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
       xvfb weston xdotool x11-xkb-utils dbus polkitd pkexec procps ca-certificates curl xz-utils iproute2 \
-      python3 python3-pytest python3-websocket
+      python3 python3-pytest python3-websocket python3-gi libnotify4 dbus-session-bus-common
 # Node 22 — для сценариев с настоящим dsh (npm, nvm, root-префикс).
 COPY node-${NODE_VER}-linux-x64.tar.xz /tmp/
 # --no-same-owner: файлы архива Node принадлежат uid 1000; в Debian это и есть
