@@ -575,13 +575,16 @@ async function onReady() {
   state.win.webContents.on('context-menu', (_e, params) => showContextMenu(params));
   // диагностика: из лога должно быть видно, что окно показало и что загрузилось
   state.win.once('ready-to-show', () => { state.win.show(); console.log('[launcher] окно показано'); });
+  let shownOnce = false;
+  state.win.once('show', () => { shownOnce = true; });
   // Страховка: на нативном Wayland ready-to-show может прийти с большим
   // опозданием (или не прийти вовсе) — окно с show:false остаётся невидимым.
-  // Если через 8 с оно всё ещё не показано — показываем вручную.
+  // Если через 8 с оно ни разу не показано — показываем вручную. Именно «ни
+  // разу»: окно, которое уже успели спрятать в трей, возвращать нельзя.
   setTimeout(() => {
     // isDestroyed: окно могли закрыть (и app.quit()) раньше таймера —
     // методы на уничтоженном окне бросают исключение.
-    if (state.win && !state.win.isDestroyed() && !state.win.isVisible()) {
+    if (state.win && !state.win.isDestroyed() && !shownOnce && !state.win.isVisible()) {
       console.log('[launcher] ready-to-show не пришло за 8 с — показываю окно вручную');
       state.win.show();
     }

@@ -14,6 +14,9 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
   window was opened — the Ubuntu dock counted it as unread, and the next one
   showed “2”, “3”… Now there is only one notification (a new one replaces the
   old one), and it is closed as soon as the window is opened.
+- **A window hidden to the tray in the first seconds after launch no longer
+  pops up by itself.** After 8 s the “the window never appeared” safety net
+  (for Wayland) showed it again.
 
 ### Changed
 

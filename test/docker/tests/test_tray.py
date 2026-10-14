@@ -124,6 +124,9 @@ def test_agent_notification_cleared(start, gui, notifications):
         assert wait_for(lambda: open(NOTIFYD_LOG).read().count('summary=The agent has finished') == n, 5, 0.1), \
             f'уведомление {n} показано'
         assert opened() == 1, f'после уведомления {n} в списке одно, а не {opened()}'
+    # второе — позже 8 с после старта: страховка «ready-to-show не пришло» не
+    # должна возвращать окно, которое уже показывали и спрятали в трей
+    assert 'показываю окно вручную' not in launcher.log(), 'спрятанное окно осталось в трее'
 
     as_tester('DISPLAY=:99 HOME=/home/tester /usr/bin/dsh-launcher >/dev/null 2>&1')  # открыть окно
     assert launcher.wait_log('окно показано из трея', 15)
