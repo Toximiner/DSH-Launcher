@@ -58,6 +58,9 @@ function timedCheck(promise, ms) {
   });
 }
 
+// Маршрут запроса dshlauncher://…: у нестандартной схемы первый сегмент
+// (retry, install, paste, market) URL-парсер кладёт в host, а не в pathname —
+// склеиваем обратно: dshlauncher://install/run/ -> '/install/run/'.
 function launcherRoute(url) {
   const u = new URL(url);
   return '/' + u.host + u.pathname;

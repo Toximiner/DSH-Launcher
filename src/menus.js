@@ -148,10 +148,10 @@ function showContextMenu(params, w = state.win, wc = w && w.webContents) {
 /* ===== end showContextMenu ===== */
 
 // Версия лаунчера: пакетная установка — dpkg; сборка из исходников —
-// package.json (теперь синхронизирован с релизом, 1.2.0+).
+// package.json корня репозитория (теперь синхронизирован с релизом, 1.2.0+).
 async function launcherVersionRaw() {
   if (process.execPath.startsWith('/opt/dsh-launcher/')) return updates.launcherInstalledVersion();
-  try { return require('./package.json').version; } catch { return null; }
+  try { return require('../package.json').version; } catch { return null; }
 }
 
 // Версия dsh: если DSH_BIN исполняется — спрашиваем её (--version), иначе —
