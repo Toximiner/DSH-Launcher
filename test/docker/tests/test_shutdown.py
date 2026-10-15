@@ -32,14 +32,19 @@ def test_sigterm(start, gui):
     assert dsh_tree_gone(), 'дерево dsh остановлено'
     assert 'SIGTERM' in fakedsh_events(), 'dsh получил SIGTERM, а не сразу SIGKILL'
     assert 'SIGTERM — ' in launcher.log(), 'в логе лаунчера — обработчик сигнала'
+    assert 'окно «закрывается…» показано' not in launcher.log(), 'быстрый выход — без окошка «закрывается…»'
 
 
 def test_sigterm_ignored(start, gui):
-    """dsh игнорирует SIGTERM — лаунчер через ~4 с добивает его SIGKILL."""
+    """dsh игнорирует SIGTERM — лаунчер через ~4 с добивает его SIGKILL. Пока
+    ждёт — главное окно спрятано, показано окошко «закрывается…»."""
     launcher = start(FAKE, NOUPD, FAKE_IGNORE_TERM='1')
     gui.wait()
 
-    assert launcher.term(15) is not None, 'лаунчер вышел за 15 с'
+    sh(f'kill -TERM {launcher.pid}')
+    assert gui.drv.wait_text('Останавливаю dsh|Stopping dsh', 5, page='закрывается|is closing'), 'окошко «закрывается…» на экране'
+    assert launcher.wait_log('окно «закрывается…» показано', 2)
+    assert launcher.wait_exit(15) is not None, 'лаунчер вышел за 15 с'
 
     assert dsh_tree_gone(), 'dsh, игнорирующий SIGTERM, добит SIGKILL'
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Юнит-тесты помощников страниц и проверок: timedCheck, groupAlive,
-// pageHtml, retryButton (main.js).
+// pageHtml, retryButton (main.js), closingHtml.
 'use strict';
 const assert = require('assert');
 const { spawn } = require('child_process');
@@ -17,6 +17,19 @@ const { extract } = require('./_extract');
   const retryButton = extract('retryButton', { tr: (ru, en) => ru });
   assert.ok(retryButton().includes('dshlauncher://retry/'), 'ссылка retry');
   assert.ok(retryButton().includes('Проверить снова'), 'RU-подпись');
+
+  // ---- closingHtml: окошко «закрывается…» ----
+  {
+    const closingHtml = extract('closingHtml', { esc: require('../src/util').esc });
+    const data = closingHtml('Закрывается <x>', 'Подождите', 'data:image/png;base64,AAA');
+    assert.ok(data.startsWith('data:text/html;charset=utf-8,'), 'data: URL');
+    const h = decodeURIComponent(data.slice('data:text/html;charset=utf-8,'.length));
+    assert.ok(h.includes('<h1>Закрывается &lt;x&gt;</h1>') && h.includes('<title>Закрывается &lt;x&gt;</title>'), 'заголовок экранирован');
+    assert.ok(h.includes('<p>Подождите</p>') && h.includes('class="spin"'), 'текст и крутилка');
+    assert.ok(h.includes('<img src="data:image/png;base64,AAA"'), 'значок');
+    assert.ok(!closingHtml('t', 'x', '').includes('<img'), 'нет значка — нет <img>');
+    assert.ok(!/<script/i.test(h) && !h.includes('dshlauncher://'), 'без скриптов и маршрутов');
+  }
 
   // ---- pageHtml: разметка служебной страницы ----
   const { esc, withRouteKey } = require('../src/util');

@@ -7,6 +7,14 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+### Added
+
+- **A "DeepSeek Harness is closing…" window on exit.** While the launcher stops
+  dsh (up to a few seconds), the main window is already hidden, and the app
+  looked hung or not fully closed. Now, if stopping takes a while, a small
+  window with the icon and a spinner appears in the middle of the screen; a
+  quick exit goes without it.
+
 ### Fixed
 
 - **The window no longer asks for a token after dsh is restarted from the

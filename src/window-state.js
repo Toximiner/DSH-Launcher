@@ -35,8 +35,11 @@ function trackWindowState(w) {
   w.once('ready-to-show', snapshot);
   w.once('show', snapshot); // Wayland: ready-to-show может не прийти — окно показывают по таймеру
   for (const ev of ['resize', 'maximize', 'unmaximize']) w.on(ev, later);
-  w.on('close', snapshot); // крестик / «Выйти» — самые свежие размеры
+  // крестик / «Выйти» — самые свежие размеры; у спрятанного окна (трей, окно
+  // «закрывается…») размеры не те — остаётся снимок, сделанный до того
+  w.on('close', () => { if (w.isVisible()) snapshot(); });
   w.on('closed', () => { clearTimeout(timer); write(); });
+  return snapshot; // снимок перед тем, как спрятать окно
 }
 
 module.exports = { loadWindowState, trackWindowState };

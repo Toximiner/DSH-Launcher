@@ -57,6 +57,7 @@ const { loadWindowState, trackWindowState } = require('./src/window-state');
 const { dshInstallCheck } = require('./src/dsh-install');
 const { killGroup, dshLeaderExited, stopDsh, adoptedTargets, stopAdoptedDsh } = require('./src/dsh-stop');
 const { checkPreviousRun, clearRunMarker, maybeShowCrashNotice, saveReport } = require('./src/diagnostics');
+const { showClosingWindow, CLOSING_DELAY_MS } = require('./src/closing-window');
 const { closeToTrayOn, setTray, setTrayAttention, clearAgentNotification, showMainWindow, onMainWindowClose, AGENT_POLL_MS, pollAgentState } = require('./src/tray');
 // ---- реестр launcher: имена, нужные модулям (генерируется) ----
 const launcher = require('./src/launcher');
@@ -582,7 +583,7 @@ async function onReady() {
     webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: true, autoplayPolicy: 'no-user-gesture-required' },
   });
   if (size.maximized) state.win.maximize();
-  trackWindowState(state.win);
+  snapshotWindow = trackWindowState(state.win);
   state.win.on('close', onMainWindowClose);
   state.win.on('focus', () => { state.win.flashFrame(false); setTrayAttention(false); clearAgentNotification(); });
   initSpellcheck();
@@ -684,10 +685,18 @@ async function onReady() {
 
 app.on('window-all-closed', () => app.quit());
 
+let snapshotWindow = null; // снимок размеров главного окна (window-state.js)
+
 app.on('before-quit', (e) => {
   if (state.stopping) return;
   state.stopping = true;
   e.preventDefault();
+  // Окно прячем сразу, а если остановка dsh затянется — окошко «закрывается…»
+  if (state.win && !state.win.isDestroyed()) {
+    if (state.win.isVisible() && snapshotWindow) snapshotWindow();
+    state.win.hide();
+  }
+  const closingTimer = setTimeout(() => showClosingWindow(state.relaunchRequested), CLOSING_DELAY_MS);
   // установка dsh / маркета / шаг обновления: свой процесс и таймер перерисовки
   for (const st of [installState, marketState, updateState]) {
     if (st.proc) { try { st.proc.kill('SIGTERM'); } catch { /* noop */ } }
@@ -701,6 +710,7 @@ app.on('before-quit', (e) => {
     await stopDsh();
     if (state.adoptedDsh) await stopAdoptedDsh();
   }).finally(() => {
+    clearTimeout(closingTimer);
     if (state.relaunchRequested) { try { spawnNewInstance(); } catch (e) { console.error('[launcher] перезапуск:', e.message); } }
     app.quit();
   });
