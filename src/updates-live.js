@@ -18,6 +18,7 @@ const menus = require('./menus');
 const settingsWindow = require('./settings-window');
 const updates = require('./updates');
 const view = require('./view');
+const whatsNew = require('./whats-new');
 const launcher = require('./launcher'); // общий реестр (наполняет main.js)
 
 /* ---------------- обновления во время работы ---------------- */
@@ -39,6 +40,9 @@ async function findUpdates(checks) {
     timedCheck(updates.fetchDshLatest(), updates.UPDATE_CHECK_TIMEOUT),
   ]);
   const found = {};
+  // Список релизов получен — если «Что нового» не смогло показать себя при
+  // запуске (GitHub не ответил), показываем пропущенные изменения сейчас.
+  if (l && l.releases) whatsNew.retryWhatsNew(l);
   const lInst = await updates.launcherInstalledVersion();
   if (l && l.version && lInst && compareDebianVer(tagToPackageVersion(l.version), lInst) > 0) {
     found.launcher = { version: l.version, installed: lInst, releases: l.releases };

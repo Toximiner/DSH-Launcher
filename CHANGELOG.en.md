@@ -5,6 +5,15 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- “What’s new”: if the release list couldn’t be fetched at startup (slow
+  network), the skipped changes are shown within a minute of startup — or at
+  the next successful update check — instead of piling up until the next
+  update.
+
 ## [1.15.10] — 2026-10-15
 
 ### Changed
