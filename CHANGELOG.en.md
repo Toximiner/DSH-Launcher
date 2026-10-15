@@ -5,6 +5,16 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- **Launcher version in source builds.** "About", the diagnostics report,
+  and "What's new" read the version from a `package.json` in the adjacent
+  `src/` directory, which does not exist — the version showed as "unknown"
+  and "What's new" never appeared. Package (.deb) installs were unaffected:
+  their version always comes from dpkg.
+
 ## [1.15.8] — 2026-10-15
 
 ### Added
