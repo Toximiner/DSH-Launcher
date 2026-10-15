@@ -542,6 +542,7 @@ async function onReady() {
       if (route.startsWith('/update-now/')) { updateNow(new URL(request.url).searchParams.get('k')); return noContentResponse(); }
       if (route.startsWith('/find/')) return onFindRequest(route, request.url);
       if (route.startsWith('/dialog/logs/')) { void openLogsFolder(); return noContentResponse(); }
+      if (route.startsWith('/menu/quit/')) { app.quit(); return noContentResponse(); } // «Файл → Выйти» (role: 'quit')
       if (route.startsWith('/window/close/')) { if (state.win && !state.win.isDestroyed()) state.win.close(); return noContentResponse(); }
       if (route.startsWith('/menu/report/')) { void saveReport(); return noContentResponse(); }
       if (route.startsWith('/dialog/report-show/')) { if (state.lastReportPath) shell.showItemInFolder(state.lastReportPath); return noContentResponse(); }

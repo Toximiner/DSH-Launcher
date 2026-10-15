@@ -38,6 +38,14 @@ class Gui:
         """Закрыть окно из страницы (window.close())."""
         self.drv.eval('window.close()', page=GUI_URL)
 
+    def quit(self):
+        """«Файл → Выйти» (то же app.quit(), что пункт меню и трея)."""
+        self.go('dshlauncher://menu/quit/')
+
+    def hidden(self):
+        """Главное окно спрятано (страница GUI dsh ещё жива)."""
+        return self.eval('document.visibilityState') == 'hidden'
+
     # ---- состояние страницы ----
 
     def mark(self):

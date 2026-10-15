@@ -1,12 +1,15 @@
-"""Завершение работы: закрытие окна, сигналы лаунчеру, «усыновлённый» dsh.
+"""Завершение работы: закрытие окна, сигналы лаунчеру, «усыновлённый» dsh,
+окошко «закрывается…» (пока dsh останавливается).
 
 Во всех случаях лаунчер должен остановить запущенный им dsh вместе с
 потомками (у фейкового dsh — sleep 7777 в той же группе процессов).
 """
+import json
+
 import pytest
 
-from helpers.env import FAKE, NOUPD
-from helpers.procs import as_tester, dsh_tree_alive, dsh_tree_gone, fakedsh_events, pgrep, sh, wait_for, wait_port
+from helpers.env import CONF, FAKE, NOUPD
+from helpers.procs import as_tester, dsh_tree_alive, dsh_tree_gone, fakedsh_events, pgrep, sh, wait_exit, wait_for, wait_port
 
 
 def test_close(start, gui):
@@ -89,3 +92,61 @@ def test_adopt(start, gui, detached):
 
     assert launcher.wait_exit(15) is not None, 'лаунчер завершился после закрытия окна'
     assert dsh_tree_gone(), 'усыновлённый dsh и потомки старой группы остановлены'
+
+
+CLOSING = 'закрывается|is closing'
+
+
+def closing_shown(gui, title=CLOSING):
+    return gui.drv.wait_text('Останавливаю dsh|Stopping dsh', 5, page=title)
+
+
+@pytest.mark.parametrize('how', ['menu_quit', 'close_window'])
+def test_closing_window(start, gui, how):
+    """«Файл → Выйти» и крестик (трей выключен): главное окно сразу прячется,
+    пока dsh останавливается — окошко «закрывается…», потом выход."""
+    launcher = start(FAKE, NOUPD, FAKE_IGNORE_TERM='1')
+    gui.wait()
+
+    if how == 'menu_quit':
+        gui.quit()
+        assert wait_for(gui.hidden, 3, 0.2), 'главное окно спрятано сразу'
+    else:
+        gui.close()
+    assert closing_shown(gui), 'окошко «закрывается…» на экране'
+    assert launcher.wait_exit(15) is not None, 'лаунчер вышел'
+    assert dsh_tree_gone(), 'дерево dsh остановлено'
+
+
+def test_closing_window_relaunch(start, gui):
+    """Перезапуск лаунчера после смены настроек — заголовок «перезапускается…»."""
+    launcher = start(FAKE, NOUPD, FAKE_IGNORE_TERM='1')
+    gui.wait()
+    settings = gui.open_settings()
+    settings.set('profile', 'second')
+    settings.wait_note('Saved')
+    settings.relaunch()
+
+    assert closing_shown(gui, 'перезапускается|is restarting'), 'окошко «перезапускается…» на экране'
+    assert launcher.wait_exit(20) is not None, 'прежний экземпляр завершился'
+    new = launcher.successor()
+    assert new, 'лаунчер перезапустился'
+    gui.wait()
+    sh(f'kill -TERM {new}')
+    assert wait_exit(new, 15) is not None, 'новый экземпляр штатно завершился'
+
+
+def test_closing_window_keeps_size(start, gui):
+    """Окно прячется перед остановкой dsh — размер записан тот, что был на
+    экране, а не размер спрятанного окна."""
+    state = f'{CONF}/window-state.json'
+    as_tester(f"mkdir -p {CONF} && echo '{{\"width\":1000,\"height\":640}}' > {state}")
+    launcher = start(FAKE, NOUPD, FAKE_IGNORE_TERM='1')
+    gui.wait()
+    assert gui.outer_width() == 1000
+
+    gui.quit()
+    assert closing_shown(gui)
+    assert launcher.wait_exit(15) is not None, 'лаунчер вышел'
+    saved = json.load(open(state))
+    assert saved.get('width') == 1000 and saved.get('maximized') is False, f'размер окна сохранён: {saved}'
