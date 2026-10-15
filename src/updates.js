@@ -165,7 +165,7 @@ function showUpdatePage(note, noteIsError = false) {
       ${noteHtml}
       <p>${tr('Выполняю', 'Running')} <code>${esc(updateState.cmdLine || '')}</code></p>
       <p>${tr('Последние строки:', 'Latest output lines:')}</p>
-      <pre>${esc(updateState.log.slice(-40).join('\n') || '…')}</pre>`;
+      ${pages.liveLogPre(updateState.log)}`;
   } else if (mode === 'success') {
     title = tr('Обновление установлено', 'Update installed');
     body = `
@@ -212,6 +212,7 @@ function showUpdatePage(note, noteIsError = false) {
         ${link}
       </div>`;
   }
+  if (mode === 'running') pages.liveLogSync(updateState);
   pages.showStatus(title, body, noteIsError);
 }
 
@@ -245,12 +246,21 @@ function onUpdateChoice(choice) {
   return launcher.blankResponse();
 }
 
-// Шаг установки с живым логом на странице.
+// Шаг установки с живым логом на странице (живой лог — pages.liveLogTick:
+// строки дописываются без перезагрузки страницы, скролл остаётся за
+// пользователем).
 function runUpdateStep(cmd, args, env) {
   updateState.mode = 'running';
   updateState.cmdLine = [cmd, ...args].join(' ');
   console.log(`[launcher] шаг обновления: ${updateState.cmdLine}`);
-  return runWithLiveLog(updateState, cmd, args, { env, redraw: () => showUpdatePage() });
+  showUpdatePage();
+  return runWithLiveLog(updateState, cmd, args, { env, redraw: () => {
+    // mode === 'running' — иначе уже показана другая страница (ошибка/успех),
+    // и доп. перерисовка затёрла бы её note (тик мог успеть разрешиться позже).
+    pages.liveLogTick(updateState).then((ok) => {
+      if (!ok && updateState.mode === 'running') showUpdatePage();
+    });
+  } });
 }
 
 // Скачивание .deb из релиза в userData/updates/. Прогресс — в логе на
@@ -260,8 +270,10 @@ async function downloadDeb(url, expectedSha256) {
   updateState.running = true;
   updateState.mode = 'running';
   updateState.log = [];
+  updateState.logSeq = 0;
   updateState.cmdLine = `download ${url}`;
   console.log(`[launcher] скачиваю ${url}`);
+  showUpdatePage();
   const dir = path.join(app.getPath('userData'), 'updates');
   try {
     fs.mkdirSync(dir, { recursive: true });
@@ -275,6 +287,10 @@ async function downloadDeb(url, expectedSha256) {
     const name = url.split('/').pop() || 'dsh-launcher.deb';
     const dest = path.join(dir, name);
     updateState.log.push(total ? `${name} (${(total / 1048576).toFixed(1)} МБ)` : name);
+    updateState.logSeq++;
+    pages.liveLogTick(updateState).then((ok) => {
+      if (!ok && updateState.mode === 'running') showUpdatePage();
+    });
     const out = fs.createWriteStream(dest);
     const hash = crypto.createHash('sha256');
     let got = 0;
@@ -283,7 +299,10 @@ async function downloadDeb(url, expectedSha256) {
         ? `${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} МБ (${Math.round((100 * got) / total)}%)`
         : `${(got / 1048576).toFixed(1)} МБ`);
       if (updateState.log.length > LOG_MAX_LINES) updateState.log.shift();
-      showUpdatePage();
+      updateState.logSeq++;
+      pages.liveLogTick(updateState).then((ok) => {
+        if (!ok && updateState.mode === 'running') showUpdatePage();
+      });
     }, 800);
     try {
       await new Promise((resolve, reject) => {

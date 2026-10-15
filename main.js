@@ -45,7 +45,7 @@ const { buildAppMenu, showContextMenu } = require('./src/menus');
 const { startUpdateChecks, updateState, onUpdateChoice, restartLauncher } = require('./src/updates');
 const { marketState, onMarketChoice } = require('./src/market');
 const { installState, refreshInstallState, showInstallPage } = require('./src/install-page');
-const { showPage, loadLangPref, onLangSwitch, loadInWin, showStatus, showPastePage } = require('./src/pages');
+const { showPage, loadLangPref, onLangSwitch, loadInWin, showStatus, showPastePage, liveLogTick } = require('./src/pages');
 const { setUpdatePolling, onToastRequest, showUpdateNowDialog, updateNow } = require('./src/updates-live');
 const { onSettingsSet, onSettingsPick, onSettingsResetUpdates, relaunchLauncher, spawnNewInstance, SETTINGS_SECTIONS, showSettingsDialog } = require('./src/settings-window');
 const { onDialogClose, onDialogCopy, showAboutDialog, showUpdateCheckDialog } = require('./src/dialogs');
@@ -458,8 +458,16 @@ async function onInstallRun() {
       return blankResponse();
     }
     console.log(`[launcher] установка dsh из окна: ${npmInfo.command}`);
+    installState.running = true; // страница «выполняется» — сразу, до первой строки
+    showInstallPage();
     const code = await runWithLiveLog(installState, npmInfo.npm, ['install', '-g', '@deepseek-ai/dsh'],
-      { env: envWithBinDir(npmInfo.npm), redraw: () => showInstallPage() });
+      { env: envWithBinDir(npmInfo.npm), redraw: () => {
+        // running — иначе установка закончилась и страница уже переключилась
+        // (успех/ошибка), и доп. перерисовка затёрла бы её note.
+        liveLogTick(installState).then((ok) => {
+          if (!ok && installState.running) showInstallPage();
+        });
+      } });
     if (code === 0) {
       console.log('[launcher] dsh установлен — продолжаю запуск');
       // Если prefix не /usr, бинарник лёг не в /usr/bin — находим и запоминаем фактический путь.

@@ -74,7 +74,7 @@ function showMarketPage(note, noteIsError = false) {
   const body = installing
     ? `<p>${tr('Выполняю', 'Running')} <code>${esc(marketState.cmdLine || marketCommand())}</code></p>
        <p>${tr('Последние строки установки:', 'Latest install output:')}</p>
-       <pre>${esc(marketState.log.slice(-40).join('\n') || '…')}</pre>`
+       ${pages.liveLogPre(marketState.log)}`
     : `${noteHtml}
        <p>${tr(`В профиле <code>${esc(DSH_PROFILE)}</code> не найден плагин маркета
           <code>${MARKET_PKG}</code>. Установить его перед запуском dsh?`,
@@ -87,6 +87,7 @@ function showMarketPage(note, noteIsError = false) {
          <button onclick="location.href='dshlauncher://market/skip/'">${tr('Не сейчас', 'Not now')}</button>
          <button onclick="location.href='dshlauncher://market/never/'">${tr('Не спрашивать больше', 'Don’t ask again')}</button>
        </div>`;
+  if (installing) pages.liveLogSync(marketState);
   pages.showStatus(installing ? tr(`Устанавливаю ${MARKET_PKG}…`, `Installing ${MARKET_PKG}…`)
     : tr(`Установить ${MARKET_PKG}?`, `Install ${MARKET_PKG}?`), body, noteIsError);
 }
@@ -116,11 +117,21 @@ function marketEnv() {
   return env;
 }
 
-// Запуск шага установки (pnpm или сам маркет) с живым логом на странице.
+// Запуск шага установки (pnpm или сам маркет) с живым логом на странице
+// (pages.liveLogTick — строки дописываются без перезагрузки, скролл за
+// пользователем).
 function runMarketInstall(cmd, args, env) {
   marketState.cmdLine = [cmd, ...args].join(' ');
   console.log(`[launcher] установка: ${marketState.cmdLine}`);
-  return runWithLiveLog(marketState, cmd, args, { cwd: CWD, env, redraw: () => showMarketPage() });
+  marketState.running = true;
+  showMarketPage();
+  return runWithLiveLog(marketState, cmd, args, { cwd: CWD, env, redraw: () => {
+    // running — иначе страница уже переключилась (успех/ошибка/новый вопрос),
+    // и доп. перерисовка затёрла бы её note (тик мог разрешиться позже).
+    pages.liveLogTick(marketState).then((ok) => {
+      if (!ok && marketState.running) showMarketPage();
+    });
+  } });
 }
 
 async function offerMarketIfMissing() {
