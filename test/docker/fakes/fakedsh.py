@@ -9,8 +9,12 @@
   FAKE_SPAM_LINES          — после адреса напечатать столько строк (журнал растёт)
   FAKE_CRASH_AFTER         — через N с упасть (выход с кодом 3); FAKE_CRASH_ONCE=<файл>
                              — только в первый раз (файл-метка), дальше работать
-  FAKE_REQUIRE_TOKEN=1     — GUI только с ?token=abc (тогда куки и редирект на
-                             адрес без токена) или с куки; иначе 401
+  FAKE_REQUIRE_TOKEN=1     — GUI только с ?token=<FAKE_TOKEN, abc> (тогда куки
+                             и редирект на адрес без токена) или с куки этого
+                             токена; иначе 401
+  FAKE_REBORN_TOKEN, FAKE_REBORN_OUT=<файл> — у перезапустившегося процесса
+                             свой токен (старое куки не годится) и вывод в файл
+                             (как перезапуск кнопкой маркета)
   FAKE_LISTEN_FILE=<файл>  — открыть порт, только когда появится файл (dsh
                              запустился, но долго не поднимает сервис)
   plugin --profile P add X — «установить плагин»: X в dependencies
@@ -29,6 +33,7 @@ import time
 
 LOG = '/tmp/fakedsh.log'
 ROLE = os.environ.get('FAKE_ROLE', 'main')
+TOKEN = os.environ.get('FAKE_TOKEN', 'abc')
 
 
 def log(msg):
@@ -74,15 +79,15 @@ signal.signal(signal.SIGTERM, on_term)
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if os.environ.get('FAKE_REQUIRE_TOKEN') == '1':
-            if 'token=abc' in self.path:
+            if f'token={TOKEN}' in self.path:
                 log('token accepted')
                 self.send_response(302)
-                self.send_header('set-cookie', 'sess=1; Path=/')
+                self.send_header('set-cookie', f'sess={TOKEN}; Path=/')
                 self.send_header('location', self.path.split('?')[0])
                 self.send_header('content-length', '0')
                 self.end_headers()
                 return
-            if 'sess=1' not in (self.headers.get('cookie') or ''):
+            if f'sess={TOKEN}' not in (self.headers.get('cookie') or ''):
                 body = b'<html><body>401 token required</body></html>'
                 self.send_response(401)
                 self.send_header('content-type', 'text/html')
@@ -115,7 +120,7 @@ while True:  # порт ещё занят старым процессом (по�
     except OSError:
         time.sleep(0.2)
 log('listening')
-print(f'dsh web: http://127.0.0.1:{port}/?token=abc', flush=True)
+print(f'dsh web: http://127.0.0.1:{port}/?token={TOKEN}', flush=True)
 for i in range(int(os.environ.get('FAKE_SPAM_LINES', '0'))):
     print(f'spam line {i:05d} ' + '.' * 60, flush=True)
 
@@ -135,9 +140,13 @@ after = float(os.environ.get('FAKE_SELF_RESTART_AFTER') or 0)
 if ROLE == 'main' and after:
     def restart():
         log('self-restart')
-        subprocess.Popen([sys.executable, os.path.abspath(__file__), *sys.argv[1:]],
-                         env={**os.environ, 'FAKE_ROLE': 'reborn'},
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env = {**os.environ, 'FAKE_ROLE': 'reborn'}
+        if os.environ.get('FAKE_REBORN_TOKEN'):
+            env['FAKE_TOKEN'] = os.environ['FAKE_REBORN_TOKEN']
+        out = os.environ.get('FAKE_REBORN_OUT')
+        subprocess.Popen([sys.executable, os.path.abspath(__file__), *sys.argv[1:]], env=env,
+                         stdin=subprocess.DEVNULL, stdout=open(out, 'w') if out else subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL,
                          start_new_session=os.environ.get('FAKE_REBORN_DETACHED') == '1')
         srv.server_close()
         os._exit(0)  # sleep 7777 остаётся в старой группе

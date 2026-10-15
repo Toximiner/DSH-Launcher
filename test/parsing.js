@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Юнит-тесты чистых помощников main.js: splitArgs, launcherRoute,
-// profileFromArgs, firstErrLine, esc, envWithBinDir, withoutUnitEnv, marketInPkg.
+// profileFromArgs, firstErrLine, esc, envWithBinDir, withoutUnitEnv, marketInPkg,
+// authUrlFromOutput.
 'use strict';
 const path = require('path');
 const assert = require('assert');
@@ -182,6 +183,22 @@ assert.strictEqual(proxyUrlFromRule('proxy p:1'), 'http://p:1', 'регистр 
   for (const u of ['file:///etc/passwd', 'javascript:alert(1)', 'data:text/html,x', 'chrome://gpu', 'не url']) {
     assert.strictEqual(nav(u, 'http://127.0.0.1:3080/', GUI), 'deny', `запрещено: ${u}`);
   }
+}
+
+// ---- authUrlFromOutput: ссылка входа из вывода dsh ----
+{
+  const { authUrlFromOutput: auth } = require('../src/system');
+  const PLAIN = 'http://127.0.0.1:3080/';
+  assert.strictEqual(auth('', PLAIN), null, 'пусто → null');
+  assert.strictEqual(auth('dsh web: http://127.0.0.1:3080/?token=a\n', PLAIN), 'http://127.0.0.1:3080/?token=a');
+  assert.strictEqual(auth('dsh web: http://127.0.0.1:3080/?token=a\nx\ndsh web: http://127.0.0.1:3080/?token=b', PLAIN),
+    'http://127.0.0.1:3080/?token=b', 'несколько — последняя (перезапуск в тот же файл)');
+  assert.strictEqual(auth('dsh web: http://127.0.0.1:3081/?token=a', PLAIN), null, 'другой порт — не наша');
+  assert.strictEqual(auth('dsh web: http://evil.example/?token=a', PLAIN), null, 'другой хост — не наша');
+  assert.strictEqual(auth('dsh web: http://127.0.0.1:3080/', PLAIN), null, 'без токена — null');
+  assert.strictEqual(auth('see http://127.0.0.1:3080/?token=a', PLAIN), null, 'не строка «dsh web:» — null');
+  assert.strictEqual(auth('dsh web: http://127.0.0.1:3080/?token=a\ndsh web: http://[', PLAIN),
+    'http://127.0.0.1:3080/?token=a', 'обрывок в конце хвоста — пропуск');
 }
 
 console.log('OK: parsing — все проверки прошли');

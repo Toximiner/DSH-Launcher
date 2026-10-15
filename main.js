@@ -30,7 +30,7 @@ const { tr } = i18n;
 const { esc, launcherRoute, stripRouteKey } = require('./src/util');
 const { runWithLiveLog } = require('./src/proc-log');
 const { guardNavigation, restrictPermissions } = require('./src/guard');
-const { envWithBinDir } = require('./src/system');
+const { envWithBinDir, listenerAuthUrl } = require('./src/system');
 const { WIN_MIN, keyAction, isAltKey, windowSize } = require('./src/ui');
 
 // Параметры запуска и журнал лаунчера — первыми: env.js убирает токен CI из
@@ -261,6 +261,35 @@ async function plainUrlIsAuthed() {
   }
 }
 
+// Окно — на GUI уже работающего dsh, который запустил не лаунчер (перезапуск
+// из маркета, терминал): куки валидны → GUI; иначе ссылка входа из вывода
+// процесса на порту (listenerAuthUrl); иначе ещё раз куки — порт открывается
+// раньше, чем dsh готов проверять вход, — и только потом страница вставки.
+const AUTH_WAIT_MS = 5000;
+
+async function openRunningGui(why) {
+  if (await plainUrlIsAuthed()) {
+    console.log(`[launcher] ${why}: куки валидны — открываю GUI`);
+    return loadInWin(PLAIN_URL);
+  }
+  const deadline = Date.now() + AUTH_WAIT_MS;
+  for (;;) {
+    const url = listenerAuthUrl(PORT, PLAIN_URL);
+    if (url) {
+      console.log(`[launcher] ${why}: ссылка входа — из вывода процесса dsh на порту`);
+      return loadInWin(url);
+    }
+    if (Date.now() >= deadline || state.stopping) break;
+    await sleep(500);
+    if (await plainUrlIsAuthed()) {
+      console.log(`[launcher] ${why}: куки валидны — открываю GUI`);
+      return loadInWin(PLAIN_URL);
+    }
+  }
+  console.log(`[launcher] ${why}: валидного куки и ссылки входа нет — страница вставки токена`);
+  showPastePage();
+}
+
 /* ---------------- авто-восстановление после перезапуска dsh ----------------
  * GUI сам не возобновляет текущую сессию, когда процесс dsh перезапускается:
  * окно застревает на «сессия завершена». Но всё нужное для возобновления
@@ -286,10 +315,8 @@ async function recoverWindow(force = false) {
     try { onDshPage = new URL(cur).origin === dshOrigin; } catch { /* data: и т.п. */ }
     if (onDshPage) {
       await loadInWin(PLAIN_URL);
-    } else if (await plainUrlIsAuthed()) {
-      await loadInWin(PLAIN_URL); // окно на статус-странице, но куки валидны
     } else {
-      showPastePage(); // куки не пережили перезапуск — нужен токен нового процесса
+      await openRunningGui('dsh снова на порту'); // окно на статус-странице
     }
   } catch (e) {
     console.error('[launcher] recover:', e.message);
@@ -350,13 +377,7 @@ async function onRetryRequest() {
         state.dshProc = null;
         state.dshFatal = false;
         state.portState = 'up';
-        if (await plainUrlIsAuthed()) {
-          console.log('[launcher] retry: dsh запущен, куки валидны — открываю GUI');
-          await loadInWin(PLAIN_URL);
-        } else {
-          console.log('[launcher] retry: dsh запущен, валидного куки нет — страница вставки');
-          showPastePage();
-        }
+        await openRunningGui('retry: dsh запущен');
       } else {
         // Бинарник мог исчезнуть (разустановка, другой DSH_BIN) — тогда
         // совет запускать его в терминале бессмысленен.
@@ -637,13 +658,7 @@ async function onReady() {
     showPage(() => showStatus(tr('Подключение…', 'Connecting…'), tr(
       `<p><code>dsh</code> уже запущен на порту ${PORT}. Подключаюсь…</p>`,
       `<p><code>dsh</code> is already running on port ${PORT}. Connecting…</p>`)));
-    if (await plainUrlIsAuthed()) {
-      console.log('[launcher] валидный куки есть — открываю GUI');
-      await loadInWin(PLAIN_URL);
-    } else {
-      console.log('[launcher] валидного куки нет — показываю страницу вставки токена');
-      showPastePage();
-    }
+    await openRunningGui('подключение');
     startWatchdog();
     return;
   }

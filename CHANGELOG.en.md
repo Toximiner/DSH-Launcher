@@ -5,6 +5,19 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Fixed
+
+- **The window no longer asks for a token after dsh is restarted from the
+  market.** The market starts the new dsh itself, and that process prints its
+  login link to its own file (`/tmp/dsh-market-restart-*.out.log`), not to the
+  launcher, so the window showed "Token required". The launcher now takes the
+  link from the output of the process listening on the port and, while dsh is
+  coming up, re-checks the login for a few seconds before showing the
+  paste-token page. The same applies when attaching to an already running dsh
+  and to "Check again".
+
 ## [1.15.7] — 2026-10-14
 
 ### Fixed

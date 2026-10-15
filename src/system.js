@@ -64,6 +64,45 @@ function portListenerPid(port) {
   return null;
 }
 
+/* Ссылка входа из вывода dsh: последняя строка «dsh web: <url>?token=…» с тем
+   же адресом, что plainUrl (другой порт или хост — не наша). Нет — null. */
+function authUrlFromOutput(text, plainUrl) {
+  const origin = new URL(plainUrl).origin;
+  let found = null;
+  for (const m of String(text).matchAll(/dsh web:\s*(https?:\/\/\S+)/g)) {
+    try {
+      const u = new URL(m[1]);
+      if (u.origin === origin && u.searchParams.get('token')) found = m[1];
+    } catch { /* обрывок строки */ }
+  }
+  return found;
+}
+
+// dsh, перезапущенный не лаунчером (кнопкой перезапуска маркета), печатает
+// ссылку входа не нам, а в свой файл (/tmp/dsh-market-restart-*.out.log).
+// Берём её из stdout процесса на порту: только обычный файл своего
+// пользователя и только хвост. Не вышло — null (будет страница вставки).
+const OUTPUT_TAIL = 64 * 1024;
+
+function listenerAuthUrl(port, plainUrl) {
+  const pid = portListenerPid(port);
+  if (!pid) return null;
+  let fd;
+  try {
+    fd = fs.openSync(`/proc/${pid}/fd/1`, 'r');
+    const st = fs.fstatSync(fd);
+    if (!st.isFile() || st.uid !== process.getuid()) return null;
+    const len = Math.min(st.size, OUTPUT_TAIL);
+    const buf = Buffer.alloc(len);
+    fs.readSync(fd, buf, 0, len, st.size - len);
+    return authUrlFromOutput(buf.toString('utf8'), plainUrl);
+  } catch {
+    return null;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
+
 function pgidOf(pid) {
   try {
     const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
@@ -86,4 +125,4 @@ function pickKillTargets(portPid, portPgid, selfPgid, oldPgid) {
   return targets;
 }
 
-module.exports = { envWithBinDir, withoutUnitEnv, writableOrCreatable, groupAlive, portListenerPid, pgidOf, pickKillTargets };
+module.exports = { envWithBinDir, withoutUnitEnv, writableOrCreatable, groupAlive, portListenerPid, authUrlFromOutput, listenerAuthUrl, pgidOf, pickKillTargets };
