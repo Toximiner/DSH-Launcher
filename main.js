@@ -349,11 +349,6 @@ function startWatchdog() {
   })();
 }
 
-// Маршрут запроса dshlauncher://…: у нестандартной схемы первый сегмент
-// (retry, install, paste, market) URL-парсер кладёт в host, а не в pathname —
-// склеиваем обратно: dshlauncher://install/run/ -> '/install/run/'.
-
-
 function onPasteRequest(route) {
   try {
     const pasted = decodeURIComponent(route.replace(/^\/paste\//, ''));
@@ -486,6 +481,112 @@ async function onInstallRun() {
   return blankResponse();
 }
 
+/* ===== matchRoute (тест test/routes.js) =====
+   Таблица маршрутов dshlauncher:// (порядок важен: /menu/rollback/ раньше
+   /rollback/). Чистая функция: префикс маршрута → имя; null — не наш. */
+const ROUTE_TABLE = [
+  ['/retry/', 'retry'],
+  ['/lang/', 'lang'],
+  ['/install/copy/', 'install/copy'],
+  ['/install/run/', 'install/run'],
+  ['/install/recheck/', 'install/recheck'],
+  ['/market/install/', 'market/install'],
+  ['/market/skip/', 'market/skip'],
+  ['/market/never/', 'market/never'],
+  ['/update/install/', 'update/install'],
+  ['/update/later/', 'update/later'],
+  ['/update/never/', 'update/never'],
+  ['/update/recheck/', 'update/recheck'],
+  ['/update/copy/', 'update/copy'],
+  ['/update/restart/', 'update/restart'],
+  ['/menu/about/', 'menu/about'],
+  ['/menu/check/', 'menu/check'],
+  ['/menu/rollback/', 'menu/rollback'],
+  ['/rollback/', 'rollback'],
+  ['/menu/update/', 'menu/update'],
+  ['/toast/', 'toast'],
+  ['/update-now/', 'update-now'],
+  ['/find/', 'find'],
+  ['/dialog/logs/', 'dialog/logs'],
+  ['/menu/quit/', 'menu/quit'],
+  ['/window/close/', 'window/close'],
+  ['/menu/report/', 'menu/report'],
+  ['/dialog/report-show/', 'dialog/report-show'],
+  ['/dialog/log-refresh/', 'dialog/log-refresh'],
+  ['/menu/log/', 'menu/log'],
+  ['/menu/settings/', 'menu/settings'],
+  ['/settings/set/', 'settings/set'],
+  ['/settings/section/', 'settings/section'],
+  ['/settings/pick-dsh/', 'settings/pick-dsh'],
+  ['/settings/pick-cwd/', 'settings/pick-cwd'],
+  ['/settings/reset-updates/', 'settings/reset-updates'],
+  ['/settings/relaunch/', 'settings/relaunch'],
+  ['/menu/close-context/', 'menu/close-context'],
+  ['/dialog/gpu-enable/', 'dialog/gpu-enable'],
+  ['/menu/restart-dsh/', 'menu/restart-dsh'],
+  ['/dialog/close/', 'dialog/close'],
+  ['/dialog/copy/', 'dialog/copy'],
+];
+
+function matchRoute(route) {
+  for (const [prefix, name] of ROUTE_TABLE) if (String(route).startsWith(prefix)) return name;
+  return null;
+}
+/* ===== end matchRoute ===== */
+
+// Имена из matchRoute → действия. route — строка маршрута, url — один
+// разобранный URL запроса (параметры — из url.searchParams).
+const ROUTE_HANDLERS = {
+  retry: () => onRetryRequest(),
+  lang: (route) => onLangSwitch(route.split('/')[2]),
+  'install/copy': () => onInstallCopy(),
+  'install/run': () => onInstallRun(),
+  'install/recheck': () => onInstallRecheck(),
+  'market/install': () => onMarketChoice('install'),
+  'market/skip': () => onMarketChoice('skip'),
+  'market/never': () => onMarketChoice('never'),
+  'update/install': () => onUpdateChoice('install'),
+  'update/later': () => onUpdateChoice('later'),
+  'update/never': () => onUpdateChoice('never'),
+  'update/recheck': () => onUpdateChoice('recheck'),
+  'update/copy': () => onUpdateChoice('copy'),
+  'update/restart': () => onUpdateChoice('restart'),
+  // О программе / проверка обновлений по URL — для Docker-сценариев
+  // (driver.js не умеет кликать по нативному меню); штатно — пункт меню.
+  // Ответ 204: страница, с которой перешли (GUI dsh), остаётся на месте.
+  'menu/about': () => { void showAboutDialog(); return noContentResponse(); },
+  'menu/check': () => { void showUpdateCheckDialog(); return noContentResponse(); },
+  'menu/rollback': () => { void showRollbackDialog(); return noContentResponse(); },
+  rollback: (route, url) => { rollbackTo(url.searchParams.get('v')); return noContentResponse(); },
+  'menu/update': (route, url) => { showUpdateNowDialog(url.searchParams.get('k')); return noContentResponse(); },
+  toast: (route, url) => onToastRequest(route, url),
+  'update-now': (route, url) => { updateNow(url.searchParams.get('k')); return noContentResponse(); },
+  find: (route, url) => onFindRequest(route, url),
+  'dialog/logs': () => { void openLogsFolder(); return noContentResponse(); },
+  'menu/quit': () => { app.quit(); return noContentResponse(); }, // «Файл → Выйти» (role: 'quit')
+  'window/close': () => { if (state.win && !state.win.isDestroyed()) state.win.close(); return noContentResponse(); },
+  'menu/report': () => { void saveReport(); return noContentResponse(); },
+  'dialog/report-show': () => { if (state.lastReportPath) shell.showItemInFolder(state.lastReportPath); return noContentResponse(); },
+  'dialog/log-refresh': () => { if (state.dialogRender) state.dialogRender(false); return noContentResponse(); },
+  'menu/log': () => { showLogDialog(); return noContentResponse(); },
+  'menu/settings': () => { showSettingsDialog(); return noContentResponse(); },
+  'settings/set': (route, url) => onSettingsSet(url),
+  'settings/section': (route, url) => {
+    const sec = url.searchParams.get('s');
+    if (SETTINGS_SECTIONS.includes(sec)) state.settingsSection = sec;
+    return noContentResponse();
+  },
+  'settings/pick-dsh': () => onSettingsPick('dshPath'),
+  'settings/pick-cwd': () => onSettingsPick('cwd'),
+  'settings/reset-updates': () => onSettingsResetUpdates(),
+  'settings/relaunch': () => { relaunchLauncher(); return noContentResponse(); },
+  'menu/close-context': () => { if (state.openContextMenu) state.openContextMenu.closePopup(); return noContentResponse(); },
+  'dialog/gpu-enable': () => onDialogGpuEnable(),
+  'menu/restart-dsh': () => { void restartDsh({ confirm: false }); return noContentResponse(); },
+  'dialog/close': () => onDialogClose(),
+  'dialog/copy': () => onDialogCopy(),
+};
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -507,65 +608,19 @@ async function onReady() {
   setInterval(() => { void pollAgentState(); }, AGENT_POLL_MS);
   restrictPermissions(); // до первого окна
   protocol.handle('dshlauncher', (request) => {
-    let route;
     try {
       // Без ключа запуска — не со страницы лаунчера (GUI dsh, плагин, внешний
       // сайт в окне): ничего не делаем. В журнал — только путь, без параметров.
-      route = stripRouteKey(launcherRoute(request.url), ROUTE_KEY);
+      const route = stripRouteKey(launcherRoute(request.url), ROUTE_KEY);
       if (route === null) {
         console.error(`[launcher] dshlauncher: запрос без ключа запуска — отклонён: ${launcherRoute(request.url).slice(0, 80)}`);
         return noContentResponse();
       }
-      if (route.startsWith('/retry/')) return onRetryRequest();
-      if (route.startsWith('/lang/')) return onLangSwitch(route.split('/')[2]);
-      if (route.startsWith('/install/copy/')) return onInstallCopy();
-      if (route.startsWith('/install/run/')) return onInstallRun();
-      if (route.startsWith('/install/recheck/')) return onInstallRecheck();
-      if (route.startsWith('/market/install/')) return onMarketChoice('install');
-      if (route.startsWith('/market/skip/')) return onMarketChoice('skip');
-      if (route.startsWith('/market/never/')) return onMarketChoice('never');
-      if (route.startsWith('/update/install/')) return onUpdateChoice('install');
-      if (route.startsWith('/update/later/')) return onUpdateChoice('later');
-      if (route.startsWith('/update/never/')) return onUpdateChoice('never');
-      if (route.startsWith('/update/recheck/')) return onUpdateChoice('recheck');
-      if (route.startsWith('/update/copy/')) return onUpdateChoice('copy');
-      if (route.startsWith('/update/restart/')) return onUpdateChoice('restart');
-      // О программе / проверка обновлений по URL — для Docker-сценариев
-      // (driver.js не умеет кликать по нативному меню); штатно — пункт меню.
-      // Ответ 204: страница, с которой перешли (GUI dsh), остаётся на месте.
-      if (route.startsWith('/menu/about/')) { void showAboutDialog(); return noContentResponse(); }
-      if (route.startsWith('/menu/check/')) { void showUpdateCheckDialog(); return noContentResponse(); }
-      if (route.startsWith('/menu/rollback/')) { void showRollbackDialog(); return noContentResponse(); }
-      if (route.startsWith('/rollback/')) { rollbackTo(new URL(request.url).searchParams.get('v')); return noContentResponse(); }
-      if (route.startsWith('/menu/update/')) { showUpdateNowDialog(new URL(request.url).searchParams.get('k')); return noContentResponse(); }
-      if (route.startsWith('/toast/')) return onToastRequest(route, request.url);
-      if (route.startsWith('/update-now/')) { updateNow(new URL(request.url).searchParams.get('k')); return noContentResponse(); }
-      if (route.startsWith('/find/')) return onFindRequest(route, request.url);
-      if (route.startsWith('/dialog/logs/')) { void openLogsFolder(); return noContentResponse(); }
-      if (route.startsWith('/menu/quit/')) { app.quit(); return noContentResponse(); } // «Файл → Выйти» (role: 'quit')
-      if (route.startsWith('/window/close/')) { if (state.win && !state.win.isDestroyed()) state.win.close(); return noContentResponse(); }
-      if (route.startsWith('/menu/report/')) { void saveReport(); return noContentResponse(); }
-      if (route.startsWith('/dialog/report-show/')) { if (state.lastReportPath) shell.showItemInFolder(state.lastReportPath); return noContentResponse(); }
-      if (route.startsWith('/dialog/log-refresh/')) { if (state.dialogRender) state.dialogRender(false); return noContentResponse(); }
-      if (route.startsWith('/menu/log/')) { showLogDialog(); return noContentResponse(); }
-      if (route.startsWith('/menu/settings/')) { showSettingsDialog(); return noContentResponse(); }
-      if (route.startsWith('/settings/set/')) return onSettingsSet(request.url);
-      if (route.startsWith('/settings/section/')) {
-        const sec = new URL(request.url).searchParams.get('s');
-        if (SETTINGS_SECTIONS.includes(sec)) state.settingsSection = sec;
-        return noContentResponse();
-      }
-      if (route.startsWith('/settings/pick-dsh/')) return onSettingsPick('dshPath');
-      if (route.startsWith('/settings/pick-cwd/')) return onSettingsPick('cwd');
-      if (route.startsWith('/settings/reset-updates/')) return onSettingsResetUpdates();
-      if (route.startsWith('/settings/relaunch/')) { relaunchLauncher(); return noContentResponse(); }
-      if (route.startsWith('/menu/close-context/')) { if (state.openContextMenu) state.openContextMenu.closePopup(); return noContentResponse(); }
-      if (route.startsWith('/dialog/gpu-enable/')) return onDialogGpuEnable();
-      if (route.startsWith('/menu/restart-dsh/')) { void restartDsh({ confirm: false }); return noContentResponse(); }
-      if (route.startsWith('/dialog/close/')) return onDialogClose();
-      if (route.startsWith('/dialog/copy/')) return onDialogCopy();
+      // URL разбираем один раз: хендлеры берут параметры из url.searchParams.
+      const url = new URL(request.url);
+      const handler = ROUTE_HANDLERS[matchRoute(route)];
+      return handler ? handler(route, url) : onPasteRequest(route);
     } catch { return blankResponse(); } // как раньше: сбой обработчика — пустая страница
-    return onPasteRequest(route);
   });
 
   const size = windowSize(loadWindowState(), screen.getPrimaryDisplay().workAreaSize);

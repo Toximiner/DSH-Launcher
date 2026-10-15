@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 // Юнит-тесты меню (main.js): contextMenuItems — какие пункты контекстного
 // меню показать, showContextMenu — что делает каждый пункт (на подставных
-// окне, Menu и буфере обмена), appMenuTemplate — строка меню окна.
+// окне, Menu и буфере обмена), appMenuTemplate — строка меню окна,
+// launcherVersionRaw — версия лаунчера (dpkg / корневой package.json).
 // main.js целиком не загружается (electron).
 'use strict';
 const assert = require('assert');
+const path = require('path');
 const { extract } = require('./_extract');
 
 // ---- contextMenuItems: пункты контекстного меню по правому клику ----
@@ -296,4 +298,24 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
   assert.deepStrictEqual([replaced, added], [['привет'], ['превет']], 'замена и добавление в словарь');
 }
 
-console.log('OK: contextMenuItems, showContextMenu, appMenuTemplate, keyAction, windowSize, gpuStatus — все проверки прошли');
+// ---- launcherVersionRaw: версия лаунчера (регресс-тест: package.json
+// исходников — корневой, а не src/ — иначе «О программе» показывает «неизвестно») ----
+// updates/process/require — подставные; require решает относительные пути
+// от src/ (от каталога, где модуль лежит в жизни).
+{
+  const mk = (execPath, requireImpl) => extract('launcherVersionRaw', {
+    updates: { launcherInstalledVersion: async () => '9.9.9' },
+    process: { execPath },
+    require: requireImpl,
+  })();
+  const realRequire = (spec) => require(path.resolve(__dirname, '..', 'src', spec));
+  (async () => {
+    assert.strictEqual(await mk('/opt/dsh-launcher/electron/dist/electron', () => { throw new Error('не должно открываться'); }),
+      '9.9.9', 'deb: версия из dpkg, package.json не открывают');
+    assert.strictEqual(await mk('/home/u/.local/share/electron/electron', realRequire),
+      require('../package.json').version, 'исходники: корневой package.json');
+    assert.strictEqual(await mk('/home/u/.local/share/electron/electron', () => { throw new Error('MODULE_NOT_FOUND'); }),
+      null, 'package.json недоступен — null');
+    console.log('OK: contextMenuItems, showContextMenu, appMenuTemplate, keyAction, windowSize, gpuStatus, launcherVersionRaw — все проверки прошли');
+  })();
+}

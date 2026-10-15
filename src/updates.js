@@ -1,8 +1,6 @@
 'use strict';
 // Обновления при запуске: проверка, вопрос, скачивание и установка лаунчера и dsh.
-const { app, session, clipboard } = require('electron');
-const http = require('http');
-const https = require('https');
+const { app, clipboard } = require('electron');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
@@ -11,13 +9,14 @@ const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc, timedCheck } = require('./util');
 const { envWithBinDir } = require('./system');
-const { runWithLiveLog } = require('./proc-log');
+const { runWithLiveLog, LOG_MAX_LINES } = require('./proc-log');
 const { prefFile, readPref, writePref } = require('./prefs');
 const { compareDebianVer, compareSemVer, tagToPackageVersion, dpkgStatusVersion, notesBetween } = require('./versions');
 const { releaseNotesLang, mdToHtml } = require('./notes');
-const { releasesCacheMode, releasesCacheFresh, proxyUrlFromRule, parseRelease } = require('./updates-logic');
-const { GITHUB_TOKEN, GITHUB_API, UPDATE_NOW, INSTALL_VERSION, CONFIG } = require('./env');
+const { GITHUB_TOKEN, UPDATE_NOW, INSTALL_VERSION, CONFIG } = require('./env');
 const { probeDsh, findBin, MIN_NODE_MAJOR, npmInstallInfo } = require('./dsh-install');
+const { httpGet } = require('./updates-http');
+const { DSH_NPM_PKG, UPDATE_GITHUB_REPO, fetchLauncherLatest, fetchDshLatest } = require('./updates-github');
 const pages = require('./pages');
 const settingsWindow = require('./settings-window');
 const launcher = require('./launcher'); // общий реестр (наполняет main.js)
@@ -60,22 +59,13 @@ const launcher = require('./launcher'); // общий реестр (наполн
  *  DSH_LAUNCHER_GITHUB_API=http://127.0.0.1:<порт> — подставной GitHub API
  *    (Docker-тесты, test/docker/fakes/github.py): список релизов и .deb.
  */
-const DSH_NPM_PKG = '@deepseek-ai/dsh';
-const UPDATE_GITHUB_REPO = 'Toximiner/DSH-Launcher';
 const UPDATE_CHECK_TIMEOUT = 8000; // сколько ждать проверки, прежде чем не спрашивать
 const NO_UPDATE_CHECK = !CONFIG.checkUpdates; // DSH_LAUNCHER_NO_UPDATE_CHECK или «Настройки»
-
-
-
-
-
-// Установленная версия лаунчера через dpkg (пакет .deb dsh-launcher).
-// null — не установлен через .deb (запуск из исходников) → не проверяем.
-
 
 // Версия пакета лаунчера — из базы dpkg, без запуска dpkg-query: запуск
 // дочернего процесса во время загрузки окна-диалога ронял Electron 44
 // («О программе»: SIGSEGV / «terminate called without an active exception»).
+// null — не установлен через .deb (запуск из исходников) → не проверяем.
 async function launcherInstalledVersion() {
   const fake = process.env.DSH_LAUNCHER_FAKE_INSTALLED;
   if (fake) return String(fake);
@@ -86,143 +76,6 @@ async function launcherInstalledVersion() {
   }
 }
 
-// Проверка с дедлайном: по истечении ms возвращает null — медленная сеть
-// не должна держать окно на вопросе, а вопрос — не держать старт.
-
-
-// Внешние запросы (GitHub, npm, скачивание .deb) — через http/https из Node,
-// а не electronNet.fetch. После electronNet.fetch к внешним хостам при старте
-// следующий запуск дочернего процесса (dpkg-query, dsh --version в «О
-// программе») ронял Electron 44 в нативном коде: «terminate called without
-// an active exception» / SIGSEGV (Wayland, Ubuntu 26.04; 1.3.0). Системный
-// прокси берём у Chromium (session.resolveProxy — настройки GNOME/KDE и
-// переменные окружения) и передаём агенту Node (proxyEnv, Node 24.5+).
-// Проверка куки окна (plainUrlIsAuthed) остаётся на electronNet — ей нужна
-// сессия окна.
-
-
-
-async function proxyAgentFor(u) {
-  let rule = 'DIRECT';
-  try { rule = await session.defaultSession.resolveProxy(u.toString()); } catch { /* напрямую */ }
-  const proxy = proxyUrlFromRule(rule);
-  if (!proxy) return undefined;
-  const isHttp = u.protocol === 'http:';
-  return new (isHttp ? http : https).Agent({ proxyEnv: { [isHttp ? 'HTTP_PROXY' : 'HTTPS_PROXY']: proxy } });
-}
-
-/* ===== httpGet (тест test/http.js, с подставным агентом) =====
-   GET с переходами по редиректам (ассеты релизов GitHub отдаются через 302)
-   → поток ответа (http.IncomingMessage): statusCode, headers, данные.
-   Authorization — только в пределах исходного адреса (origin). */
-async function httpGet(url, { headers = {}, maxRedirects = 5, timeoutMs = 30000 } = {}) {
-  const u = new URL(url);
-  const agent = await proxyAgentFor(u);
-  const res = await new Promise((resolve, reject) => {
-    const req = (u.protocol === 'http:' ? http : https).get(u, { headers, agent }, resolve);
-    req.on('error', reject);
-    req.setTimeout(timeoutMs, () => req.destroy(new Error(`таймаут ${timeoutMs / 1000} с: ${u.host}`)));
-  });
-  if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
-    res.resume();
-    if (maxRedirects <= 0) throw new Error('слишком много перенаправлений');
-    const next = new URL(res.headers.location, u);
-    // токен — только тому адресу, которому его давали: на другой хост, порт
-    // или схему заголовок Authorization не уходит (как у curl и браузеров)
-    const nextHeaders = next.origin === u.origin ? headers
-      : Object.fromEntries(Object.entries(headers).filter(([k]) => k.toLowerCase() !== 'authorization'));
-    return httpGet(next.toString(), { headers: nextHeaders, maxRedirects: maxRedirects - 1, timeoutMs });
-  }
-  return res;
-}
-/* ===== end httpGet ===== */
-
-async function httpJson(url, headers, what) {
-  const res = await httpGet(url, { headers });
-  let body = '';
-  res.setEncoding('utf8');
-  for await (const c of res) body += c;
-  if (res.statusCode !== 200) throw new Error(`${what}: HTTP ${res.statusCode}`);
-  return JSON.parse(body);
-}
-
-
-
-// Кэш списка релизов: без метки ETag — не спрашивать GitHub чаще раза в час;
-// GitHub не ответил — список из кэша, если он не старше часа.
-const RELEASES_MAX_AGE_MS = 60 * 60 * 1000;
-const releasesCacheFile = () => path.join(app.getPath('userData'), 'releases-cache.json');
-
-// Список релизов GitHub с учётом кэша (см. releasesCacheMode).
-async function githubReleases({ force = false } = {}) {
-  let entry = null;
-  try { entry = JSON.parse(fs.readFileSync(releasesCacheFile(), 'utf8')); } catch { /* кэша нет */ }
-  const mode = releasesCacheMode(entry, Date.now(), RELEASES_MAX_AGE_MS, force);
-  if (mode === 'cache') return entry.list;
-  const headers = { 'User-Agent': 'dsh-launcher', 'Accept': 'application/vnd.github+json' };
-  if (mode === 'revalidate') headers['If-None-Match'] = entry.etag;
-  if (GITHUB_TOKEN && GITHUB_API === 'https://api.github.com') headers.Authorization = `Bearer ${GITHUB_TOKEN}`; // только настоящему GitHub
-  let res;
-  let body = '';
-  try {
-  // 100 — максимум GitHub API: «Вернуть предыдущую версию…» и «Что нового» видят
-  // и старые релизы (с 20 они выпадали из списка); ответ кэшируется по ETag
-    res = await httpGet(`${GITHUB_API}/repos/${UPDATE_GITHUB_REPO}/releases?per_page=100`, { headers });
-    res.setEncoding('utf8');
-    for await (const c of res) body += c;
-    if (res.statusCode !== 200 && !(res.statusCode === 304 && entry)) throw new Error(`GitHub API: HTTP ${res.statusCode}`);
-  } catch (e) {
-    // нет сети, лимит, сбой GitHub — недавний список лучше никакого
-    if (!force && releasesCacheFresh(entry, Date.now(), RELEASES_MAX_AGE_MS)) {
-      console.log(`[launcher] релизы GitHub: ${e.message} — список из кэша`);
-      return entry.list;
-    }
-    throw e;
-  }
-  let list;
-  if (res.statusCode === 304) {
-    list = entry.list;
-    console.log('[launcher] релизы GitHub: не изменились (304, лимит не расходуется)');
-  } else {
-    list = JSON.parse(body);
-    entry = { etag: res.headers.etag || null, list };
-  }
-  try {
-    fs.mkdirSync(path.dirname(releasesCacheFile()), { recursive: true });
-    fs.writeFileSync(releasesCacheFile(), JSON.stringify({ ...entry, fetchedAt: Date.now() }));
-  } catch { /* кэш — не обязателен */ }
-  return list;
-}
-
-// Список релизов (одним запросом): последний — наибольшая версия среди
-// опубликованных (не черновик, не prerelease); описания остальных — для
-// «Что нового» (изменения между установленной и новой версией).
-async function fetchLauncherLatest({ force = false } = {}) {
-  const list = await githubReleases({ force });
-  const rels = (Array.isArray(list) ? list : []).filter((r) => r && !r.draft && !r.prerelease && r.tag_name);
-  if (!rels.length) throw new Error('GitHub API: нет опубликованных релизов');
-  const ver = (r) => String(r.tag_name).replace(/^v/, '');
-  const j = rels.reduce((a, b) => (compareDebianVer(tagToPackageVersion(ver(b)), tagToPackageVersion(ver(a))) > 0 ? b : a));
-  const { version, htmlUrl, assetUrl, assetSha256 } = parseRelease(j);
-  const meta = {
-    version,
-    htmlUrl,
-    assetUrl,
-    assetSha256,
-    releases: rels.map((r) => ({ version: ver(r), body: String(r.body || '') })),
-    all: rels.map(parseRelease), // для «Вернуть предыдущую версию…»
-  };
-  const fake = fakeLatest('DSH_LAUNCHER_FAKE_LAUNCHER_LATEST'); // разработка/тесты
-  if (fake) meta.version = fake;
-  return meta;
-}
-
-
-
-
-
-
-
 // Блок «Что нового» — версии от новой к старой; пусто — ''.
 function notesBlockHtml(items) {
   const parts = (items || [])
@@ -232,26 +85,6 @@ function notesBlockHtml(items) {
   return `<p style="margin:14px 0 6px; color:#d7dce3">${tr('Что нового:', 'What’s new:')}</p>
     <div class="notes">${parts.map((r) => `<div class="ver"><code>${esc(r.v)}</code></div>${r.html}`).join('')}</div>`;
 }
-
-async function fetchDshLatest() {
-  const j = await httpJson(`https://registry.npmjs.org/${DSH_NPM_PKG}/latest`,
-    { 'User-Agent': 'dsh-launcher' }, 'npm registry');
-  const version = String(j.version || '');
-  if (!version) throw new Error('нет версии в ответе npm');
-  const meta = { version, htmlUrl: `https://www.npmjs.com/package/${DSH_NPM_PKG}` };
-  const fake = fakeLatest('DSH_LAUNCHER_FAKE_DSH_LATEST'); // разработка/тесты
-  if (fake) meta.version = fake;
-  return meta;
-}
-
-// Подставная «последняя» версия (разработка/тесты): значение переменной или,
-// если это путь, — содержимое файла (читается при каждой проверке).
-function fakeLatest(name) {
-  const v = process.env[name];
-  if (!v || !v.startsWith('/')) return v || null;
-  try { return fs.readFileSync(v, 'utf8').trim() || null; } catch { return null; }
-}
-
 
 // При старте — оба запроса в параллель (здесь не ждём их завершения).
 function startUpdateChecks() {
@@ -449,7 +282,7 @@ async function downloadDeb(url, expectedSha256) {
       updateState.log.push(total
         ? `${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} МБ (${Math.round((100 * got) / total)}%)`
         : `${(got / 1048576).toFixed(1)} МБ`);
-      if (updateState.log.length > 500) updateState.log.shift();
+      if (updateState.log.length > LOG_MAX_LINES) updateState.log.shift();
       showUpdatePage();
     }, 800);
     try {
@@ -487,8 +320,6 @@ async function downloadDeb(url, expectedSha256) {
 // Перезапуск после обновления лаунчера: отпускаем single-instance лок, чтобы
 // новый экземпляр сразу его взял, запускаем новый отсоединённым (он
 // переживёт наш выход) и закрываемся штатно — через before-quit.
-
-
 function restartLauncher() {
   if (state.restarting || state.stopping) return;
   state.restarting = true;
@@ -527,8 +358,6 @@ function restartLauncher() {
 // /opt/dsh-launcher под нами. Уже открытые файлы живут (старые inode), но
 // новые процессы Chromium (GPU, утилиты) запустились бы из нового бинарника —
 // поэтому перезапускаемся быстро, а при падении любого процесса — сразу.
-
-
 function showUpdateSuccess() {
   state.launcherUpdatedOnDisk = true;
   if (updateState.debPath) {
@@ -662,10 +491,6 @@ async function offerLauncherUpdate() {
     noteIsError = true;
   }
 }
-
-// Текущая версия dsh: из dshInstallCheck при старте (onReady); если почему-
-// то нет — пробинуем саму команду.
-
 
 async function offerDshUpdate() {
   const latest = await state.updateChecks.dsh;
