@@ -5,6 +5,16 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Changed
+
+- **Live log on the “running” pages** (dsh install, marketplace install,
+  updates and .deb download). New lines are now appended to the page without
+  reloading it: scrolling stays with the user — if you scrolled the log up to
+  read it, new lines no longer yank the view back to the first line; if you
+  are at the bottom, the log stays pinned there as before.
+
 ## [1.15.9] — 2026-10-15
 
 ### Fixed

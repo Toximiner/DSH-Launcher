@@ -200,4 +200,76 @@ function showPastePage() {
   showStatus(tr('Нужен токен', 'Token required'), body, true);
 }
 
-Object.assign(module.exports, { pageHtml, stderrBlock, showPage, langPrefFile, loadLangPref, onLangSwitch, loadInWin, showStatus, showPastePage }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+/* ---------------- живой лог на странице-статусе ----------------
+ * Страницы «выполняется» раньше перерисовывались целиком каждые 800 мс
+ * (новый data: URL) — скролл сбрасывался наверх, и лог нельзя было читать.
+ * Теперь первая отрисовка — обычная страница с <pre id="live-log">, а
+ * последующие — через executeJavaScript: строки только дописываются, и если
+ * пользователь прижат ко дну, остаётся прижатым, иначе скролл не трогают.
+ * Если страница уже не живая (ушли по переходу, перегрузили) — false:
+ * вызывающий делает полную отрисовку, которая сбрасывает счётчик.
+ */
+const livePushed = new Map(); // st → logSeq последней строки, уже на странице
+
+/* ===== liveLogAppend (чистая функция, тест test/live-log.js) ===== */
+// Страницная функция: дописать строки в <pre id="live-log">. Лимит 500 —
+// как LOG_MAX_LINES в proc-log.js: при превышении старые строки уходят
+// сверху. false — на странице нет такого <pre> (уже не наша страница).
+function liveLogAppend(document, lines) {
+  const pre = document.getElementById('live-log');
+  if (!pre) return false;
+  const pinned = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
+  if (lines.length) {
+    let t = pre.textContent;
+    if (t.trim() === '…') t = '';
+    t = t ? t + '\n' + lines.join('\n') : lines.join('\n');
+    const ls = t.split('\n');
+    if (ls.length > 500) t = ls.slice(ls.length - 500).join('\n');
+    pre.textContent = t;
+  }
+  if (pinned) pre.scrollTop = pre.scrollHeight;
+  return true;
+}
+/* ===== end liveLogAppend ===== */
+
+/* ===== liveLogFresh (чистая функция, тест test/live-log.js) ===== */
+// Строки, которых ещё нет на странице: с logSeq = shown+1 по st.logSeq.
+// null — ничего нового. st.log хранит только последние 500 строк
+// (proc-log), поэтому индекс считается от logSeq; строки, ушедшие из окна
+// раньше, чем их успели показать, не восстанавливаются (редко: лог > 500).
+function liveLogFresh(st, shown) {
+  const seq = st.logSeq || 0;
+  if (seq === shown) return null;
+  return st.log.slice(Math.max(0, shown - seq + st.log.length));
+}
+/* ===== end liveLogFresh ===== */
+
+// Для первой отрисовки страницы «выполняется»: <pre> с текущими строками
+// и скриптом дописывания (liveLogAppend — сама функция, целиком в страницу).
+function liveLogPre(lines) {
+  return `<pre id="live-log">${esc(lines.join('\n') || '…')}</pre>
+  <script>window.__liveLog = (lines) => (${liveLogAppend.toString()})(document, lines);</script>`;
+}
+
+// После полной отрисовки «выполняется»: на странице все текущие строки.
+function liveLogSync(st) {
+  livePushed.set(st, st.logSeq || 0);
+}
+
+// Дописать новые строки на открытую страницу. true — дописано (или новых
+// нет); false — страница уже не живая, вызывающий делает полную отрисовку.
+async function liveLogTick(st) {
+  if (!state.win || state.win.isDestroyed()) return false;
+  const fresh = liveLogFresh(st, livePushed.get(st) || 0);
+  if (fresh === null) return true;
+  try {
+    const ok = await state.win.webContents.executeJavaScript(`window.__liveLog(${JSON.stringify(fresh)})`);
+    if (!ok) return false;
+    livePushed.set(st, st.logSeq || 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+Object.assign(module.exports, { pageHtml, stderrBlock, showPage, langPrefFile, loadLangPref, onLangSwitch, loadInWin, showStatus, showPastePage, liveLogPre, liveLogSync, liveLogTick }); // дополняем, а не заменяем: модули подключают друг друга по кругу
