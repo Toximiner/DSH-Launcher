@@ -95,4 +95,9 @@ function redactLog(text) {
     .replace(/((?:api[_-]?key|apikey|secret|password|passwd|access[_-]?token|auth[_-]?token)["']?\s*[:=]\s*["']?)[^\s"'&,;]+/gi, '$1***');
 }
 
-module.exports = { splitArgs, firstErrLine, esc, profileFromArgs, timedCheck, launcherRoute, withRouteKey, stripRouteKey, validRouteKey, redactLog };
+// CSP служебных data:-страниц: внешних ресурсов нет (защита в глубину
+// вместе с esc() — при инъекции в логи), разрешены только inline-
+// скрипты и стили (кнопки и стили страниц их используют) и data:-изображения.
+const CSP_META = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;">`;
+
+module.exports = { splitArgs, firstErrLine, esc, profileFromArgs, timedCheck, launcherRoute, withRouteKey, stripRouteKey, validRouteKey, redactLog, CSP_META };

@@ -8,7 +8,7 @@ const { BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { tr } = require('./i18n');
-const { esc } = require('./util');
+const { esc, CSP_META } = require('./util');
 
 const CLOSING_DELAY_MS = 300;
 
@@ -16,7 +16,7 @@ const CLOSING_DELAY_MS = 300;
    Разметка окошка: значок, крутилка, заголовок и пояснение. Без скриптов. */
 function closingHtml(title, text, icon) {
   const img = icon ? `<img src="${esc(icon)}" alt="">` : '';
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>
+  const html = `<!doctype html><html><head><meta charset="utf-8">${CSP_META}<title>${esc(title)}</title><style>
     html,body{margin:0;height:100%;background:#0f1115;color:#d7dce3;overflow:hidden;
       font-family:system-ui,'Segoe UI',Roboto,Ubuntu,sans-serif;user-select:none}
     body{display:flex;align-items:center;gap:16px;padding:0 22px;box-sizing:border-box;
