@@ -23,7 +23,7 @@ def x(*args):
 
 def focus_window():
     """Активировать окно лаунчера: без фокуса X-клавиши уходят «в никуда»."""
-    win = x('xdotool', 'search', '--onlyvisible', '--name', 'DeepSeek Harness').split()[0]
+    win = x('xdotool', 'search', '--onlyvisible', '--name', 'DeepSeek Harness|fake dsh gui').split()[0]
     x('xdotool', 'windowfocus', '--sync', win)
 
 

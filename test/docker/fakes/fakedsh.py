@@ -86,7 +86,9 @@ signal.signal(signal.SIGTERM, on_term)
 # beforeinput insertText вставляет текст (как Lexical), Enter без модификаторов
 # «отправляет»: текст уходит в #sent, поле очищается.
 GUI_PAGE = """<!doctype html>
-<html><head><meta charset="utf-8"><title>fake dsh gui</title></head>
+<!-- <title> не задаём: Electron берёт заголовок окна из документа,
+     а xdotool-фокус (test_input_history) ищет окно 'DeepSeek Harness' -->
+<html><head><meta charset="utf-8"></head>
 <body>
 <div id="c" contenteditable="true" role="textbox" aria-multiline="true" data-composer-input="true"></div>
 <pre id="sent"></pre>
