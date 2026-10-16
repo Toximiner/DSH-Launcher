@@ -34,6 +34,33 @@ def key(name):
     x('xdotool', 'key', name)
 
 
+def ensure_key_counter(gui):
+    """Счётчик keydown на странице: подтверждение, что X-клавиша дошла."""
+    gui.eval('window.__keys_n = window.__keys_n || 0;'
+             ' if (!window.__kch) { window.__kch = 1;'
+             ' document.addEventListener("keydown", () => { window.__keys_n++; }, true); } 1')
+
+
+def press_key(gui, name):
+    """X-клавиша с подтверждением доставки.
+
+    При неактивированном окне клавиши теряются (прогоны №4–5: и CDP, и xdotool).
+    Повтор шлём, только если страница не увидела события — у потерянной клавиши
+    побочных эффектов нет.
+    """
+    ensure_key_counter(gui)
+    for _ in range(5):
+        n = gui.eval('window.__keys_n')
+        if n is None:
+            ensure_key_counter(gui)
+            continue
+        key(name)
+        if wait_for(lambda: gui.eval('window.__keys_n') != n, 2, 0.05):
+            return
+        focus_window()
+    raise AssertionError(f'клавиша {name} не дошла до страницы')
+
+
 def field(gui):
     return gui.eval('window.__field()')
 
@@ -71,39 +98,39 @@ def test_input_history(start, gui):
 
     # Enter «отправляет» (поле очищается, как в dsh), текст попадает в историю
     type_text(gui, 'первое сообщение')
-    key('Return')
+    press_key(gui, 'Return')
     assert wait_for(lambda: field(gui) == '', 5, 0.1), f'после Enter поле пустое: {field(gui)!r}'
     assert wait_for(lambda: history_file() == ['первое сообщение'], 10, 0.2), f'история записана: {history_file()!r}'
 
     type_text(gui, 'второе сообщение')
-    key('Return')
+    press_key(gui, 'Return')
     assert wait_for(lambda: history_file() == ['второе сообщение', 'первое сообщение'], 10, 0.2), \
         f'свежие сверху: {history_file()!r}'
 
     # повтор подряд не дублируется
     type_text(gui, 'второе сообщение')
-    key('Return')
+    press_key(gui, 'Return')
     assert wait_for(lambda: history_file() == ['второе сообщение', 'первое сообщение'], 10, 0.2), \
         f'повтор не дублируется: {history_file()!r}'
 
     # ↑ — свежее, ↑↑ — старше, дальше некуда; ↓ — назад, ↓ ниже нового — пустое
-    key('Up')
+    press_key(gui, 'Up')
     assert wait_for(lambda: field(gui) == 'второе сообщение', 5, 0.1), f'↑ даёт последнее: {field(gui)!r}'
-    key('Up')
+    press_key(gui, 'Up')
     assert wait_for(lambda: field(gui) == 'первое сообщение', 5, 0.1), f'↑↑ даёт предыдущее: {field(gui)!r}'
-    key('Up')
+    press_key(gui, 'Up')
     assert wait_for(lambda: field(gui) == 'первое сообщение', 5, 0.1), 'дальше истории нет'
-    key('Down')
+    press_key(gui, 'Down')
     assert wait_for(lambda: field(gui) == 'второе сообщение', 5, 0.1), f'↓ возвращает к свежему: {field(gui)!r}'
-    key('Down')
+    press_key(gui, 'Down')
     assert wait_for(lambda: field(gui) == '', 5, 0.1), f'↓ ниже нового — пустое поле: {field(gui)!r}'
 
     # Esc: недописанный черновик возвращается, в историю не попадает
     type_text(gui, 'черновик')
     caret_start(gui)
-    key('Up')
+    press_key(gui, 'Up')
     assert wait_for(lambda: field(gui) == 'второе сообщение', 5, 0.1), f'↑ из черновика: {field(gui)!r}'
-    key('Escape')
+    press_key(gui, 'Escape')
     assert wait_for(lambda: field(gui) == 'черновик', 5, 0.1), f'Esc вернул черновик: {field(gui)!r}'
     assert history_file() == ['второе сообщение', 'первое сообщение'], f'черновик не записан: {history_file()!r}'
 
@@ -133,7 +160,7 @@ def test_input_history(start, gui):
              " enabled: (window.__dshInputHistory || {}).enabled, installed: (window.__dshInputHistory || {}).installed }); 1")
     focus_window()
     focus_composer(gui)
-    key('Up')
+    press_key(gui, 'Up')
     if not wait_for(lambda: field(gui) == 'второе сообщение', 8, 0.1):
         diag = gui.eval('JSON.stringify({ diag: window.__diag, state0: window.__state0,'
                         ' field: window.__field(), items: (window.__dshInputHistory || {}).items })')
