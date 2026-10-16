@@ -7,6 +7,10 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
+
+## [1.15.13] — 2026-10-16
+
 ### Changed
 
 - The `launcher` registry in `main.js` was trimmed from 17 names to 5:
