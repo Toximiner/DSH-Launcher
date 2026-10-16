@@ -7,7 +7,12 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
-<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
+### Added
+
+- Input history: `↑`/`↓` in the dsh input field recall previously sent messages
+  (up to 50, like a terminal), `Esc` restores an unsent draft. Stored in
+  `~/.config/dsh-launcher/input-history.json`, never written to the log; can be
+  turned off in “Settings” → “General”.
 
 ## [1.15.14] — 2026-10-16
 
