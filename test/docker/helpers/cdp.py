@@ -145,6 +145,7 @@ class Driver:
             vk = 111 + int(code[1:])
         else:
             key, vk = {'Escape': ('Escape', 27), 'Enter': ('Enter', 13),
+                       'ArrowUp': ('ArrowUp', 38), 'ArrowDown': ('ArrowDown', 40),
                        'Equal': ('=', 187), 'Minus': ('-', 189)}.get(code, (code, 0))
         ev = lambda t: ('Input.dispatchKeyEvent', {'type': t, 'modifiers': modifiers, 'code': code, 'key': key,
                                                    'windowsVirtualKeyCode': vk, 'nativeVirtualKeyCode': vk})

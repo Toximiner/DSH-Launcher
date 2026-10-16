@@ -27,6 +27,15 @@ A small Electron app: a window that opens **DeepSeek Harness**
   “Don’t ask again”. The permanent opt-out is stored in
   `~/.config/dsh-launcher/market-prompt.json` — delete the file to get the
   question back. No question is asked when attaching to an already running dsh.
+- **Input history.** Plain `↑`/`↓` in the dsh input field recall previously
+  sent messages (like a terminal; up to 50, consecutive repeats are not
+  duplicated), `Esc` brings back an unsent draft, `↓` below the newest clears
+  the field. The arrows are intercepted only when the caret is at the start of
+  the field; `Shift+↑/↓` (selection) and `Ctrl`/`Alt` combinations (used by
+  dsh itself) are not touched. Texts live in
+  `~/.config/dsh-launcher/input-history.json` and are never written to the
+  launcher log; can be turned off in “Settings” → “General”. The feature relies
+  on dsh's input editor: a major dsh update may stop it from working.
 - **Closing the window** stops the whole dsh process tree (SIGTERM,
   SIGKILL after 4 s): both the one the launcher started and the one it
   “adopted” after a dsh self-restart (found by the listening port). A dsh

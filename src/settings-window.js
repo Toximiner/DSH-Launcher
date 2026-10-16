@@ -21,6 +21,7 @@ const updatesLive = require('./updates-live');
 const updates = require('./updates');
 const view = require('./view');
 const { noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
+const { inputHistoryOn, inputHistoryScript } = require('./input-history'); // ↑/↓: история введённого в поле dsh
 
 /* ---------------- окно «Настройки» ---------------- */
 
@@ -80,6 +81,15 @@ function onSettingsSet(url) {
       else if (key === 'attention') saveSettings({ attention: r.value ? null : false });
       else if (key === 'sandbox') saveSettings({ sandbox: r.value ? true : null });
       else if (key === 'attentionSound') { saveSettings({ attentionSound: r.value ? true : null }); if (r.value && state.win) tray.playAgentSound(); } // сразу — услышать
+      else if (key === 'inputHistory') { // сразу: впрыск в уже открытую страницу dsh
+        saveSettings({ inputHistory: r.value ? null : false });
+        try {
+          if (state.win && !state.win.isDestroyed()) {
+            const js = r.value ? inputHistoryScript() : 'window.__dshInputHistory && window.__dshInputHistory.setEnabled(false); 1';
+            void state.win.webContents.executeJavaScript(js).catch(() => {});
+          }
+        } catch { /* noop */ }
+      }
       else saveSettings({ [key]: r.value || null }); // dshPath, cwd: '' — по умолчанию
       console.log(`[launcher] настройки: ${key} = ${key === 'dshPath' || key === 'cwd' ? (r.value || '(по умолчанию)') : r.value}`);
       settingsNote = { text: tr('Сохранено', 'Saved'), error: false };
@@ -195,6 +205,7 @@ function showSettingsDialog() {
           ${LANG_FORCED ? `<code>${i18n.getLang()}</code> <span class="hint">${tr('задано переменной', 'set by')} <code>DSH_LAUNCHER_LANG</code></span>`
             : sel('lang', langSetting(), [['auto', tr('Авто (как в системе)', 'Auto (system)')], ['ru', 'Русский'], ['en', 'English']])}</div>
         <div class="row">${check('spellcheck', state.spellcheckOn, tr('Проверка орфографии в полях ввода', 'Spell check in text fields'))}</div>
+        <div class="row">${check('inputHistory', inputHistoryOn(), tr('Поднимать историю сообщений клавишами ↑/↓ (как в терминале)', 'Recall sent messages with ↑/↓ (like a terminal)'))}</div>
           </section>
           <section id="sec-updates" class="form"${state.settingsSection === 'updates' ? '' : ' hidden'}>
         <div class="row">${check('checkUpdates', next.checkUpdates, tr('Проверять обновления при запуске (со следующего запуска)', 'Check for updates at startup (from the next start)'), next.src.checkUpdates === 'env')}

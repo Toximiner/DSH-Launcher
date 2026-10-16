@@ -56,6 +56,7 @@ const { stopDsh, stopAdoptedDsh } = require('./src/dsh-stop');
 const { checkPreviousRun, clearRunMarker, maybeShowCrashNotice } = require('./src/diagnostics');
 const { showClosingWindow, CLOSING_DELAY_MS } = require('./src/closing-window');
 const { closeToTrayOn, setTray, setTrayAttention, clearAgentNotification, showMainWindow, onMainWindowClose, AGENT_POLL_MS, pollAgentState } = require('./src/tray');
+const { inputHistoryOn, inputHistoryScript } = require('./src/input-history'); // ↑/↓: история введённого в поле dsh
 const { maybeShowWhatsNew } = require('./src/whats-new');
 const { maybeShowDshCrashNotice } = require('./src/dsh-process');
 const { loadWindowState, trackWindowState } = require('./src/window-state');
@@ -186,7 +187,13 @@ async function onReady() {
   state.win.webContents.on('did-finish-load', () => {
     // первая загрузка GUI dsh — показать «Что нового», если лаунчер обновился
     try {
-      if (new URL(state.win.webContents.getURL()).origin === new URL(PLAIN_URL).origin) { void maybeShowWhatsNew(); maybeShowCrashNotice(); maybeShowDshCrashNotice(); }
+      if (new URL(state.win.webContents.getURL()).origin === new URL(PLAIN_URL).origin) {
+        void maybeShowWhatsNew();
+        maybeShowCrashNotice();
+        maybeShowDshCrashNotice();
+        // ↑/↓ в поле dsh: впрыск истории введённого (тексты в журнал не пишутся)
+        if (inputHistoryOn()) void state.win.webContents.executeJavaScript(inputHistoryScript()).catch(() => {});
+      }
     } catch { /* data: */ }
     try { console.log('[launcher] страница загружена:', state.win.webContents.getURL().slice(0, 120)); } catch { /* noop */ }
   });

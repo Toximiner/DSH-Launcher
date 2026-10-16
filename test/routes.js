@@ -48,6 +48,7 @@ const expected = [
   ['/menu/restart-dsh/', 'menu/restart-dsh'],
   ['/dialog/close/', 'dialog/close'],
   ['/dialog/copy/', 'dialog/copy'],
+  ['/history/push/', 'history/push'],
 ];
 for (const [prefix, name] of expected) {
   assert.strictEqual(matchRoute(prefix + 'x'), name, prefix);
