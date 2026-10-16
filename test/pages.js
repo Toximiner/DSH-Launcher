@@ -20,7 +20,7 @@ const { extract } = require('./_extract');
 
   // ---- closingHtml: окошко «закрывается…» ----
   {
-    const closingHtml = extract('closingHtml', { esc: require('../src/util').esc });
+    const closingHtml = extract('closingHtml', { esc: require('../src/util').esc, CSP_META: 'CSP' });
     const data = closingHtml('Закрывается <x>', 'Подождите', 'data:image/png;base64,AAA');
     assert.ok(data.startsWith('data:text/html;charset=utf-8,'), 'data: URL');
     const h = decodeURIComponent(data.slice('data:text/html;charset=utf-8,'.length));
@@ -34,7 +34,7 @@ const { extract } = require('./_extract');
   // ---- pageHtml: разметка служебной страницы ----
   const { esc, withRouteKey } = require('../src/util');
   const KEY = 'ab'.repeat(16);
-  const pageHtml = extract('pageHtml', { i18n: { getLang: () => 'ru' }, esc, PAGE_CSS: 'CSS', withRouteKey, ROUTE_KEY: KEY });
+  const pageHtml = extract('pageHtml', { i18n: { getLang: () => 'ru' }, esc, PAGE_CSS: 'CSS', withRouteKey, ROUTE_KEY: KEY, CSP_META: 'CSP' });
   const prefix = 'data:text/html;charset=utf-8,';
   const htmlOf = (data) => decodeURIComponent(data.slice(prefix.length));
 

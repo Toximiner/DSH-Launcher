@@ -7,12 +7,12 @@ const { guardNavigation } = require('./guard');
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
-const { esc, withRouteKey } = require('./util');
+const { esc, withRouteKey, CSP_META } = require('./util');
 const { ROUTE_KEY } = require('./env');
 const menus = require('./menus');
 const settingsWindow = require('./settings-window');
 const updatesLive = require('./updates-live');
-const launcher = require('./launcher'); // общий реестр (наполняет main.js)
+const { noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
 
 /* ---------------- «Вид»: перезагрузка, масштаб, поиск, полный экран ---------------- */
 
@@ -73,7 +73,7 @@ function findBarUrl() {
     button{background:#1f2836;border:0;border-radius:7px;color:#d7dce3;width:28px;height:28px;cursor:pointer;font-size:14px}
     button:hover{background:#2a3550}`;
   const go = (r) => `location.href='dshlauncher://find/${r}/'`;
-  const html = `<!doctype html><html lang="${i18n.getLang()}"><head><meta charset="utf-8"><style>${css}</style></head><body>
+  const html = `<!doctype html><html lang="${i18n.getLang()}"><head><meta charset="utf-8">${CSP_META}<style>${css}</style></head><body>
     <input id="q" placeholder="${esc(tr('Найти на странице', 'Find in page'))}" spellcheck="false" autocomplete="off">
     <span id="n"></span>
     <button title="${esc(tr('Предыдущее (Shift+Enter)', 'Previous (Shift+Enter)'))}" onclick="${go('prev')}">&#8593;</button>
@@ -149,7 +149,7 @@ function onFindRequest(route, url) {
   else if (route.startsWith('/find/next/')) findStep(true);
   else if (route.startsWith('/find/prev/')) findStep(false);
   else if (route.startsWith('/find/close/')) closeFind();
-  return launcher.noContentResponse();
+  return noContentResponse();
 }
 
 // Проверка орфографии в полях ввода (русский и английский). Словари

@@ -13,7 +13,7 @@ const { prefFile, readPref, writePref } = require('./prefs');
 const { DSH_ARGS, CWD } = require('./env');
 const { dshEnv, findBin, npmInstallInfo } = require('./dsh-install');
 const pages = require('./pages');
-const launcher = require('./launcher'); // общий реестр (наполняет main.js)
+const { blankResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
 
 /* ---------------- плагин маркета (dshmarket) ----------------
  * Перед тем как лаунчер сам запускает dsh, проверяем, что в профиле стоит
@@ -114,7 +114,7 @@ function onMarketChoice(choice) {
     marketState.resolve = null;
     resolve(choice);
   }
-  return launcher.blankResponse();
+  return blankResponse();
 }
 
 // dsh plugin add вызывает pnpm — его каталог тоже должен быть в PATH.

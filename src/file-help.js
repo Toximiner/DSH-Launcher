@@ -12,7 +12,7 @@ const { GPU_MARKER_FILE, GPU_MARKER_TTL_MS, gpuDisabledByMarker, hasEglLibs, has
 const dshStop = require('./dsh-stop');
 const launch = require('./launch');
 const pages = require('./pages');
-const launcher = require('./launcher'); // общий реестр (наполняет main.js)
+const { noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
 
 /* ---------------- «Файл» / «Справка»: перезапуск dsh, папка логов ---------------- */
 
@@ -100,7 +100,7 @@ function onDialogGpuEnable() {
   try { fs.unlinkSync(GPU_MARKER_FILE); console.log('[launcher] маркер сбоев GPU снят — GPU со следующего запуска'); }
   catch (e) { if (e.code !== 'ENOENT') console.error('[launcher] маркер GPU:', e.message); }
   if (state.dialogRender) state.dialogRender(false);
-  return launcher.noContentResponse();
+  return noContentResponse();
 }
 
 Object.assign(module.exports, { openLogsFolder, restartDsh, gpuStatusNow, gpuStatusText, onDialogGpuEnable }); // дополняем, а не заменяем: модули подключают друг друга по кругу

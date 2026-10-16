@@ -3,12 +3,12 @@
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
-const { esc, withRouteKey } = require('./util');
+const { esc, withRouteKey, CSP_META } = require('./util');
 const { prefFile, readPref, writePref } = require('./prefs');
 const { PLAIN_URL, LANG_FORCED, ROUTE_KEY } = require('./env');
 const { stderrTail } = require('./port'); // чистый модуль — прямой require, без реестра
 const menus = require('./menus');
-const launcher = require('./launcher'); // общий реестр (наполняет main.js)
+const { blankResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
 
 /* ---------------- страницы-статусы ---------------- */
 
@@ -106,7 +106,7 @@ function pageHtml(title, body, isError, opts = {}) {
   const langLink = (code, label) =>
     `<a href="dshlauncher://lang/${code}/"${i18n.getLang() === code ? ' class="on"' : ''}>${label}</a>`;
   const langSwitch = opts.dialog ? '' : `<div class="lang">${langLink('ru', 'RU')} | ${langLink('en', 'EN')}</div>`;
-  const html = `<!doctype html><html lang="${i18n.getLang()}"${opts.dialog ? ' class="ovl"' : ''}><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PAGE_CSS}</style></head><body${opts.dialog ? ' class="dlg"' : ''}>${langSwitch}<div class="wrap${isError ? ' err' : ''}"><h1><span class="dot"></span>${esc(title)}</h1>${body}</div></body></html>`;
+  const html = `<!doctype html><html lang="${i18n.getLang()}"${opts.dialog ? ' class="ovl"' : ''}><head><meta charset="utf-8">${CSP_META}<title>${esc(title)}</title><style>${PAGE_CSS}</style></head><body${opts.dialog ? ' class="dlg"' : ''}>${langSwitch}<div class="wrap${isError ? ' err' : ''}"><h1><span class="dot"></span>${esc(title)}</h1>${body}</div></body></html>`;
   return 'data:text/html;charset=utf-8,' + encodeURIComponent(withRouteKey(html, ROUTE_KEY));
 }
 /* ===== end pageHtml ===== */
@@ -142,7 +142,7 @@ function onLangSwitch(lang) {
   }
   menus.buildAppMenu(); // подписи меню на новом языке
   if (state.currentPage) state.currentPage();
-  return launcher.blankResponse();
+  return blankResponse();
 }
 
 // Загрузка в окно. ERR_ABORTED (-3) — не ошибка: эту навигацию сменила

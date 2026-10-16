@@ -7,7 +7,19 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
-<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
+### Added
+
+- A smoke test that loads `main.js` in the unit suite (`npm test`): the entry
+  point and the launcher registry are validated without Electron.
+
+### Changed
+
+- Launcher registry 5 → 3: `blankResponse`/`noContentResponse` moved to a pure
+  module `src/respond.js` (direct require, no registry).
+- Service `data:` pages (status, find bar, update toast, closing window) now
+  set a Content-Security-Policy: no external resources.
+- CDP driver (Docker tests): wait timeout errors now show the last exception
+  from the page.
 
 ## [1.15.13] — 2026-10-16
 

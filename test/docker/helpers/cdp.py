@@ -102,16 +102,20 @@ class Driver:
     def _wait(self, get, pattern, timeout):
         rx = re.compile(pattern)
         last = ''
+        err = ''
         end = time.time() + timeout
         while time.time() < end:
             try:
                 last = get()
-            except Exception:  # страница как раз перезагружается
+                err = ''
+            except Exception as e:  # страница как раз перезагружается
                 last = ''
+                err = f'{type(e).__name__}: {e}'
             if rx.search(last):
                 return last
             time.sleep(0.5)
-        raise AssertionError(f'не дождались /{pattern}/ за {timeout} с; последнее: {last[:600]}')
+        tail = f' (ошибка: {err[:200]})' if err else ''
+        raise AssertionError(f'не дождались /{pattern}/ за {timeout} с; последнее: {last[:600]}{tail}')
 
     def wait_text(self, pattern, timeout=30, page=None):
         return self._wait(lambda: self.text(page), pattern, timeout)

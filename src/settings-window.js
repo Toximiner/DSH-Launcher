@@ -20,7 +20,7 @@ const tray = require('./tray');
 const updatesLive = require('./updates-live');
 const updates = require('./updates');
 const view = require('./view');
-const launcher = require('./launcher'); // общий реестр (наполняет main.js)
+const { noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
 
 /* ---------------- окно «Настройки» ---------------- */
 
@@ -88,11 +88,11 @@ function onSettingsSet(url) {
     }
   }
   if (state.dialogRender) state.dialogRender(false);
-  return launcher.noContentResponse();
+  return noContentResponse();
 }
 
 async function onSettingsPick(kind) {
-  if (!dialogs.dialogOpen()) return launcher.noContentResponse();
+  if (!dialogs.dialogOpen()) return noContentResponse();
   const isDir = kind === 'cwd';
   const r = await dialog.showOpenDialog(state.win, {
     title: isDir ? tr('Рабочая папка dsh', 'dsh working folder') : tr('Программа dsh', 'The dsh program'),
@@ -102,7 +102,7 @@ async function onSettingsPick(kind) {
   if (!r.canceled && r.filePaths[0]) {
     return onSettingsSet(`dshlauncher://settings/set/?k=${kind}&v=${encodeURIComponent(r.filePaths[0])}`);
   }
-  return launcher.noContentResponse();
+  return noContentResponse();
 }
 
 function onSettingsResetUpdates() {
@@ -110,7 +110,7 @@ function onSettingsResetUpdates() {
   console.log('[launcher] настройки: снова спрашивать об обновлениях');
   settingsNote = { text: tr('Об отложенных обновлениях лаунчер снова спросит при запуске.', 'The launcher will ask about postponed updates again at startup.'), error: false };
   if (state.dialogRender) state.dialogRender(false);
-  return launcher.noContentResponse();
+  return noContentResponse();
 }
 
 // Перезапуск лаунчера (применить настройки). Не app.relaunch(): Electron

@@ -6,7 +6,7 @@ const { guardNavigation } = require('./guard');
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
-const { esc, timedCheck, withRouteKey } = require('./util');
+const { esc, timedCheck, withRouteKey, CSP_META } = require('./util');
 const { compareDebianVer, compareSemVer, tagToPackageVersion, notesBetween } = require('./versions');
 const { updatePollMs, announceUpdates } = require('./updates-logic');
 const { LOG_DIR, LAUNCHER_LOG_FILE, ROUTE_KEY } = require('./env');
@@ -19,7 +19,7 @@ const settingsWindow = require('./settings-window');
 const updates = require('./updates');
 const view = require('./view');
 const whatsNew = require('./whats-new');
-const launcher = require('./launcher'); // общий реестр (наполняет main.js)
+const { noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
 
 /* ---------------- обновления во время работы ---------------- */
 
@@ -126,7 +126,7 @@ function toastPageUrl({ title, sub, buttons }) {
     button{background:#1f2836;border:0;border-radius:7px;color:#d7dce3;height:30px;cursor:pointer;font-size:13px;padding:0 12px;white-space:nowrap}
     button:hover{background:#2a3550}
     button.x{width:28px;padding:0;font-size:14px}`;
-  const html = `<!doctype html><html lang="${i18n.getLang()}"><head><meta charset="utf-8"><title>launcher-toast</title><style>${css}</style></head><body>
+  const html = `<!doctype html><html lang="${i18n.getLang()}"><head><meta charset="utf-8">${CSP_META}<title>launcher-toast</title><style>${css}</style></head><body>
     <div class="t"><b>${esc(title)}</b><span>${esc(sub)}</span></div>
     ${buttons.map((b) => `<button onclick="location.href='${b.href}'">${esc(b.label)}</button>`).join('')}
     <button class="x" title="${esc(tr('Закрыть', 'Close'))}" onclick="location.href='dshlauncher://toast/close/'">&#10005;</button>
@@ -196,7 +196,7 @@ function onToastRequest(route, url) {
     closeUpdateToast();
     void diagnostics.saveReport();
   }
-  return launcher.noContentResponse();
+  return noContentResponse();
 }
 
 // Окно «Обновить … до X…»: что нового и предупреждение о перезапуске.

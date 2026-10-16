@@ -19,7 +19,7 @@ const { httpGet } = require('./updates-http');
 const { DSH_NPM_PKG, UPDATE_GITHUB_REPO, fetchLauncherLatest, fetchDshLatest } = require('./updates-github');
 const pages = require('./pages');
 const settingsWindow = require('./settings-window');
-const launcher = require('./launcher'); // общий реестр (наполняет main.js)
+const { blankResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
 
 /* ---------------- проверка обновлений (лаунчер и dsh) ----------------
  * При старте (в onReady, параллельно со всем остальным) проверяем:
@@ -244,18 +244,18 @@ function onUpdateChoice(choice) {
       clipboard.writeText(updateState.manualCmd);
       showUpdatePage(tr('Команда скопирована в буфер обмена.', 'Command copied to the clipboard.'), false);
     }
-    return launcher.blankResponse();
+    return blankResponse();
   }
   if (choice === 'restart') {
     restartLauncher();
-    return launcher.blankResponse();
+    return blankResponse();
   }
   const resolve = updateState.resolve;
   if (resolve && !updateState.running) {
     updateState.resolve = null;
     resolve(choice);
   }
-  return launcher.blankResponse();
+  return blankResponse();
 }
 
 // Шаг установки с живым логом на странице (живой лог — pages.liveLogTick:

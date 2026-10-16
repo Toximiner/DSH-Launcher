@@ -15,7 +15,7 @@ const { isAltKey } = require('./ui');
 const pages = require('./pages');
 const updatesLive = require('./updates-live');
 const updates = require('./updates');
-const launcher = require('./launcher'); // общий реестр (наполняет main.js)
+const { noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
 
 /* ---------------- окно-диалог: «О программе», «Проверить обновления» ---------------- */
 
@@ -96,13 +96,13 @@ const dialogCloseButton = () =>
 
 function onDialogClose() {
   closeDialog();
-  return launcher.noContentResponse();
+  return noContentResponse();
 }
 
 function onDialogCopy() {
   if (state.dialogCopyText) clipboard.writeText(state.dialogCopyText);
   if (state.dialogRender) state.dialogRender(true); // перерисовка: «Скопировано»
-  return launcher.noContentResponse();
+  return noContentResponse();
 }
 
 async function showAboutDialog() {
