@@ -60,6 +60,14 @@ function marketPromptDisabled() {
 
 let marketState = { resolve: null, running: false, log: [], timer: null, proc: null, cmdLine: null };
 
+// Закрытие лаунчера: процесс установки и таймер перерисовки (before-quit →
+// state.settleAllOperations, main.js).
+function settleMarketState() {
+  if (marketState.proc) { try { marketState.proc.kill('SIGTERM'); } catch { /* noop */ } }
+  clearInterval(marketState.timer);
+}
+state.settleOperation(settleMarketState);
+
 function marketCommand() {
   return `${state.dshBin} plugin --profile ${DSH_PROFILE} add ${MARKET_PKG}`;
 }

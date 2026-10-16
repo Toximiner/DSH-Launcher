@@ -1,6 +1,14 @@
 'use strict';
 // Общее состояние лаунчера — то, что читают и меняют разные части. Начальные
 // значения задаёт main.js (там же, где раньше были объявления let).
+//
+// Операции с собственным процессом/таймером (установка dsh, установка
+// маркета, шаг обновления) имеют разные формы состояния — но при закрытии
+// всё одинаково: SIGTERM процессу и clearInterval. Модули регистрируют
+// функцию очистки через settleOperation при загрузке, before-quit вызывает
+// все через settleAllOperations — без знания списка модулей.
+const operationSettlers = [];
+
 module.exports = {
   win: null,                 // главное окно
   stopping: false,           // лаунчер закрывается
@@ -31,4 +39,6 @@ module.exports = {
   spellcheckOn: true,        // проверка орфографии в полях ввода
   restartingDsh: false,      // идёт «Перезапустить dsh»: остановка dsh — не сбой
   dshCrashNotice: null,      // dsh перезапущен после сбоя — плашка, когда GUI загрузится
+  settleOperation(fn) { operationSettlers.push(fn); },
+  settleAllOperations() { for (const fn of operationSettlers) fn(); },
 };

@@ -5,6 +5,25 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Changed
+
+- **main.js structure**: code moved into dedicated modules — `src/gpu.js`
+  (GPU/EGL/ozone, the “broken GPU” marker), `src/port.js` (dsh port, stderr
+  tail), `src/routes.js` (the dshlauncher:// scheme and handlers),
+  `src/watchdog.js` (window auto-recovery), `src/signals.js` (signals and
+  hard dsh stop). `main.js` now holds only the window and lifecycle.
+- Installation-step cleanup on exit (dsh, marketplace, launcher update) is
+  centralized: modules register cleanup via `state.settleOperation`,
+  before-quit runs them all at once.
+- `npm start` runs through `run.sh` (with `--no-sandbox`, same as
+  `./run.sh`); `engines: node >=22` is now declared.
+- CI: unit-test coverage thresholds (lines ≥95%, branches ≥95%, functions
+  100%) — the build fails if coverage drops below them. The report covers
+  `src/` and `release.js` only (the test files themselves are excluded) —
+  otherwise their coverage would differ between Node versions.
+
 ## [1.15.11] — 2026-10-15
 
 ### Fixed

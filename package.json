@@ -4,13 +4,16 @@
   "description": "Desktop launcher (Electron) for DeepSeek Harness: opens dsh web in a window, stops dsh on exit",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "sh run.sh",
     "test": "eslint . && node --test test/*.js",
     "icon": "node make-icon.js",
     "banner": "electron make-banner.js --no-sandbox",
     "lint": "eslint .",
     "release": "node release.js",
-    "coverage": "node --test --experimental-test-coverage test/*.js"
+    "coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/*' --test-coverage-lines=95 --test-coverage-branches=95 --test-coverage-functions=100 test/*.js"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "license": "MIT",
   "devDependencies": {

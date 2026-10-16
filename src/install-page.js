@@ -17,6 +17,14 @@ const pages = require('./pages');
  */
 let installState = { check: null, npmInfo: null, running: false, log: [], timer: null, proc: null };
 
+// Закрытие лаунчера: процесс установки и таймер перерисовки (before-quit →
+// state.settleAllOperations, main.js).
+function settleInstallState() {
+  if (installState.proc) { try { installState.proc.kill('SIGTERM'); } catch { /* noop */ } }
+  clearInterval(installState.timer);
+}
+state.settleOperation(settleInstallState);
+
 async function refreshInstallState() {
   [installState.check, installState.npmInfo] = await Promise.all([dshInstallCheck(), npmInstallInfo()]);
 }
