@@ -23,8 +23,11 @@ def x(*args):
 
 def focus_window():
     """Активировать окно лаунчера: без фокуса X-клавиши уходят «в никуда»."""
-    win = x('xdotool', 'search', '--onlyvisible', '--name', 'DeepSeek Harness|fake dsh gui').split()[0]
-    x('xdotool', 'windowfocus', '--sync', win)
+    wins = x('xdotool', 'search', '--onlyvisible', '--name', 'DeepSeek Harness|fake dsh gui').split()
+    # печатаем все совпадения: в отчёте упавшего теста видно, сколько окон
+    # и какое окно осталось с фокусом (диагностика прогона №4)
+    print('X-окна:', [(w, x('xdotool', 'getwindowname', w).strip()) for w in wins], flush=True)
+    x('xdotool', 'windowfocus', '--sync', wins[0])
 
 
 def key(name):
@@ -112,9 +115,28 @@ def test_input_history(start, gui):
     assert wait_for(lambda: gui.eval("document.readyState === 'complete' && window.__mark === undefined") is True, 15, 0.2), \
         'страница перезагрузилась'
     assert wait_for(lambda: gui.eval('!!window.__dshInputHistory'), 10, 0.2), 'скрипт истории впрыснут'
+    assert wait_for(lambda: gui.eval("!!document.querySelector('[data-composer-input=\"true\"]')") is True, 10, 0.2), \
+        'композер на перезагруженной странице'
+    focus_window()
+    focus_composer(gui)
+    # диагностика (прогон №4: ↑ после перезагрузки не сработал): слушаем
+    # keydown/beforeinput и снимаем состояние впрыска — по отчёту видно,
+    # дошла ли клавиша до страницы и увидел ли её обработчик истории
+    gui.eval("window.__diag = [];"
+             " document.addEventListener('keydown', (e) => { window.__diag.push('keydown ' + e.key"
+             " + ' target=' + (e.target.id || e.target.tagName)"
+             " + ' active=' + (document.activeElement.id || document.activeElement.tagName)"
+             " + ' prevented=' + e.defaultPrevented); }, true);"
+             " document.addEventListener('beforeinput', (e) => { window.__diag.push('beforeinput '"
+             " + e.inputType + ' data=' + JSON.stringify(e.data) + ' prevented=' + e.defaultPrevented); }, true);"
+             " window.__state0 = JSON.stringify({ items: (window.__dshInputHistory || {}).items,"
+             " enabled: (window.__dshInputHistory || {}).enabled, installed: (window.__dshInputHistory || {}).installed }); 1")
     focus_window()
     focus_composer(gui)
     key('Up')
-    assert wait_for(lambda: field(gui) == 'второе сообщение', 5, 0.1), f'после перезагрузки ↑ работает: {field(gui)!r}'
+    if not wait_for(lambda: field(gui) == 'второе сообщение', 8, 0.1):
+        diag = gui.eval('JSON.stringify({ diag: window.__diag, state0: window.__state0,'
+                        ' field: window.__field(), items: (window.__dshInputHistory || {}).items })')
+        raise AssertionError(f'после перезагрузки ↑ работает: {field(gui)!r}; диагностика: {diag}')
 
     launcher.term()
