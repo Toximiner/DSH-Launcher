@@ -14,6 +14,7 @@ const { sleep, portOpen } = require('./port');
 const { launcherRoute, stripRouteKey } = require('./util');
 const { loadInWin, showPastePage, showPage, showStatus, liveLogTick, onLangSwitch } = require('./pages');
 const { envWithBinDir, listenerAuthUrl } = require('./system');
+const { blankResponse, noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
 const { runWithLiveLog } = require('./proc-log');
 const { dshInstallCheck } = require('./dsh-install');
 const { retryButton } = require('./dsh-process');
@@ -116,16 +117,6 @@ async function onRetryRequest() {
     console.error('[launcher] onRetryRequest:', e.message);
   }
   return blankResponse();
-}
-
-function blankResponse() {
-  return new Response('<!doctype html><html><body style="background:#0f1115;margin:0"></body></html>',
-    { headers: { 'content-type': 'text/html' } });
-}
-
-// «Нет содержимого»: навигация не происходит, страница остаётся как была.
-function noContentResponse() {
-  return new Response(null, { status: 204 });
 }
 
 // «Скопировать команду» на странице установки dsh.
@@ -339,8 +330,6 @@ module.exports = {
   openRunningGui,
   onPasteRequest,
   onRetryRequest,
-  blankResponse,
-  noContentResponse,
   onInstallCopy,
   onInstallRecheck,
   onInstallRun,

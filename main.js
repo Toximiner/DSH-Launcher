@@ -40,7 +40,7 @@ startLauncherLog();
 
 const gpu = require('./src/gpu'); // GPU/EGL/marker — детект при загрузке, решения до ready
 const { portOpen } = require('./src/port');
-const { openRunningGui, plainUrlIsAuthed, blankResponse, noContentResponse, registerProtocol } = require('./src/routes');
+const { openRunningGui, plainUrlIsAuthed, registerProtocol } = require('./src/routes');
 const { recoverWindow, startWatchdog } = require('./src/watchdog');
 const { killDshNow, installSignalHandlers } = require('./src/signals');
 const { launchDsh } = require('./src/launch');
@@ -61,12 +61,11 @@ const { maybeShowDshCrashNotice } = require('./src/dsh-process');
 const { loadWindowState, trackWindowState } = require('./src/window-state');
 // ---- реестр launcher: имена, нужные модулям (генерируется) ----
 // В реестре остались только имена из модулей, подключающих electron (и с
-// циклами require): чистые модули (port.js, gpu.js) потребители подключают
-// прямым require. Геттеры разрешаются в момент вызова — циклы не мешают.
+// циклами require): чистые модули (port.js, gpu.js, respond.js) потребители
+// подключают прямым require. Геттеры разрешаются в момент вызова — циклы
+// не мешают.
 const launcher = require('./src/launcher');
 Object.defineProperties(launcher, {
-  blankResponse: { get: () => blankResponse, enumerable: true },
-  noContentResponse: { get: () => noContentResponse, enumerable: true },
   plainUrlIsAuthed: { get: () => plainUrlIsAuthed, enumerable: true },
   recoverWindow: { get: () => recoverWindow, enumerable: true },
   startWatchdog: { get: () => startWatchdog, enumerable: true },
