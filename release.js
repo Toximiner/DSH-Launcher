@@ -1,7 +1,9 @@
 'use strict';
 // Подготовка релиза: npm run release 1.16.0
 //   - раздел `## [Unreleased]` в CHANGELOG.md и CHANGELOG.en.md становится
-//     `## [1.16.0] — <сегодня>` (оба раздела должны быть и быть непустыми);
+//     `## [1.16.0] — <сегодня>` (оба раздела должны быть и быть непустыми),
+//     а на его месте создаётся новый пустой `## [Unreleased]` — под правки
+//     до следующего релиза;
 //   - версия в package.json, package-lock.json и deb/control (1.16.0-1);
 //   - коммит «Версия 1.16.0» и тег v1.16.0 (локально; отправка — вручную,
 //     команду скрипт печатает: тег запускает сборку и публикацию релиза).
@@ -20,8 +22,10 @@ function checkVersion(v, current) {
   }
 }
 
-/* `## [Unreleased]` → `## [version] — date`; раздел должен быть непустым, а
-   раздела этой версии ещё не должно быть. */
+/* `## [Unreleased]` → `## [version] — date`; раздел должен быть непустым
+   (HTML-комментарий пустотой не считается), а раздела этой версии ещё не
+   должно быть. Выше выпущенной версии создаётся новый пустой раздел
+   `## [Unreleased]` — под правки до следующего релиза. */
 function releaseChangelog(text, version, date) {
   const lines = text.split('\n');
   const at = lines.findIndex((l) => /^## \[Unreleased\]\s*$/i.test(l));
@@ -29,8 +33,10 @@ function releaseChangelog(text, version, date) {
   if (lines.some((l) => l.startsWith(`## [${version}]`))) throw new Error(`раздел [${version}] уже есть`);
   const next = lines.findIndex((l, i) => i > at && l.startsWith('## ['));
   const body = lines.slice(at + 1, next < 0 ? lines.length : next);
-  if (!body.some((l) => l.trim() && !l.startsWith('### '))) throw new Error('раздел «## [Unreleased]» пуст');
+  if (!body.some((l) => l.trim() && !l.startsWith('### ') && !l.trim().startsWith('<!--'))) throw new Error('раздел «## [Unreleased]» пуст');
   lines[at] = `## [${version}] — ${date}`;
+  lines.splice(at, 0, '## [Unreleased]', '',
+    '<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->', '');
   return lines.join('\n');
 }
 
