@@ -6,6 +6,7 @@
 """
 import json
 import re
+import time
 
 from .env import GUI_URL
 from .procs import wait_for
@@ -430,6 +431,14 @@ class PastePage(UpdatePrompt):
     """«Нужен токен»: dsh уже запущен, а у окна нет сессионного куки."""
 
     def paste(self, value):
-        """Вставить ссылку или токен в поле и нажать Enter — как пользователь."""
-        self.drv.eval(f"(() => {{ const el = document.getElementById('u'); el.value = {json.dumps(value)};"
-                      " el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); return 1; })()")
+        """Вставить ссылку или токен в поле и нажать Enter — как пользователь.
+        Enter — синтетическим событием; под нагрузкой CI навигация после него
+        могла теряться (флэк 26.04): проверяем, что окно ушло с paste-страницы,
+        — не ушло, повторяем."""
+        for _ in range(3):
+            start = self.drv.url()
+            self.drv.eval(f"(() => {{ const el = document.getElementById('u'); el.value = {json.dumps(value)};"
+                          " el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' })); return 1; })()")
+            time.sleep(1.5)
+            if self.drv.url() != start:
+                return

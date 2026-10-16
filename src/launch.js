@@ -5,6 +5,7 @@ const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc } = require('./util');
 const { DSH_ARGS, PLAIN_URL } = require('./env');
+const { waitForPort, waitForAuthUrl } = require('./port'); // чистый модуль — прямой require, без реестра
 const dshProcess = require('./dsh-process');
 const market = require('./market');
 const pages = require('./pages');
@@ -49,7 +50,7 @@ async function launchDshInner() {
     `<p>Running <code>${esc(state.dshBin)} ${esc(DSH_ARGS.join(' '))}</code>.<br>Waiting for the service to come up…</p>`)));
   dshProcess.startDsh();
 
-  const up = await launcher.waitForPort();
+  const up = await waitForPort();
   if (!up) {
     pages.showPage(() => pages.showStatus(tr('Не удалось запустить dsh', 'Failed to start dsh'), tr(
       `<p>Процесс не поднял сервис на <code>${PLAIN_URL}</code>.<br>
@@ -67,7 +68,7 @@ async function launchDshInner() {
   // Порт уже поднят нами: проверка watchdog, начатая во время запуска и
   // завершившаяся после, не должна принять это за перезапуск dsh.
   state.portState = 'up';
-  const url = state.authUrl || (await launcher.waitForAuthUrl());
+  const url = state.authUrl || (await waitForAuthUrl());
   if (url) {
     await pages.loadInWin(url); // обмен токена на куки, затем редирект на чистый URL
   } else if (await launcher.plainUrlIsAuthed()) {

@@ -39,8 +39,7 @@ const { startLauncherLog } = require('./src/log');
 startLauncherLog();
 
 const gpu = require('./src/gpu'); // GPU/EGL/marker — детект при загрузке, решения до ready
-const { GPU_MARKER_FILE, GPU_MARKER_TTL_MS, gpuDisabledByMarker, hasEglLibs, hasGpuRenderNode, noGpuRequested } = gpu;
-const { portOpen, sleep, pushErr, stderrTail, waitForPort, waitForAuthUrl } = require('./src/port');
+const { portOpen } = require('./src/port');
 const { openRunningGui, plainUrlIsAuthed, blankResponse, noContentResponse, registerProtocol } = require('./src/routes');
 const { recoverWindow, startWatchdog } = require('./src/watchdog');
 const { killDshNow, installSignalHandlers } = require('./src/signals');
@@ -61,25 +60,16 @@ const { maybeShowWhatsNew } = require('./src/whats-new');
 const { maybeShowDshCrashNotice } = require('./src/dsh-process');
 const { loadWindowState, trackWindowState } = require('./src/window-state');
 // ---- реестр launcher: имена, нужные модулям (генерируется) ----
+// В реестре остались только имена из модулей, подключающих electron (и с
+// циклами require): чистые модули (port.js, gpu.js) потребители подключают
+// прямым require. Геттеры разрешаются в момент вызова — циклы не мешают.
 const launcher = require('./src/launcher');
 Object.defineProperties(launcher, {
-  GPU_MARKER_FILE: { get: () => GPU_MARKER_FILE, enumerable: true },
-  GPU_MARKER_TTL_MS: { get: () => GPU_MARKER_TTL_MS, enumerable: true },
   blankResponse: { get: () => blankResponse, enumerable: true },
-  gpuDisabledByMarker: { get: () => gpuDisabledByMarker, enumerable: true },
-  hasEglLibs: { get: () => hasEglLibs, enumerable: true },
-  hasGpuRenderNode: { get: () => hasGpuRenderNode, enumerable: true },
   noContentResponse: { get: () => noContentResponse, enumerable: true },
-  noGpuRequested: { get: () => noGpuRequested, enumerable: true },
   plainUrlIsAuthed: { get: () => plainUrlIsAuthed, enumerable: true },
-  portOpen: { get: () => portOpen, enumerable: true },
-  pushErr: { get: () => pushErr, enumerable: true },
   recoverWindow: { get: () => recoverWindow, enumerable: true },
-  sleep: { get: () => sleep, enumerable: true },
   startWatchdog: { get: () => startWatchdog, enumerable: true },
-  stderrTail: { get: () => stderrTail, enumerable: true },
-  waitForAuthUrl: { get: () => waitForAuthUrl, enumerable: true },
-  waitForPort: { get: () => waitForPort, enumerable: true },
 });
 // ---- конец реестра ----
 

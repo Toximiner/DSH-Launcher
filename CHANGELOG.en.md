@@ -5,6 +5,22 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
+## [Unreleased]
+
+### Changed
+
+- The `launcher` registry in `main.js` was trimmed from 17 names to 5:
+  pure modules (`src/port.js`, `src/gpu.js`) are required directly by
+  their consumers; the registry is left for names from electron modules.
+- Docker test driver: "paste the token" is retried up to 3 times if the
+  synthetic Enter was lost under load (Ubuntu 26.04 flake).
+- `SHA256SUMS` is now included in the artifact and the GitHub Release —
+  for verifying the checksum during manual installation.
+- `release.js` now creates a new empty `## [Unreleased]` section (with a
+  hint comment) after a release, so it no longer needs to be written by hand.
+- New unit tests for `src/system.js`: kill-target logic (`pickKillTargets`),
+  port → listener pid, token URL parsing, process environment.
+
 ## [1.15.12] — 2026-10-16
 
 ### Changed

@@ -42,14 +42,16 @@ const CL = `# Изменения
 {
   const out = releaseChangelog(CL, '1.16.0', '2026-10-13');
   assert.ok(out.includes('\n## [1.16.0] — 2026-10-13\n\n### Исправлено\n\n- Что-то.\n\n## [1.15.1]'), 'Unreleased → версия и дата');
-  assert.ok(!out.includes('Unreleased'), 'раздела Unreleased больше нет');
-  assert.strictEqual(out.split('\n').length, CL.split('\n').length, 'остальное не тронуто');
+  assert.ok(out.includes('\n## [Unreleased]\n\n<!-- сюда дописать'), 'создан новый пустой [Unreleased]');
+  assert.ok(out.indexOf('## [Unreleased]') < out.indexOf('## [1.16.0] — 2026-10-13'), 'новый [Unreleased] — выше версии');
+  assert.strictEqual(out.split('\n').length, CL.split('\n').length + 4, 'остальное не тронуто, добавлен новый [Unreleased]');
 }
 assert.throws(() => releaseChangelog(CL.replace('## [Unreleased]\n', ''), '1.16.0', '2026-10-13'), /нет раздела/, 'нет Unreleased');
 assert.throws(() => releaseChangelog(CL.replace('### Исправлено\n\n- Что-то.\n', ''), '1.16.0', '2026-10-13'), /пуст/, 'пустой Unreleased');
 assert.throws(() => releaseChangelog(CL.replace('- Что-то.\n', ''), '1.16.0', '2026-10-13'), /пуст/, 'только подзаголовок — пусто');
 assert.throws(() => releaseChangelog(CL, '1.15.1', '2026-10-13'), /уже есть/, 'раздел версии уже есть');
-assert.ok(releaseChangelog('## [Unreleased]\n- Последний раздел.\n', '1.0.0', '2026-01-01').startsWith('## [1.0.0] — 2026-01-01\n'), 'Unreleased — последний раздел');
+assert.ok(releaseChangelog('## [Unreleased]\n- Последний раздел.\n', '1.0.0', '2026-01-01').includes('## [1.0.0] — 2026-01-01\n- Последний раздел.\n'), 'Unreleased — последний раздел');
+assert.throws(() => releaseChangelog(releaseChangelog(CL, '1.16.0', '2026-10-13'), '1.16.1', '2026-10-14'), /пуст/, 'авто-созданный [Unreleased] пуст (комментарий не считается)');
 
 // ---- setControlVersion ----
 assert.strictEqual(setControlVersion('Package: dsh-launcher\nVersion: 1.15.1-1\nArchitecture: amd64\n', '1.16.0'),
@@ -142,7 +144,7 @@ assert.strictEqual(today(new Date(2026, 0, 5)), '2026-01-05', 'дата с ну�
     assert.strictEqual(JSON.parse(read('package.json')).version, '1.16.0', 'package.json');
     assert.strictEqual(JSON.parse(read('package-lock.json')).packages[''].version, '1.16.0', 'package-lock.json');
     assert.ok(read('deb/control').includes('Version: 1.16.0-1'), 'deb/control');
-    assert.throws(() => run('1.16.1'), /нет раздела/, 'второй выпуск без нового Unreleased — отказ');
+    assert.throws(() => run('1.16.1'), /пуст/, 'второй выпуск без изменений — отказ (авто-созданный Unreleased пуст)');
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

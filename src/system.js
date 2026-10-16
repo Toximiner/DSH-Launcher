@@ -125,4 +125,4 @@ function pickKillTargets(portPid, portPgid, selfPgid, oldPgid) {
   return targets;
 }
 
-module.exports = { envWithBinDir, withoutUnitEnv, writableOrCreatable, groupAlive, portListenerPid, authUrlFromOutput, listenerAuthUrl, pgidOf, pickKillTargets };
+module.exports = { SYSTEMD_UNIT_ENV, envWithBinDir, withoutUnitEnv, writableOrCreatable, groupAlive, portListenerPid, authUrlFromOutput, listenerAuthUrl, pgidOf, pickKillTargets };
