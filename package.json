@@ -10,7 +10,7 @@
     "banner": "electron make-banner.js --no-sandbox",
     "lint": "eslint .",
     "release": "node release.js",
-    "coverage": "node --test --experimental-test-coverage --test-coverage-lines=95 --test-coverage-branches=95 --test-coverage-functions=100 test/*.js"
+    "coverage": "node --test --experimental-test-coverage --test-coverage-exclude='test/*' --test-coverage-lines=95 --test-coverage-branches=95 --test-coverage-functions=100 test/*.js"
   },
   "engines": {
     "node": ">=22"
