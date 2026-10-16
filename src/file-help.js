@@ -7,6 +7,8 @@ const i18n = require('./i18n');
 const { tr } = i18n;
 const { gpuStatus } = require('./ui');
 const { CONFIG, LOG_DIR } = require('./env');
+const { portOpen, sleep } = require('./port'); // чистый модуль — прямой require, без реестра
+const { GPU_MARKER_FILE, GPU_MARKER_TTL_MS, gpuDisabledByMarker, hasEglLibs, hasGpuRenderNode, noGpuRequested } = require('./gpu');
 const dshStop = require('./dsh-stop');
 const launch = require('./launch');
 const pages = require('./pages');
@@ -57,7 +59,7 @@ async function restartDsh({ confirm = true } = {}) {
     pages.showPage(() => pages.showStatus(tr('Перезапуск dsh…', 'Restarting dsh…'),
       tr('<p>Останавливаю <code>dsh</code> и запускаю заново…</p>', '<p>Stopping <code>dsh</code> and starting it again…</p>'), false));
     if (state.adoptedDsh) await dshStop.stopAdoptedDsh(); else await dshStop.stopDsh();
-    for (let i = 0; i < 50 && await launcher.portOpen(); i++) await launcher.sleep(100); // порт освободился
+    for (let i = 0; i < 50 && await portOpen(); i++) await sleep(100); // порт освободился
     state.weStartedDsh = false; state.adoptedDsh = false; state.adoptedOldPgid = null; state.dshProc = null; state.dshFatal = false;
   } finally {
     state.restartingDsh = false;
@@ -70,10 +72,10 @@ async function restartDsh({ confirm = true } = {}) {
 
 function gpuStatusNow() {
   let markerAgeMs = null;
-  try { markerAgeMs = Date.now() - fs.statSync(launcher.GPU_MARKER_FILE).mtimeMs; } catch { /* маркера нет */ }
+  try { markerAgeMs = Date.now() - fs.statSync(GPU_MARKER_FILE).mtimeMs; } catch { /* маркера нет */ }
   return gpuStatus({
-    noGpuRequested: launcher.noGpuRequested, noGpuBySettings: CONFIG.src.gpu === 'settings', disabledByMarker: launcher.gpuDisabledByMarker, hasRenderNode: launcher.hasGpuRenderNode, hasEgl: launcher.hasEglLibs,
-    markerAgeMs, ttlMs: launcher.GPU_MARKER_TTL_MS,
+    noGpuRequested, noGpuBySettings: CONFIG.src.gpu === 'settings', disabledByMarker: gpuDisabledByMarker, hasRenderNode: hasGpuRenderNode, hasEgl: hasEglLibs,
+    markerAgeMs, ttlMs: GPU_MARKER_TTL_MS,
   });
 }
 
@@ -95,7 +97,7 @@ function gpuStatusText(g) {
 }
 
 function onDialogGpuEnable() {
-  try { fs.unlinkSync(launcher.GPU_MARKER_FILE); console.log('[launcher] маркер сбоев GPU снят — GPU со следующего запуска'); }
+  try { fs.unlinkSync(GPU_MARKER_FILE); console.log('[launcher] маркер сбоев GPU снят — GPU со следующего запуска'); }
   catch (e) { if (e.code !== 'ENOENT') console.error('[launcher] маркер GPU:', e.message); }
   if (state.dialogRender) state.dialogRender(false);
   return launcher.noContentResponse();

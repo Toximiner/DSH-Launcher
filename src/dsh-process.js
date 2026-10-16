@@ -10,6 +10,7 @@ const { tr } = i18n;
 const { DSH_ARGS, CWD, LOG_DIR, LOG_FILE } = require('./env');
 const { rotateLog, openDshLog } = require('./log');
 const { dshEnv } = require('./dsh-install');
+const { sleep, pushErr, portOpen } = require('./port'); // чистый модуль — прямой require, без реестра
 const launch = require('./launch');
 const pages = require('./pages');
 const updatesLive = require('./updates-live');
@@ -67,13 +68,13 @@ function startDsh() {
   });
   state.dshProc.stderr.on('data', (d) => {
     for (const line of d.toString().split('\n')) {
-      launcher.pushErr(line);
+      pushErr(line);
       logStream.write(line + '\n');
     }
   });
   state.dshProc.on('error', (err) => {
     state.dshFatal = true;
-    launcher.pushErr(tr(`ошибка запуска dsh: ${err.message}`, `failed to start dsh: ${err.message}`));
+    pushErr(tr(`ошибка запуска dsh: ${err.message}`, `failed to start dsh: ${err.message}`));
   });
   const proc = state.dshProc;
   state.dshProc.on('exit', (code, signal) => {
@@ -104,7 +105,7 @@ let adoptionCheck = false;
 async function handleDshExit(code, signal) {
   console.log('[launcher] dsh process exited:', { code, signal });
   if (state.stopping) return;
-  launcher.pushErr(tr(`dsh остановился (code=${code}, signal=${signal})`, `dsh stopped (code=${code}, signal=${signal})`));
+  pushErr(tr(`dsh остановился (code=${code}, signal=${signal})`, `dsh stopped (code=${code}, signal=${signal})`));
   if (adoptionCheck) return; // на всякий случай: один цикл проверки
   adoptionCheck = true;
   try {
@@ -114,8 +115,8 @@ async function handleDshExit(code, signal) {
       `<p>The <code>dsh</code> process exited (code=${code}).<br>
          Checking whether a new process has started…</p>`), false));
     const deadline = Date.now() + 8000;
-    let up = await launcher.portOpen();
-    while (!up && Date.now() < deadline) { await launcher.sleep(500); up = await launcher.portOpen(); }
+    let up = await portOpen();
+    while (!up && Date.now() < deadline) { await sleep(500); up = await portOpen(); }
     if (up && !state.stopping && state.win && !state.win.isDestroyed()) {
       console.log('[launcher] порт снова открыт — dsh перезапустился сам, перехожу в режим подключения');
       state.weStartedDsh = false; // новый процесс — не наш дочерний (ручки на него нет)

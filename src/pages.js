@@ -6,6 +6,7 @@ const { tr } = i18n;
 const { esc, withRouteKey } = require('./util');
 const { prefFile, readPref, writePref } = require('./prefs');
 const { PLAIN_URL, LANG_FORCED, ROUTE_KEY } = require('./env');
+const { stderrTail } = require('./port'); // чистый модуль — прямой require, без реестра
 const menus = require('./menus');
 const launcher = require('./launcher'); // общий реестр (наполняет main.js)
 
@@ -111,7 +112,7 @@ function pageHtml(title, body, isError, opts = {}) {
 /* ===== end pageHtml ===== */
 
 function stderrBlock() {
-  return `<pre>${esc(launcher.stderrTail.slice(-50).join('\n') || tr('нет данных журнала', 'no log data'))}</pre>`;
+  return `<pre>${esc(stderrTail.slice(-50).join('\n') || tr('нет данных журнала', 'no log data'))}</pre>`;
 }
 
 // Текущая служебная страница как функция отрисовки: переключатель RU | EN

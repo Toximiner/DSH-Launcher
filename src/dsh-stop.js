@@ -3,7 +3,7 @@
 const state = require('./state');
 const { groupAlive, portListenerPid, pgidOf, pickKillTargets } = require('./system');
 const { PORT } = require('./env');
-const launcher = require('./launcher'); // общий реестр (наполняет main.js)
+const { sleep } = require('./port'); // чистый модуль — прямой require, без реестра
 
 /* ---------------- остановка дерева процессов ---------------- */
 
@@ -30,10 +30,10 @@ async function stopDsh() {
   const groupOnly = dshLeaderExited();
   if (!groupAlive(pid, groupOnly)) return; // группа уже мёртва — нечего убивать
   killGroup(pid, 'SIGTERM', groupOnly);
-  for (let i = 0; i < 40 && groupAlive(pid, groupOnly); i++) await launcher.sleep(100); // до 4 с
+  for (let i = 0; i < 40 && groupAlive(pid, groupOnly); i++) await sleep(100); // до 4 с
   if (groupAlive(pid, groupOnly)) {
     killGroup(pid, 'SIGKILL');
-    for (let i = 0; i < 20 && groupAlive(pid); i++) await launcher.sleep(100);
+    for (let i = 0; i < 20 && groupAlive(pid); i++) await sleep(100);
   }
   console.log('[launcher] dsh stopped by launcher');
 }
@@ -69,7 +69,7 @@ async function stopAdoptedDsh() {
   console.log(`[launcher] останавливаю усыновлённый dsh (${targets.map((t) => (t.groupOnly ? 'pgid=' : 'pid=') + t.id).join(', ')})`);
   const alive = () => targets.filter((t) => groupAlive(t.id, t.groupOnly));
   for (const t of targets) killGroup(t.id, 'SIGTERM', t.groupOnly);
-  for (let i = 0; i < 20 && alive().length; i++) await launcher.sleep(100); // до 2 с
+  for (let i = 0; i < 20 && alive().length; i++) await sleep(100); // до 2 с
   for (const t of alive()) killGroup(t.id, 'SIGKILL', t.groupOnly);
 }
 
