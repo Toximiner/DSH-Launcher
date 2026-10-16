@@ -95,6 +95,7 @@ function settingValue(key, raw) {
     case 'attentionSound':
     case 'sandbox':
     case 'spellcheck':
+    case 'inputHistory':
       if (v !== 'true' && v !== 'false') return { error: 'bad value' };
       return { value: v === 'true' };
     case 'lang':

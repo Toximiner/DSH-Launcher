@@ -15,6 +15,7 @@ const { launcherRoute, stripRouteKey } = require('./util');
 const { loadInWin, showPastePage, showPage, showStatus, liveLogTick, onLangSwitch } = require('./pages');
 const { envWithBinDir, listenerAuthUrl } = require('./system');
 const { blankResponse, noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
+const { pushInputHistory } = require('./input-history'); // история введённого (↑/↓ в поле dsh); тексты в журнал не пишутся
 const { runWithLiveLog } = require('./proc-log');
 const { dshInstallCheck } = require('./dsh-install');
 const { retryButton } = require('./dsh-process');
@@ -244,6 +245,7 @@ const ROUTE_TABLE = [
   ['/menu/restart-dsh/', 'menu/restart-dsh'],
   ['/dialog/close/', 'dialog/close'],
   ['/dialog/copy/', 'dialog/copy'],
+  ['/history/push/', 'history/push'],
 ];
 
 function matchRoute(route) {
@@ -303,6 +305,14 @@ const ROUTE_HANDLERS = {
   'menu/restart-dsh': () => { void restartDsh({ confirm: false }); return noContentResponse(); },
   'dialog/close': () => onDialogClose(),
   'dialog/copy': () => onDialogCopy(),
+  // История введённого (страница dsh → main): текст приходит параметром, в
+  // журнал не пишется — только длина и счётчик. Ответ 204: страница остаётся.
+  'history/push': (route, url) => {
+    const text = url.searchParams.get('text') || '';
+    const r = pushInputHistory(text);
+    if (r.changed) console.log(`[launcher] история ввода: сохранено сообщение (${text.length} симв.), всего ${r.count}`);
+    return noContentResponse();
+  },
 };
 
 // Диспетчер dshlauncher:// — вызывается main.js из onReady (до первого окна
