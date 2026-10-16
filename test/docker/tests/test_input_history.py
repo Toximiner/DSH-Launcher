@@ -81,9 +81,13 @@ def test_input_history(start, gui):
     assert wait_for(lambda: field(gui) == 'черновик', 5, 0.1), f'Esc вернул черновик: {field(gui)!r}'
     assert history_file() == ['второе сообщение', 'первое сообщение'], f'черновик не записан: {history_file()!r}'
 
-    # перезагрузка страницы dsh: история поднимается снова (впрыск при загрузке)
+    # перезагрузка страницы dsh: история поднимается снова (впрыск при загрузке).
+    # __mark со старой страницы пропадает только у нового документа: иначе
+    # wait() мог поймать ещё не начавшуюся перезагрузку (флэк на debian-13).
+    gui.mark()
     gui.eval('location.reload(); 1')
-    gui.wait()
+    assert wait_for(lambda: gui.eval("document.readyState === 'complete' && window.__mark === undefined") is True, 15, 0.2), \
+        'страница перезагрузилась'
     assert wait_for(lambda: gui.eval('!!window.__dshInputHistory'), 10, 0.2), 'скрипт истории впрыснут'
     focus_composer(gui)
     gui.press('ArrowUp')
