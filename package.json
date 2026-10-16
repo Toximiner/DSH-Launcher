@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "sh run.sh",
-    "test": "eslint . && node --test test/*.js",
+    "test": "eslint . && node --test test/*.js test/smoke/*.js",
     "icon": "node make-icon.js",
     "banner": "electron make-banner.js --no-sandbox",
     "lint": "eslint .",
