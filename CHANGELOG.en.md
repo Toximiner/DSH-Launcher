@@ -7,6 +7,10 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
+
+## [1.16.0] — 2026-10-16
+
 ### Added
 
 - Input history: `↑`/`↓` in the dsh input field recall previously sent messages
