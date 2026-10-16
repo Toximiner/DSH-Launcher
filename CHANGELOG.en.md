@@ -7,6 +7,10 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
+
+## [1.15.14] — 2026-10-16
+
 ### Added
 
 - A smoke test that loads `main.js` in the unit suite (`npm test`): the entry

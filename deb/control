@@ -1,5 +1,5 @@
 Package: dsh-launcher
-Version: 1.15.13-1
+Version: 1.15.14-1
 Section: utils
 Priority: optional
 Architecture: amd64
