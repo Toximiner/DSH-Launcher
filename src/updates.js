@@ -121,6 +121,18 @@ let updateState = {
   restartTimer: null,
 };
 
+// Закрытие лаунчера: процесс шага обновления, таймер перерисовки и таймер
+// авто-перезапуска (before-quit → state.settleAllOperations, main.js).
+function settleUpdateState() {
+  if (updateState.proc) { try { updateState.proc.kill('SIGTERM'); } catch { /* noop */ } }
+  clearInterval(updateState.timer);
+  if (updateState.restartTimer) {
+    clearTimeout(updateState.restartTimer);
+    updateState.restartTimer = null;
+  }
+}
+state.settleOperation(settleUpdateState);
+
 const UPDATE_PREFS = 'update-prefs.json';
 const updatePrefFile = () => prefFile(UPDATE_PREFS);
 

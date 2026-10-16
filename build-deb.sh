@@ -1,5 +1,6 @@
 #!/bin/sh
-# Собирает .deb для Ubuntu 26.04 (amd64) без root: dpkg-deb --root-owner-group.
+# Собирает .deb (amd64) без root: dpkg-deb --root-owner-group. Пакет ставится
+# на Ubuntu 24.04 / 26.04 и Debian 13 (матрица Docker-тестов, .github/).
 # Результат: dsh-launcher_<версия>_<rev>_amd64.deb рядом со скриптом.
 set -eu
 cd "$(dirname "$0")"

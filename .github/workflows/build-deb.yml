@@ -162,11 +162,14 @@ jobs:
       - name: Unit test coverage
         # Отчёт о покрытии модулей, которые тесты подключают напрямую (функции
         # в блоках-маркеров проверяет test/markers.js) — во вкладку Summary.
+        # Пороги (--test-coverage-*) заданы в package.json: упало покрытие
+        # ниже них — шаг завершается ошибкой и сборка не выйдет.
         run: |
+          npm run -s coverage > coverage-report.txt 2>&1 || { cat coverage-report.txt; exit 1; }
           {
             echo '### Покрытие юнит-тестами'
             echo '```'
-            npm run -s coverage 2>&1 | sed -n '/start of coverage report/,/end of coverage report/p' | sed 's/^ℹ //'
+            sed -n '/start of coverage report/,/end of coverage report/p' coverage-report.txt | sed 's/^ℹ //'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
