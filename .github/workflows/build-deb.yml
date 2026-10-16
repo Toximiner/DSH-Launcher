@@ -180,12 +180,19 @@ jobs:
       - name: Build .deb
         run: ./build-deb.sh
 
+      - name: Checksums
+        # SHA256SUMS — для ручной установки; само-обновление лаунчера сверяет
+        # digest .deb, который отдаёт GitHub API, с файлом.
+        run: sha256sum dsh-launcher_*_amd64.deb > SHA256SUMS
+
       - name: Upload artifact
         # v5 всё ещё node20; node24 появился с v6, берём актуальный major
         uses: actions/upload-artifact@v7
         with:
           name: dsh-launcher-deb
-          path: dsh-launcher_*_amd64.deb
+          path: |
+            dsh-launcher_*_amd64.deb
+            SHA256SUMS
           if-no-files-found: error
 
       - name: Publish GitHub Release
@@ -198,6 +205,8 @@ jobs:
           tag_name: ${{ steps.ver.outputs.tag }}
           # Если тега ещё нет (ручной запуск) — акция создаст его на собранном коммите
           target_commitish: ${{ github.sha }}
-          files: dsh-launcher_*_amd64.deb
+          files: |
+            dsh-launcher_*_amd64.deb
+            SHA256SUMS
           body_path: release-notes.md
           make_latest: true
