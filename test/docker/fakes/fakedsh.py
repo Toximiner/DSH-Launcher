@@ -12,6 +12,12 @@
   FAKE_REQUIRE_TOKEN=1     — GUI только с ?token=<FAKE_TOKEN, abc> (тогда куки
                              и редирект на адрес без токена) или с куки этого
                              токена; иначе 401
+  FAKE_DSH_GUI=1           — вместо страницы-заглушки отдавать «GUI» с полем
+                             ввода, как у dsh: div data-composer-input="true"
+                             (заглушка редактора Lexical: синтетический
+                             beforeinput insertText вставляет текст, Enter —
+                             «отправка» в #sent); хелперы страницы:
+                             __type(t) — набрать текст, __field() — текст поля
   FAKE_REBORN_TOKEN, FAKE_REBORN_OUT=<файл> — у перезапустившегося процесса
                              свой токен (старое куки не годится) и вывод в файл
                              (как перезапуск кнопкой маркета)
@@ -75,6 +81,50 @@ def on_term(_sig, _frame):
 
 signal.signal(signal.SIGTERM, on_term)
 
+# Страница «GUI dsh» для сценариев ввода (FAKE_DSH_GUI=1): композер с тем же
+# маркером, что у настоящего dsh, и заглушка редактора — синтетический
+# beforeinput insertText вставляет текст (как Lexical), Enter без модификаторов
+# «отправляет»: текст уходит в #sent, поле очищается.
+GUI_PAGE = """<!doctype html>
+<html><head><meta charset="utf-8"><title>fake dsh gui</title></head>
+<body>
+<div id="c" contenteditable="true" role="textbox" aria-multiline="true" data-composer-input="true"></div>
+<pre id="sent"></pre>
+<script>
+const c = document.getElementById('c');
+c.addEventListener('beforeinput', (e) => {
+  if (e.inputType !== 'insertText') return;
+  e.preventDefault();
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const r = sel.getRangeAt(0);
+  r.deleteContents();
+  r.insertNode(document.createTextNode(e.data || ''));
+  r.collapse(false);
+  sel.removeAllRanges();
+  sel.addRange(r);
+});
+c.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    document.getElementById('sent').textContent += (c.innerText || '') + '\\n';
+    c.textContent = '';
+  }
+});
+window.__type = (t) => {
+  c.focus();
+  const r = document.createRange();
+  r.selectNodeContents(c);
+  r.collapse(false);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(r);
+  c.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: t, bubbles: true, cancelable: true }));
+};
+window.__field = () => c.innerText;
+</script>
+</body></html>"""
+
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -95,7 +145,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(body)
                 return
-        body = f'<html><body>FAKE DSH {ROLE}</body></html>'.encode()
+        body = (GUI_PAGE if os.environ.get('FAKE_DSH_GUI') == '1'
+                else f'<html><body>FAKE DSH {ROLE}</body></html>').encode()
         self.send_response(200)
         self.send_header('set-cookie', 'sess=1; Path=/')
         self.send_header('content-type', 'text/html')
