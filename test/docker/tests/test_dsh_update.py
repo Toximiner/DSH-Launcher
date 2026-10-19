@@ -59,7 +59,9 @@ def test_dsh_update_root_prefix(start, prompt):
     prompt.install()
 
     assert launcher.wait_log('dsh обновлён → 0.2.0-rc.2', 300), launcher.log()[-2000:]
-    _, out = sh('runuser -u tester -- /opt/noderoot/bin/dsh --version')
+    # runuser сбрасывает окружение, а dsh — «#!/usr/bin/env node»: node лежит
+    # в /opt/noderoot/bin, поэтому PATH задаём явно (как в dsh_update_auto).
+    _, out = sh('runuser -u tester -- env PATH=/opt/noderoot/bin:/usr/bin:/bin /opt/noderoot/bin/dsh --version')
     assert out.splitlines()[-1:] == ['0.2.0-rc.2'], f'в /opt/noderoot теперь dsh 0.2.0-rc.2: {out}'
     assert wait_port(120), 'лаунчер перешёл к запуску dsh (порт поднят)'
     assert launcher.term() is not None, 'лаунчер вышел по SIGTERM'
