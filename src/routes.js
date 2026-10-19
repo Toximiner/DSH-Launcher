@@ -17,7 +17,7 @@ const { envWithBinDir, listenerAuthUrl } = require('./system');
 const { blankResponse, noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
 const { pushInputHistory } = require('./input-history'); // история введённого (↑/↓ в поле dsh); тексты в журнал не пишутся
 const { runWithLiveLog } = require('./proc-log');
-const { dshInstallCheck } = require('./dsh-install');
+const { dshInstallCheck, pkexecNpmArgs } = require('./dsh-install');
 const { retryButton } = require('./dsh-process');
 const { launchDsh } = require('./launch');
 const { installState, refreshInstallState, showInstallPage } = require('./install-page');
@@ -164,15 +164,21 @@ async function onInstallRun() {
     await refreshInstallState();
     if (installState.running) return blankResponse(); // пока проверяли, установку уже запустили
     const npmInfo = installState.npmInfo;
-    if (!npmInfo.canAuto) {
+    // Системный npm (prefix root'а): ставим через pkexec — polkit спросит
+    // пароль системным диалогом, как при обновлении лаунчера.
+    const viaPkexec = !npmInfo.canAuto && npmInfo.rootMode === 'pkexec';
+    if (!npmInfo.canAuto && !viaPkexec) {
       showInstallPage(() => tr('Кнопка «Установить» недоступна: глобальный npm prefix требует sudo — выполните команду в терминале.', '“Install” is unavailable: the global npm prefix requires sudo — run the command in a terminal.'), true);
       return blankResponse();
     }
     console.log(`[launcher] установка dsh из окна: ${npmInfo.command}`);
     installState.running = true; // страница «выполняется» — сразу, до первой строки
     showInstallPage();
-    const code = await runWithLiveLog(installState, npmInfo.npm, ['install', '-g', '@deepseek-ai/dsh'],
-      { env: envWithBinDir(npmInfo.npm), redraw: () => {
+    const args = ['install', '-g', '@deepseek-ai/dsh'];
+    const code = await runWithLiveLog(installState,
+      viaPkexec ? npmInfo.pkexec : npmInfo.npm,
+      viaPkexec ? pkexecNpmArgs(npmInfo.npm, args) : args,
+      { env: viaPkexec ? undefined : envWithBinDir(npmInfo.npm), redraw: () => {
         // running — иначе установка закончилась и страница уже переключилась
         // (успех/ошибка), и доп. перерисовка затёрла бы её note.
         liveLogTick(installState).then((ok) => {

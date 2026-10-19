@@ -14,7 +14,7 @@ const { prefFile, readPref, writePref } = require('./prefs');
 const { compareDebianVer, compareSemVer, tagToPackageVersion, dpkgStatusVersion, notesBetween } = require('./versions');
 const { releaseNotesLang, mdToHtml } = require('./notes');
 const { GITHUB_TOKEN, UPDATE_NOW, INSTALL_VERSION, CONFIG } = require('./env');
-const { probeDsh, findBin, MIN_NODE_MAJOR, npmInstallInfo } = require('./dsh-install');
+const { probeDsh, findBin, MIN_NODE_MAJOR, npmInstallInfo, pkexecNpmArgs } = require('./dsh-install');
 const { httpGet } = require('./updates-http');
 const { DSH_NPM_PKG, UPDATE_GITHUB_REPO, fetchLauncherLatest, fetchDshLatest } = require('./updates-github');
 const pages = require('./pages');
@@ -41,9 +41,11 @@ const { blankResponse } = require('./respond'); // чистый модуль —
  *    Нет pkexec / отменили ввод пароля / ошибка → страница с командой для
  *    терминала (`sudo apt install -y <deb>`) и «Проверить ещё раз»;
  *  - dsh: если глобальный npm-prefix доступен без sudo —
- *    `npm install -g @deepseek-ai/dsh@<версия>` с живым логом; иначе —
- *    страница с командой для терминала и «Проверить ещё раз». После успеха
- *    dsh стартует сразу с новой версией.
+ *    `npm install -g @deepseek-ai/dsh@<версия>` с живым логом; если prefix
+ *    принадлежит root, а npm системный — та же команда через pkexec (polkit
+ *    спрашивает пароль системным диалогом, как при обновлении лаунчера);
+ *    иначе (npm из nvm, ~/.npm-global) — страница с командой для терминала
+ *    и «Проверить ещё раз». После успеха dsh стартует сразу с новой версией.
  *
  * В режиме подключения (dsh уже работает из-вне) не спрашиваем: чужой dsh
  * перезапускать нельзя, а обновление самого лаунчера предложим при
@@ -568,8 +570,11 @@ async function offerDshUpdate() {
         console.log(`[launcher] dsh обновлён до ${r.version} (в терминале)`);
         return;
       }
+      // Команда — по тем же правилам, что и установка: системный prefix
+      // требует sudo, пользовательский (nvm) — нет.
+      const info = await npmInstallInfo();
       updateState.mode = 'manual';
-      updateState.manualCmd = cmdAuto;
+      updateState.manualCmd = info.hasNpm && !info.canAuto ? `sudo ${cmdAuto}` : cmdAuto;
       note = tr(`Всё ещё версия ${r.ok ? r.version : 'неизвестно'}. Поставьте новую и нажмите «Проверить ещё раз».`,
                 `Still version ${r.ok ? r.version : 'unknown'}. Install the new one and click "Check again".`);
       noteIsError = true;
@@ -578,9 +583,9 @@ async function offerDshUpdate() {
     // choice === 'install'
     const npmInfo = await npmInstallInfo();
     if (state.stopping) return;
-    if (!npmInfo.hasNpm || !npmInfo.canAuto) {
+    if (!npmInfo.hasNpm || (!npmInfo.canAuto && npmInfo.rootMode !== 'pkexec')) {
       // Глобальный prefix недоступен без sudo (или npm нет) — команда для
-      // терминала.
+      // терминала. Если prefix системный (root), но pkexec нет — тоже сюда.
       updateState.mode = 'manual';
       updateState.manualCmd = npmInfo.hasNpm ? `sudo ${cmdAuto}` : cmdAuto;
       if (npmInfo.nodeOld) {
@@ -596,7 +601,13 @@ async function offerDshUpdate() {
       noteIsError = true;
       continue;
     }
-    const code = await runUpdateStep(npmInfo.npm, ['install', '-g', `${DSH_NPM_PKG}@${latest.version}`], envWithBinDir(npmInfo.npm));
+    const code = npmInfo.canAuto
+      ? await runUpdateStep(npmInfo.npm, ['install', '-g', `${DSH_NPM_PKG}@${latest.version}`], envWithBinDir(npmInfo.npm))
+      // Системный prefix: npm под pkexec — polkit спросит пароль системным
+      // диалогом, как при обновлении лаунчера. Свой пользовательский prefix
+      // (nvm, ~/.npm-global) так не трогаем — там root оставил бы файлы,
+      // которые пользователь потом не обновит (rootInstallMode).
+      : await runUpdateStep(npmInfo.pkexec, pkexecNpmArgs(npmInfo.npm, ['install', '-g', `${DSH_NPM_PKG}@${latest.version}`]));
     if (state.stopping) return;
     if (code === 0) {
       const r = await probeDsh(state.dshBin);
@@ -609,7 +620,7 @@ async function offerDshUpdate() {
       // prefix (например, dsh из nvm, а npm — системный).
       console.error(`[launcher] npm install прошёл, но ${state.dshBin} — ${r.ok ? r.version : 'не запускается'} (prefix npm: ${npmInfo.prefix})`);
       updateState.mode = 'manual';
-      updateState.manualCmd = cmdAuto;
+      updateState.manualCmd = npmInfo.canAuto ? cmdAuto : `sudo ${cmdAuto}`;
       note = tr(`npm поставил пакет в ${npmInfo.prefix || 'свой prefix'}, но лаунчер запускает ${state.dshBin} (версия ${r.ok ? r.version : 'неизвестна'}). Обновите dsh тем npm, которым он был установлен, и нажмите «Проверить ещё раз».`,
                 `npm installed the package into ${npmInfo.prefix || 'its prefix'}, but the launcher runs ${state.dshBin} (version ${r.ok ? r.version : 'unknown'}). Update dsh with the npm it was installed with and click "Check again".`);
       noteIsError = true;
@@ -617,9 +628,14 @@ async function offerDshUpdate() {
     }
     console.error(`[launcher] обновление dsh не удалось (код ${code})`);
     updateState.mode = 'manual';
-    updateState.manualCmd = cmdAuto; // prefix доступен без sudo (canAuto) — sudo с nvm только навредит
-    note = tr(`Установка не удалась (код ${code}). Повторите, либо выполните команду выше в терминале и нажмите «Проверить ещё раз».`,
-              `Installation failed (code ${code}). Retry, or run the command above in a terminal and click "Check again".`);
+    // prefix доступен без sudo (canAuto) — sudo с nvm только навредит;
+    // системный prefix ставим через pkexec — та же команда, но без sudo.
+    updateState.manualCmd = npmInfo.canAuto ? cmdAuto : `sudo ${cmdAuto}`;
+    note = code === 126 || code === 127
+      ? tr('Ввод пароля отменён. Попробуйте ещё раз или выполните команду выше в терминале.',
+           'The password prompt was cancelled. Try again or run the command above in a terminal.')
+      : tr(`Установка не удалась (код ${code}). Повторите, либо выполните команду выше в терминале и нажмите «Проверить ещё раз».`,
+           `Installation failed (code ${code}). Retry, or run the command above in a terminal and click "Check again".`);
     noteIsError = true;
   }
 }
