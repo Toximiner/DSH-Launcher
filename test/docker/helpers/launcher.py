@@ -3,7 +3,7 @@
 import subprocess
 import urllib.request
 
-from .env import GITHUB_API, GITHUB_TOKEN, HOME, LAUNCHER_OUT, ROUTE_KEY, V8_COVERAGE
+from .env import DSH_LATEST, GITHUB_API, GITHUB_TOKEN, HOME, LAUNCHER_OUT, ROUTE_KEY, V8_COVERAGE
 from .procs import alive, sh, wait_exit, wait_for
 
 
@@ -49,6 +49,9 @@ class Launcher:
                 'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
                 'DSH_LAUNCHER_GITHUB_API': GITHUB_API,  # None — настоящий GitHub
                 'DSH_LAUNCHER_ROUTE_KEY': ROUTE_KEY,
+                # «Последний» dsh — пин из env.py: живому npm-реестру в тестах
+                # не доверяем (0.2.1-rc.2 уронил сценарии без правок кода).
+                'DSH_LAUNCHER_FAKE_DSH_LATEST': DSH_LATEST,
                 'NODE_V8_COVERAGE': V8_COVERAGE}
         if GITHUB_TOKEN:
             base['DSH_LAUNCHER_GITHUB_TOKEN'] = GITHUB_TOKEN

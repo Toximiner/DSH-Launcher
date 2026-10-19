@@ -7,7 +7,16 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
-<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
+### Changed
+
+- Updating dsh with a system-wide npm (prefix `/usr`, `/usr/local`) now runs
+  through `pkexec`: polkit asks for the password in a system dialog, exactly
+  like the launcher update itself. Previously the launcher always sent the
+  user to run `sudo npm install -g` in a terminal. User prefixes (`nvm`,
+  `~/.npm-global`) are still updated without root: `sudo` would leave files
+  there that cannot be updated later. The same path covers the “Install”
+  button on the “dsh not found” page and installing `pnpm` for the
+  marketplace.
 
 ## [1.16.0] — 2026-10-16
 

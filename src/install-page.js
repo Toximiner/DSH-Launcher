@@ -66,15 +66,18 @@ async function showInstallPage(note, noteIsError = false) {
           : npmInfo.canAuto
             ? tr('<p>Или нажмите «Установить» — лаунчер выполнит команду сам.</p>',
                  '<p>Or click “Install” — the launcher will run the command for you.</p>')
-            : npmInfo.hasNpm
-              ? tr('<p>Этой команде нужен <code>sudo</code> — выполните её в терминале и нажмите «Проверить ещё раз».</p>',
-                   '<p>This command needs <code>sudo</code> — run it in a terminal and click “Check again”.</p>')
-              : tr('<p>npm в системе нет: сначала установите Node.js (22+) с npm, затем команду выше, и нажмите «Проверить ещё раз».</p>',
-                   '<p>npm is not installed: install Node.js (22+) with npm first, then the command above, and click “Check again”.</p>')
+            : npmInfo.hasNpm && npmInfo.rootMode === 'pkexec'
+              ? tr('<p>Или нажмите «Установить» — лаунчер поставит dsh от root: система спросит пароль.</p>',
+                   '<p>Or click “Install” — the launcher will install dsh as root and the system will ask for your password.</p>')
+              : npmInfo.hasNpm
+                ? tr('<p>Этой команде нужен <code>sudo</code> — выполните её в терминале и нажмите «Проверить ещё раз».</p>',
+                     '<p>This command needs <code>sudo</code> — run it in a terminal and click “Check again”.</p>')
+                : tr('<p>npm в системе нет: сначала установите Node.js (22+) с npm, затем команду выше, и нажмите «Проверить ещё раз».</p>',
+                     '<p>npm is not installed: install Node.js (22+) with npm first, then the command above, and click “Check again”.</p>')
         )}
     <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap">
       ${installing ? '' : `<button onclick="location.href='dshlauncher://install/copy/'">${tr('Скопировать команду', 'Copy command')}</button>`}
-      ${installing ? '' : (npmInfo.canAuto ? `<button onclick="location.href='dshlauncher://install/run/'">${tr('Установить', 'Install')}</button>` : '')}
+      ${installing ? '' : (npmInfo.canAuto || npmInfo.rootMode === 'pkexec' ? `<button onclick="location.href='dshlauncher://install/run/'">${tr('Установить', 'Install')}</button>` : '')}
       <button onclick="location.href='dshlauncher://install/recheck/'">${tr('Проверить ещё раз', 'Check again')}</button>
     </div>`;
   if (installing) pages.liveLogSync(installState);

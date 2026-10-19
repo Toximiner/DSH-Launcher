@@ -134,6 +134,22 @@ const INSTALL_CMD = 'npm install -g @deepseek-ai/dsh';
 // предупреждения (Ubuntu 24.04: Node 18 из apt), а потом dsh не запускается.
 const MIN_NODE_MAJOR = 22;
 
+/* ===== rootInstallMode (тест test/dsh-install.js) =====
+   Как ставить глобально, когда prefix принадлежит root: 'pkexec' — npm и
+   prefix системные (не в домашнем каталоге), можно запустить установку от
+   root через pkexec — polkit спросит пароль системным диалогом, как при
+   обновлении самого лаунчера. 'manual' — всё остальное: npm из nvm или
+   ~/.npm-global под sudo ставить нельзя (root создаст файлы в домашнем
+   каталоге, и пользователь не сможет их обновлять), да и pkexec может не
+   быть. */
+function rootInstallMode({ npm, prefix, hasPkexec, home }) {
+  if (!npm || !prefix || !home) return 'manual';
+  const inHome = (p) => p === home || p.startsWith(home + path.sep);
+  if (inHome(npm) || inHome(prefix)) return 'manual';
+  return hasPkexec ? 'pkexec' : 'manual';
+}
+/* ===== end rootInstallMode ===== */
+
 async function nodeVersionNear(npm) {
   try {
     const { stdout } = await execFileAsync('node', ['--version'], { encoding: 'utf8', timeout: 5000, env: envWithBinDir(npm) });
@@ -141,22 +157,38 @@ async function nodeVersionNear(npm) {
   } catch { return null; }
 }
 
+/* ===== pkexecNpmArgs (тест test/dsh-install.js) =====
+   Аргументы pkexec для установки npm-пакета от root. pkexec запускает
+   программу с минимальным окружением: PATH без каталога npm ломает
+   `#!/usr/bin/env node` (npm — это JS-скрипт). Поэтому сначала каталог npm
+   первым в PATH, а аргументы передаются через "$@" — версия пакета не
+   склеивается в shell-строку. Результат: [pkexec, ...эти аргументы]. */
+function pkexecNpmArgs(npm, npmArgs) {
+  const script = 'PATH="$1:$PATH"; export PATH; shift; exec "$@"';
+  return ['/bin/sh', '-c', script, 'sh', path.dirname(npm), npm, ...npmArgs];
+}
+/* ===== end pkexecNpmArgs ===== */
+
 async function npmInstallInfo() {
   const npm = findNpm();
   if (!npm) return { hasNpm: false, canAuto: false, command: INSTALL_CMD };
   const nodeVersion = await nodeVersionNear(npm);
   const major = Number((/^v(\d+)/.exec(nodeVersion || '') || [])[1]);
   const nodeOld = Number.isFinite(major) && major < MIN_NODE_MAJOR;
+  const pkexec = findBin('pkexec');
   try {
     const prefix = (await execFileAsync(npm, ['prefix', '-g'], { encoding: 'utf8', timeout: 10000, env: envWithBinDir(npm) })).stdout.trim();
     const writable = writableOrCreatable(path.join(prefix, 'lib', 'node_modules')) &&
       writableOrCreatable(path.join(prefix, 'bin'));
-    return { hasNpm: true, canAuto: writable && !nodeOld, nodeVersion, nodeOld, npm, prefix,
+    // prefix root'а: ставим через pkexec (системный npm) или руками (nvm и
+    // прочие каталоги в домашнем).
+    const rootMode = writable ? null : rootInstallMode({ npm, prefix, hasPkexec: Boolean(pkexec), home: os.homedir() });
+    return { hasNpm: true, canAuto: writable && !nodeOld, nodeVersion, nodeOld, npm, prefix, pkexec, rootMode,
       command: writable ? INSTALL_CMD : 'sudo ' + INSTALL_CMD };
   } catch (e) {
     console.error('[launcher] npm prefix -g:', e.message);
-    return { hasNpm: true, canAuto: false, nodeVersion, nodeOld, npm, command: 'sudo ' + INSTALL_CMD };
+    return { hasNpm: true, canAuto: false, nodeVersion, nodeOld, npm, pkexec, rootMode: 'manual', command: 'sudo ' + INSTALL_CMD };
   }
 }
 
-module.exports = { dshEnv, probeDsh, findBin, dshInstallCheck, MIN_NODE_MAJOR, npmInstallInfo };
+module.exports = { dshEnv, probeDsh, findBin, dshInstallCheck, MIN_NODE_MAJOR, rootInstallMode, pkexecNpmArgs, npmInstallInfo };

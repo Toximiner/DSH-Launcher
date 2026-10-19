@@ -11,7 +11,7 @@ const { envWithBinDir } = require('./system');
 const { runWithLiveLog } = require('./proc-log');
 const { prefFile, readPref, writePref } = require('./prefs');
 const { DSH_ARGS, CWD } = require('./env');
-const { dshEnv, findBin, npmInstallInfo } = require('./dsh-install');
+const { dshEnv, findBin, npmInstallInfo, pkexecNpmArgs } = require('./dsh-install');
 const pages = require('./pages');
 const { blankResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
 
@@ -167,7 +167,11 @@ async function offerMarketIfMissing() {
     if (!findBin('pnpm')) {
       const npmInfo = await npmInstallInfo();
       if (state.stopping) return;
-      if (!npmInfo.canAuto) {
+      const pnpmArgs = ['install', '-g', 'pnpm'];
+      // Системный npm — ставим через pkexec (пароль спросит polkit), иначе
+      // просим выполнить в терминале: root в nvm/~/.npm-global — нельзя.
+      const viaPkexec = !npmInfo.canAuto && npmInfo.rootMode === 'pkexec';
+      if (!npmInfo.canAuto && !viaPkexec) {
         const cmd = npmInfo.hasNpm ? 'sudo npm install -g pnpm' : 'npm install -g pnpm';
         console.log(`[launcher] pnpm нет, поставить сами не можем — прошу «${cmd}»`);
         marketState.log = [];
@@ -176,8 +180,11 @@ async function offerMarketIfMissing() {
         noteIsError = true;
         continue;
       }
-      console.log('[launcher] pnpm нет — ставлю через npm');
-      const pc = await runMarketInstall(npmInfo.npm, ['install', '-g', 'pnpm'], envWithBinDir(npmInfo.npm));
+      console.log(viaPkexec ? '[launcher] pnpm нет — ставлю через pkexec' : '[launcher] pnpm нет — ставлю через npm');
+      const pc = await runMarketInstall(
+        viaPkexec ? npmInfo.pkexec : npmInfo.npm,
+        viaPkexec ? pkexecNpmArgs(npmInfo.npm, pnpmArgs) : pnpmArgs,
+        viaPkexec ? undefined : envWithBinDir(npmInfo.npm));
       if (state.stopping) return;
       if (pc !== 0 || !findBin('pnpm')) {
         console.error(`[launcher] установка pnpm не удалась (код ${pc})`);

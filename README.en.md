@@ -64,8 +64,12 @@ A small Electron app: a window that opens **DeepSeek Harness**
     cancelled password / failure — a page with the terminal command and a
     “Check again” button.
   - dsh update: `npm install -g @deepseek-ai/dsh@<version>` when the global
-    npm prefix is writable without sudo, otherwise the terminal command.
-    After success dsh starts with the new version immediately.
+    npm prefix is writable without sudo; when the prefix is system-wide (npm
+    and prefix outside the home directory) the same install runs via pkexec —
+    polkit asks for the password in a system dialog, exactly like the launcher
+    update; for nvm and `~/.npm-global` (root would leave files there that the
+    user cannot update later) — the terminal command. After success dsh starts
+    with the new version immediately.
   - In attach mode (dsh already running) no prompts are shown.
   - Requests are sent right at startup, in parallel with everything else;
     before starting dsh the launcher waits for them at most ~8 s (without a
@@ -478,7 +482,10 @@ and remove `--no-sandbox` from the last line of `run.sh`.
   window offers to install it: the `npm install -g @deepseek-ai/dsh`
   command with a “Copy command” button and, if the global npm prefix is
   writable without sudo, an “Install” button (installs right from the
-  window, with a log). “Check again” continues startup once dsh is there.
+  window, with a log). A system-wide prefix (npm in `/usr`, `/usr/local`)
+  also gets the “Install” button, but the install runs via pkexec and the
+  password is asked in a system dialog. “Check again” continues startup once
+  dsh is there.
 - If dsh crashes, the launcher restarts it by itself (at most three times
   in 10 minutes) and shows a “dsh was restarted after a crash” notice with a
   “dsh log…” button. If dsh keeps crashing, a page with the log stays.
