@@ -6,6 +6,7 @@
 """
 import json
 import os
+import shutil
 
 from helpers.env import CONF, HOME
 from helpers.procs import real_dsh_gone, sh, wait_for, wait_port
@@ -47,8 +48,26 @@ def test_dsh_update_other_prefix(start, prompt):
 
 
 def test_dsh_update_root_prefix(start, prompt):
-    """prefix принадлежит root — сразу команда с sudo; «Не спрашивать больше»
-    запоминается на версию."""
+    """prefix принадлежит root, npm системный — установка идёт через pkexec:
+    polkit спрашивает пароль системным диалогом (в контейнере правило
+    разрешает), dsh обновляется и запускается."""
+    launcher = start(OLD_LAUNCHER, DSH_BIN='/opt/noderoot/bin/dsh')
+    prompt.wait('Update DeepSeek Harness')
+
+    prompt.install()
+
+    assert launcher.wait_log('dsh обновлён → 0.2.0-rc.2', 300), launcher.log()[-2000:]
+    _, out = sh('runuser -u tester -- /opt/noderoot/bin/dsh --version')
+    assert out.splitlines()[-1:] == ['0.2.0-rc.2'], f'в /opt/noderoot теперь dsh 0.2.0-rc.2: {out}'
+    assert wait_port(120), 'лаунчер перешёл к запуску dsh (порт поднят)'
+    assert launcher.term() is not None, 'лаунчер вышел по SIGTERM'
+    assert real_dsh_gone(), 'настоящий dsh остановлен'
+
+
+def test_dsh_update_root_prefix_nopkexec(start, prompt):
+    """root-prefix, но pkexec нет — сразу команда с sudo; «Не спрашивать
+    больше» запоминается на версию."""
+    shutil.move('/usr/bin/pkexec', '/usr/bin/pkexec.off')
     launcher = start(OLD_LAUNCHER, DSH_BIN='/opt/noderoot/bin/dsh')
     prompt.wait('Update DeepSeek Harness')
 
