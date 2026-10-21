@@ -7,6 +7,19 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+### Fixed
+
+- Auto-recovery of the window after a dsh restart (plugin update,
+  marketplace self-restart): the window used to reload as soon as the TCP
+  port opened — but the port opens before the dsh app is actually ready
+  (plugin boot, bili attach). Reloading “blind” against a still-booting
+  server did not restore the session and left a gray (empty) window, so the
+  user had to restart dsh by hand. Now the watchdog waits until dsh really
+  responds (valid session cookie) and only then connects the window through
+  the same path as “dsh started manually”; if dsh is not ready within
+  ~15 s, it shows a “dsh is not ready” page with “Check again” and
+  “Restart dsh” buttons instead of the gray window.
+
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
 ## [1.17.0] — 2026-10-19
