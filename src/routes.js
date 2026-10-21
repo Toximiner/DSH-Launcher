@@ -41,6 +41,19 @@ async function plainUrlIsAuthed() {
   }
 }
 
+// HTTP-сервер dsh отвечает (любой статус — даже 401): порт открылся раньше,
+// чем приложение готово, и в момент ответа сессионный куки может быть уже не
+// годится (перезапуск маркета с новым токеном) — 200 здесь не требуется.
+// Таймаут: сокет открыт, но сервер ещё не отвечает (бут) — считаем «нет».
+async function plainUrlResponds() {
+  try {
+    const res = await electronNet.fetch(PLAIN_URL, { redirect: 'manual', signal: AbortSignal.timeout(1500) });
+    return res.status > 0;
+  } catch {
+    return false;
+  }
+}
+
 // Окно — на GUI уже работающего dsh, который запустил не лаунчер (перезапуск
 // из маркета, терминал): куки валидны → GUI; иначе ссылка входа из вывода
 // процесса на порту (listenerAuthUrl); иначе ещё раз куки — порт открывается
@@ -343,6 +356,7 @@ function registerProtocol() {
 
 module.exports = {
   plainUrlIsAuthed,
+  plainUrlResponds,
   openRunningGui,
   onPasteRequest,
   onRetryRequest,
