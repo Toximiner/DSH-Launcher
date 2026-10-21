@@ -12,12 +12,13 @@
  * сессионная подсистема, подключение bili). Перезагрузка окна в этот момент
  * — «вслепую» против бутащегося сервера — не восстанавливает сессию и
  * оставляет серое (пустое) окно; пользователь вынужден перезапускать dsh
- * руками. Поэтому при down→up сначала не перезагружаем, а ждём, пока dsh
- * действительно готово (plainUrlIsAuthed → 200 с валидным куки), и только
- * тогда подключаемся тем же путём, что «dsh запущен вручную» (openRunningGui
- * — с проверкой куки / ссылкой входа / страницей вставки). Не готов за
- * READY_WAIT_MS — показываем страницу «dsh не готов» с кнопками
- * «Проверить снова» и «Перезапустить dsh» (вместо серого окна).
+ * руками. Поэтому при down→up сначала не перезагружаем, а ждём, пока
+ * HTTP-сервер dsh действительно ОТВЕЧАЕТ (plainUrlResponds — любой статус:
+ * 200 — сессионный куки валидны; 401 — dsh поднялся, но токен сменился,
+ * и ссылку входа openRunningGui возьмёт из вывода процесса на порту), и
+ * только тогда подключаемся тем же путём, что «dsh запущен вручную».
+ * Не отвечал за READY_WAIT_MS — показываем страницу «dsh не готов» с
+ * кнопками «Проверить снова» и «Перезапустить dsh» (вместо серого окна).
  */
 const state = require('./state');
 const i18n = require('./i18n');
@@ -25,7 +26,7 @@ const { tr } = i18n;
 const { PORT } = require('./env');
 const { portOpen } = require('./port');
 const { showPage, showStatus } = require('./pages');
-const { openRunningGui, plainUrlIsAuthed } = require('./routes');
+const { openRunningGui, plainUrlResponds } = require('./routes');
 
 let watchdogStarted = false;
 let lastAutoReloadAt = 0;
@@ -83,7 +84,7 @@ async function recoverWindow(force = false) {
   lastAutoReloadAt = now;
   recovering = true;
   try {
-    const ready = await waitForReady(plainUrlIsAuthed, READY_WAIT_MS, () => state.stopping);
+    const ready = await waitForReady(plainUrlResponds, READY_WAIT_MS, () => state.stopping);
     if (state.stopping) return;
     if (!ready) {
       console.log(`[launcher] recover: dsh не готов за ${READY_WAIT_MS} мс — страница «не готов»`);
