@@ -7,6 +7,10 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
+
+## [1.17.2] — 2026-10-22
+
 ### Fixed
 
 - The `v1.17.1` GitHub release notes (and the launcher’s “What’s new”):
@@ -22,8 +26,6 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 - **Electron 44.9.0** (was 44.7.0) — Chromium/V8 fixes, including
   `net.fetch` after a Network-process restart. Dependabot proposes
   dependency updates weekly; PRs are checked by the tests and the build.
-
-<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
 ## [1.17.1] — 2026-10-21
 
