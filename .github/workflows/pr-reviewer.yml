@@ -1,0 +1,97 @@
+# Формальный ревьюер: бот-ревьюер (GitHub App `dsh-launcher-reviewer`)
+# ставит APPROVE на PR владельца (Toximiner), идущие в main из этого же
+# репозитория. Зачем: защита ветки main требует одно одобрение, а автор не
+# может одобрить собственный PR — формальное одобрение даёт отдельная
+# идентичность (бот). Бот НЕ независимый ревьюер: его ключ — в секретах
+# этого репозитория, логика — в этом файле; реальная проверка содержимого —
+# за CI-проверками (build) и, для релизов, docker-сценариями.
+#
+# Секреты репозитория:
+#   DSH_REVIEWER_APP_ID  — числовой App ID (нижний край страницы настроек App)
+#   DSH_REVIEWER_APP_KEY — приватный ключ App (PEM, сгенерирован в настройках)
+#
+# App устанавливается на этот репозиторий с правом
+# «Pull requests: Read and write» (минимум для approve).
+name: pr-reviewer
+
+on:
+  pull_request:
+    # opened/reopened — при создании; synchronize — при новом пуше (т.к.
+    # dismiss_stale_reviews сбрасывает approve при изменении ветки)
+    types: [opened, reopened, synchronize]
+
+permissions:
+  # токен бота выводится из секрета (своя идентичность), GITHUB_TOKEN не нужен
+  contents: read
+
+jobs:
+  approve:
+    if: >-
+      github.event.pull_request.user.login == 'Toximiner' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Approve PR as dsh-launcher-reviewer[bot]
+        env:
+          APP_ID: ${{ secrets.DSH_REVIEWER_APP_ID }}
+          APP_KEY: ${{ secrets.DSH_REVIEWER_APP_KEY }}
+          REPO: ${{ github.repository }}
+          REPO_ID: ${{ github.event.repository.id }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          set -eu
+          # до настройки секрета (App ID / ключ) — тихий no-op, чтобы не было
+          # ложного падения на раннем PR
+          if [ -z "${APP_ID:-}" ] || [ -z "${APP_KEY:-}" ]; then
+            echo "Секреты DSH_REVIEWER_APP_ID / DSH_REVIEWER_APP_KEY не заданы — пропускаю (настройте App)."
+            exit 0
+          fi
+          node --input-type=module -e '
+            import crypto from "node:crypto";
+            const APP_ID = process.env.APP_ID;
+            const APP_KEY = process.env.APP_KEY;
+            const REPO = process.env.REPO;
+            const REPO_ID = Number(process.env.REPO_ID);
+            const PR = Number(process.env.PR);
+            const b64url = (b) => Buffer.from(b).toString("base64url");
+            const sign = (payload) => {
+              const h = b64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+              const p = b64url(JSON.stringify(payload));
+              const sig = crypto.sign("sha256", Buffer.from(h + "." + p), APP_KEY)
+                .toString("base64url");
+              return h + "." + p + "." + sig;
+            };
+            const H = (tok) => ({ Authorization: "Bearer " + tok,
+                                  Accept: "application/vnd.github+json" });
+            // JWT приложения → поиск установки этого репозитория →
+            // installation-токен → APPROVE.
+            const jwt = sign({ iat: Math.floor(Date.now() / 1000) - 10,
+                               exp: Math.floor(Date.now() / 1000) + 540,
+                               iss: APP_ID });
+            const inst =
+              (await (await fetch("https://api.github.com/app/installations",
+                { headers: H(jwt) })).json()).installations
+                ?.find((i) => i.repositories?.some((r) => r.id === REPO_ID));
+            if (!inst) throw new Error(
+              "установка приложения для этого репозитория не найдена — " +
+              "установите App (Set up app → Only this repository)");
+            const at = await (await fetch(
+              "https://api.github.com/app/installations/" + inst.id +
+              "/access_tokens", { method: "POST", headers: H(jwt) })).json();
+            const r = await fetch(
+              "https://api.github.com/repos/" + REPO + "/pulls/" + PR +
+              "/reviews",
+              { method: "POST",
+                headers: { ...H(at.token),
+                           "Content-Type": "application/json" },
+                body: JSON.stringify({ event: "APPROVE",
+                  body: "Формальное одобрение бота-ревьюера: PR владельца в main. " +
+                        "Содержимое проверяют CI-проверки (build) и, для релизов, " +
+                        "docker-сценарии." }) });
+            if (!r.ok) throw new Error("approve: HTTP " + r.status + " " +
+                                       (await r.text()));
+            console.log("APPROVE поставлен на PR #" + PR +
+                        " (dsh-launcher-reviewer[bot])");
+          '
