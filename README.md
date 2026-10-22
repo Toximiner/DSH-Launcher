@@ -500,3 +500,4 @@ sudo chmod 4755 node_modules/electron/dist/chrome-sandbox
 - Куки живёт в профиле Electron (`~/.config/dsh-launcher`); если хотите
   «забыть» авторизацию — закройте окно (dsh остановится) и удалите этот
   каталог.
+
