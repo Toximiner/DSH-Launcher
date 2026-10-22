@@ -22,10 +22,12 @@ function checkVersion(v, current) {
   }
 }
 
-/* `## [Unreleased]` → `## [version] — date`; раздел должен быть непустым
-   (HTML-комментарий пустотой не считается), а раздела этой версии ещё не
-   должно быть. Выше выпущенной версии создаётся новый пустой раздел
-   `## [Unreleased]` — под правки до следующего релиза. */
+/* `## [Unreleased]` → `## [version] — date`; раздел должен быть непустым, а
+   раздела этой версии ещё не должно быть. HTML-комментарии (строчные) —
+   служебные: пустотой не считаются И не переносятся в раздел версии —
+   иначе попадут в описание релиза (1.17.1: плейсхолдер «сюда дописать»
+   ушёл в GitHub Release). Выше выпущенной версии создаётся новый пустой
+   раздел `## [Unreleased]` — под правки до следующего релиза. */
 function releaseChangelog(text, version, date) {
   const lines = text.split('\n');
   const at = lines.findIndex((l) => /^## \[Unreleased\]\s*$/i.test(l));
@@ -33,7 +35,14 @@ function releaseChangelog(text, version, date) {
   if (lines.some((l) => l.startsWith(`## [${version}]`))) throw new Error(`раздел [${version}] уже есть`);
   const next = lines.findIndex((l, i) => i > at && l.startsWith('## ['));
   const body = lines.slice(at + 1, next < 0 ? lines.length : next);
-  if (!body.some((l) => l.trim() && !l.startsWith('### ') && !l.trim().startsWith('<!--'))) throw new Error('раздел «## [Unreleased]» пуст');
+  const kept = [];
+  for (const l of body) {
+    if (l.trim().startsWith('<!--') && l.trim().endsWith('-->')) continue; // служебный комментарий — в версию не переносим
+    if (!l.trim() && kept.length && !kept[kept.length - 1].trim()) continue; // подряд пустые строки — одна
+    kept.push(l);
+  }
+  if (!kept.some((l) => l.trim() && !l.startsWith('### '))) throw new Error('раздел «## [Unreleased]» пуст');
+  lines.splice(at + 1, body.length, ...kept);
   lines[at] = `## [${version}] — ${date}`;
   lines.splice(at, 0, '## [Unreleased]', '',
     '<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->', '');

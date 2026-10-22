@@ -7,6 +7,16 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+### Fixed
+
+- The `v1.17.1` GitHub release notes (and the launcher’s “What’s new”):
+  a service comment from `## [Unreleased]` (“add changes for the next
+  release here”) had leaked into them. The comment is no longer carried
+  into a version section: `release.js` assembles the section without
+  single-line HTML comments, and the release-notes builder (awk in CI)
+  strips them. The offending line has been removed from the published
+  `v1.17.1` release.
+
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
 ## [1.17.1] — 2026-10-21
@@ -23,8 +33,6 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
   the same path as “dsh started manually”; if dsh is not ready within
   ~15 s, it shows a “dsh is not ready” page with “Check again” and
   “Restart dsh” buttons instead of the gray window.
-
-<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
 ## [1.17.0] — 2026-10-19
 
