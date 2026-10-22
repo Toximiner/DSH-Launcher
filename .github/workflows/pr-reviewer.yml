@@ -70,13 +70,23 @@ jobs:
             const jwt = sign({ iat: Math.floor(Date.now() / 1000) - 10,
                                exp: Math.floor(Date.now() / 1000) + 540,
                                iss: APP_ID });
-            const inst =
-              (await (await fetch("https://api.github.com/app/installations",
-                { headers: H(jwt) })).json()).installations
-                ?.find((i) => i.repositories?.some((r) => r.id === REPO_ID));
+            const ir = await fetch("https://api.github.com/app/installations",
+              { headers: H(jwt) });
+            if (!ir.ok) throw new Error(
+              "GET /app/installations: HTTP " + ir.status + " " +
+              (await ir.text()) + " — проверьте DSH_REVIEWER_APP_ID и ключ");
+            const installs = (await ir.json()).installations || [];
+            console.log("установок: " + installs.length + " | ищем REPO_ID=" +
+              REPO_ID + (installs.map((i) =>
+                " | inst " + i.id + " owner=" + (i.account?.login ||
+                  i.account?.type) + " repos=" +
+                  (i.repositories || []).map((r) => r.id + ":" + r.name)
+                .join(",") || "(нет списка)").join("")));
+            const inst = installs.find((i) =>
+              (i.repositories || []).some((r) => r.id === REPO_ID));
             if (!inst) throw new Error(
               "установка приложения для этого репозитория не найдена — " +
-              "установите App (Set up app → Only this repository)");
+              "в App: Install App → Only select repositories → " + REPO);
             const at = await (await fetch(
               "https://api.github.com/app/installations/" + inst.id +
               "/access_tokens", { method: "POST", headers: H(jwt) })).json();
