@@ -52,6 +52,18 @@ assert.throws(() => releaseChangelog(CL.replace('- Что-то.\n', ''), '1.16.0
 assert.throws(() => releaseChangelog(CL, '1.15.1', '2026-10-13'), /уже есть/, 'раздел версии уже есть');
 assert.ok(releaseChangelog('## [Unreleased]\n- Последний раздел.\n', '1.0.0', '2026-01-01').includes('## [1.0.0] — 2026-01-01\n- Последний раздел.\n'), 'Unreleased — последний раздел');
 assert.throws(() => releaseChangelog(releaseChangelog(CL, '1.16.0', '2026-10-13'), '1.16.1', '2026-10-14'), /пуст/, 'авто-созданный [Unreleased] пуст (комментарий не считается)');
+{
+  // Служебный комментарий [Unreleased] не переносится в раздел версии:
+  // 1.17.1 — плейсхолдер «сюда дописать» ушёл в описание GitHub Release.
+  const CL2 = CL.replace('## [Unreleased]\n\n### Исправлено\n',
+    '## [Unreleased]\n\n<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->\n\n### Исправлено\n');
+  const out = releaseChangelog(CL2, '1.16.0', '2026-10-13');
+  const verSection = out.split('\n## [1.16.0]')[1].split('\n## [1.15.1]')[0]; // раздел версии
+  assert.ok(!verSection.includes('дописать'), 'плейсхолдер не перенесён в версию');
+  assert.ok(out.includes('\n## [1.16.0] — 2026-10-13\n\n### Исправлено\n\n- Что-то.\n'), 'содержимое раздела на месте');
+  assert.ok(!/^<!--/m.test(verSection), 'в разделе версии комментариев нет');
+  assert.strictEqual(out.split('\n').length, CL2.split('\n').length + 2, 'удалены только комментарий и лишняя пустая строка');
+}
 
 // ---- setControlVersion ----
 assert.strictEqual(setControlVersion('Package: dsh-launcher\nVersion: 1.15.1-1\nArchitecture: amd64\n', '1.16.0'),
