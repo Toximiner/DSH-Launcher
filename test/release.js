@@ -146,11 +146,11 @@ assert.strictEqual(today(new Date(2026, 0, 5)), '2026-01-05', 'дата с ну�
     assert.strictEqual(git('tag', '--list'), '', '--no-commit: тега нет');
     git('checkout', '-q', '--', '.');
 
-    // выпуск: файлы, коммит и тег
+    // выпуск: файлы и коммит (тега НЕТ — его накладывают на origin/main
+    // после мержа PR, т.к. прямой пуш в main закрыт правилом про PR)
     quiet(() => run('--date', '2026-10-13', '1.16.0'));
     assert.strictEqual(git('log', '-1', '--format=%s'), 'Версия 1.16.0', 'коммит «Версия X.Y.Z»');
-    assert.strictEqual(git('tag', '--list'), 'v1.16.0', 'тег vX.Y.Z');
-    assert.strictEqual(git('rev-parse', 'v1.16.0^{commit}'), git('rev-parse', 'HEAD'), 'тег — на коммите версии');
+    assert.strictEqual(git('tag', '--list'), '', 'тега нет (тег — после мержа PR)');
     assert.strictEqual(git('status', '--porcelain'), '', 'всё закоммичено');
     for (const n of ['CHANGELOG.md', 'CHANGELOG.en.md']) assert.ok(read(n).includes('## [1.16.0] — 2026-10-13\n\n### Исправлено'), `${n}: раздел версии`);
     assert.strictEqual(JSON.parse(read('package.json')).version, '1.16.0', 'package.json');

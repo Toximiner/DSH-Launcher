@@ -108,8 +108,14 @@ function main(argv, root = __dirname) {
   }
   git('add', ...Object.keys(out));
   git('commit', '-q', '-m', `Версия ${version}`);
-  git('tag', `v${version}`);
-  console.log(`Коммит «Версия ${version}» и тег v${version} — локально. Выпустить:\n  git push origin main v${version}`);
+  // Тег НЕ создаётся: прямой пуш в main закрыт (правило «Changes must be
+  // made through a pull request»), тег накладывается на коммит, слитый в
+  // main, уже после мержа (см. шаги в шапке .github/workflows/build-deb.yml).
+  console.log(`Коммит «Версия ${version}» — локально, тега нет (тег — после мержа). Выпустить:\n` +
+    `  git push origin main:release/${version}\n` +
+    `  gh pr create --base main --head release/${version}   # approve поставит бот-ревьюер\n` +
+    `  # по зелёному build: мерж, затем:\n` +
+    `  git fetch origin && git tag v${version} origin/main && git push origin v${version}`);
 }
 
 if (require.main === module) {

@@ -7,8 +7,15 @@ name: build-deb
 #      установленного пакета на Ubuntu 24.04 / 26.04 и Debian 13 (~15 минут).
 #   3. npm run release X.Y.Z — раздел становится `## [X.Y.Z] — <дата>`,
 #      версия — в package.json, package-lock.json и deb/control; коммит
-#      «Версия X.Y.Z» и тег vX.Y.Z (локально).
-#   4. git push origin main vX.Y.Z
+#      «Версия X.Y.Z» (тег не создаётся — его накладывают после слитого PR).
+#   4. Прямой пуш в main закрыт правилом «Changes must be made through a
+#      pull request» — релиз идёт через PR:
+#        git push origin main:release/X.Y.Z
+#        gh pr create --base main --head release/X.Y.Z
+#      (одобрение — бот dsh-launcher-reviewer[bot], см. pr-reviewer.yml),
+#      по зелёному build — мерж (обычный merge commit).
+#   5. git fetch origin
+#      git tag vX.Y.Z origin/main && git push origin vX.Y.Z
 # Тег vX.Y.Z даёт пакет X.Y.Z-1; тег vX.Y.Z-R — пакет X.Y.Z-R (перепаковка
 # той же версии). Version: в deb/control для релиза переписывается из тега.
 #
