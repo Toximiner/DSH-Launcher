@@ -42,7 +42,7 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: |
           set -eu
-          # до настройки секрета (App ID / ключ) — тихий no-op, чтобы не было
+           ключ) — тихий no-op, чтобы не было/ ключ) — тихий no-op, чтобы не было
           # ложного падения на раннем PR
           if [ -z "${APP_ID:-}" ] || [ -z "${APP_KEY:-}" ]; then
             echo "Секреты DSH_REVIEWER_APP_ID / DSH_REVIEWER_APP_KEY не заданы — пропускаю (настройте App)."
