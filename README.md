@@ -444,8 +444,9 @@ Dependabot (`.github/dependabot.yml`) раз в неделю предлагае�
 раздел пуст, ветка не `main`, есть незакоммиченные правки или версия не выше
 текущей. Дальше — только через PR (прямой пуш в `main` закрыт правилом
 «Changes must be made through a pull request»): `git push origin
-main:release/1.16.0`, PR (одобрение ставит бот-ревьюер
-`dsh-launcher-reviewer[bot]`), по зелёному build — мерж, и тег:
+main:release/1.16.0`, PR, по зелёному build — мерж (свой PR сливается
+без approval — `enforce_admins` выключен; чужие PR, напр. dependabot, —
+с 1 approval), и тег:
 `git fetch origin && git tag v1.16.0 origin/main && git push origin
 v1.16.0`. По тегу CI собирает пакет и публикует релиз с описанием из обоих
 CHANGELOG. Только правка файлов, без коммита: `npm run release -- 1.16.0

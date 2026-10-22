@@ -12,11 +12,9 @@ name: build-deb
 #      pull request» — релиз идёт через PR:
 #        git push origin main:release/X.Y.Z
 #        gh pr create --base main --head release/X.Y.Z
-#      (одобрение — бот dsh-launcher-reviewer[bot], см. pr-reviewer.yml),
+#      (чужие PR, напр. dependabot — 1 approval от владельца;
+#      свой PR владелец сливает сам — enforce_admins выключен),
 #      по зелёному build — мерж (обычный merge commit).
-#      ПОКА бот не настроен (нет App-секретов): мерж своего PR — временно
-#      снять enforce_admins (PUT branches/main/protection),
-#      `gh pr merge N --merge --admin --delete-branch`, вернуть true.
 #   5. git fetch origin
 #      git tag vX.Y.Z origin/main && git push origin vX.Y.Z
 # Тег vX.Y.Z даёт пакет X.Y.Z-1; тег vX.Y.Z-R — пакет X.Y.Z-R (перепаковка

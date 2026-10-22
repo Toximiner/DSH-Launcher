@@ -113,7 +113,7 @@ function main(argv, root = __dirname) {
   // main, уже после мержа (см. шаги в шапке .github/workflows/build-deb.yml).
   console.log(`Коммит «Версия ${version}» — локально, тега нет (тег — после мержа). Выпустить:\n` +
     `  git push origin main:release/${version}\n` +
-    `  gh pr create --base main --head release/${version}   # approve поставит бот-ревьюер\n` +
+    `  gh pr create --base main --head release/${version}\n` +
     `  # по зелёному build: мерж, затем:\n` +
     `  git fetch origin && git tag v${version} origin/main && git push origin v${version}`);
 }
