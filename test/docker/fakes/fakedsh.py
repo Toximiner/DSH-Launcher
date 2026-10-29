@@ -21,6 +21,10 @@
   FAKE_REBORN_TOKEN, FAKE_REBORN_OUT=<файл> — у перезапустившегося процесса
                              свой токен (старое куки не годится) и вывод в файл
                              (как перезапуск кнопкой маркета)
+   FAKE_REBORN_HOLD_HTTP=<файл> — у перезапустившегося процесса HTTP-ответы
+                              держатся (сокет открыт, сервер не отвечает),
+                              пока не появится файл («dsh долго бует»);
+                              FAKE_HOLD_HTTP=<файл> — то же, но для любого процесса
   FAKE_LISTEN_FILE=<файл>  — открыть порт, только когда появится файл (dsh
                              запустился, но долго не поднимает сервис)
   plugin --profile P add X — «установить плагин»: X в dependencies
@@ -130,6 +134,17 @@ window.__field = () => c.innerText;
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
+        # «dsh долго бует»: порт открыт (TCP-сокет принимает), но HTTP-сервер
+        # не отвечает, пока не появится файл. Для reborn — FAKE_REBORN_HOLD_HTTP
+        # (в main не действует, иначе первый GUI не поднимется), иначе —
+        # FAKE_HOLD_HTTP.
+        hold = (os.environ.get('FAKE_REBORN_HOLD_HTTP') if ROLE == 'reborn'
+                else os.environ.get('FAKE_HOLD_HTTP'))
+        if hold and not os.path.exists(hold):
+            log('http held (no ' + hold + ')')
+            while not os.path.exists(hold):
+                time.sleep(0.2)
+            log('http released')
         if os.environ.get('FAKE_REQUIRE_TOKEN') == '1':
             if f'token={TOKEN}' in self.path:
                 log('token accepted')

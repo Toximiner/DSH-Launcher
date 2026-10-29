@@ -85,9 +85,11 @@ function apply(app) {
   }
 }
 
-// Две и более смерти GPU-процесса за сессию = драйвер сломан: пишем маркер,
-// чтобы следующие запуски сразу обходили GPU. Ставится при загрузке main.js
-// (до ready), как и раньше.
+/* ===== onChildProcessGone (тест test/gpu.js) =====
+   Две и более смерти GPU-процесса за сессию = драйвер сломан: пишем маркер,
+   чтобы следующие запуски сразу обходили GPU. Ставится при загрузке main.js
+   (до ready). state/fs/console/GPU_MARKER_FILE/gpuDisabledByMarker/LOG_DIR —
+   инжектимые (тест подменяет). */
 function onChildProcessGone(app, restartLauncher) {
   let gpuCrashCount = 0;
   app.on('child-process-gone', (_event, details) => {
@@ -110,6 +112,7 @@ function onChildProcessGone(app, restartLauncher) {
     }
   });
 }
+/* ===== end onChildProcessGone ===== */
 
 module.exports = {
   hasGpuRenderNode,

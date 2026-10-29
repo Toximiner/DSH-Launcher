@@ -22,12 +22,13 @@ async function openLogsFolder() {
   if (err) console.error('[launcher] не удалось открыть папку логов:', err);
 }
 
-// «Перезапустить dsh» (например, после обновления плагинов): останавливаем
-// dsh, который запустил лаунчер, и запускаем заново — без вопросов об
-// обновлениях. dsh, к которому лаунчер лишь подключился (запущен в
-// терминале), не трогаем — у него свой хозяин.
-
-
+/* ===== restartDsh (тест test/file-help.js) =====
+   «Перезапустить dsh» (например, после обновления плагинов): останавливаем
+   dsh, который запустил лаунчер, и запускаем заново — без вопросов об
+   обновлениях. dsh, к которому лаунчер лишь подключился (запущен в
+   терминале), не трогаем — у него свой хозяин.
+   state/dialog/tr/console/pages/dshStop/portOpen/sleep/launch — инжектимые
+   (тест подменяет). */
 async function restartDsh({ confirm = true } = {}) {
   if (!state.win || state.win.isDestroyed() || state.stopping || state.launching || state.restartingDsh) return;
   if (!state.weStartedDsh && !state.adoptedDsh) {
@@ -67,6 +68,7 @@ async function restartDsh({ confirm = true } = {}) {
   }
   await launch.launchDshInner();
 }
+/* ===== end restartDsh ===== */
 
 
 
@@ -79,6 +81,9 @@ function gpuStatusNow() {
   });
 }
 
+/* ===== gpuStatusText (тест test/file-help.js) =====
+   Строка состояния GPU для «О программе»: tr — инжективный (тест проверяет
+   формулировки без i18n). */
 function gpuStatusText(g) {
   if (g.on) {
     return g.marker
@@ -95,6 +100,7 @@ function gpuStatusText(g) {
   if (g.reason === 'norender') return tr('отключено (нет /dev/dri/renderD* — ВМ без 3D?)', 'off (no /dev/dri/renderD* — a VM without 3D?)');
   return tr('отключено (нет библиотек EGL)', 'off (no EGL libraries)');
 }
+/* ===== end gpuStatusText ===== */
 
 function onDialogGpuEnable() {
   try { fs.unlinkSync(GPU_MARKER_FILE); console.log('[launcher] маркер сбоев GPU снят — GPU со следующего запуска'); }
