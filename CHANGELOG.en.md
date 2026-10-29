@@ -7,6 +7,10 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
+
+## [1.17.3] — 2026-10-29
+
 ### Changed
 
 - **Electron 45.0.0** (was 44.9.0) — major version: Chromium 156,
