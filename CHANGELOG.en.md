@@ -7,7 +7,14 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
-<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
+### Changed
+
+- **Electron 45.0.0** (was 44.9.0) — major version: Chromium 156,
+  Node 24.22, V8 15.6. No launcher code changes were needed: there are
+  no preload scripts (the sandboxed-preload restrictions do not apply),
+  screen/window capture now comes in as `display-capture` and is
+  denied as before, and Electron dropped 32-bit builds (ia32, armv7l)
+  while the launcher ships x64 only.
 
 ## [1.17.2] — 2026-10-22
 
