@@ -257,6 +257,15 @@ function liveLogSync(st) {
   livePushed.set(st, st.logSeq || 0);
 }
 
+// redraw-колбэк для runWithLiveLog: дописать строки живой страницей, а если
+// страница к моменту тика уже не живая — полная отрисовка. active() — страница
+// всё ещё «выполняется» (тик мог разрешиться после переключения страницы).
+const liveRedraw = (st, active, page) => () => {
+  liveLogTick(st).then((ok) => {
+    if (!ok && active()) page();
+  });
+};
+
 // Дописать новые строки на открытую страницу. true — дописано (или новых
 // нет); false — страница уже не живая, вызывающий делает полную отрисовку.
 async function liveLogTick(st) {
@@ -273,4 +282,4 @@ async function liveLogTick(st) {
   }
 }
 
-Object.assign(module.exports, { pageHtml, stderrBlock, showPage, langPrefFile, loadLangPref, onLangSwitch, loadInWin, showStatus, showPastePage, liveLogPre, liveLogSync, liveLogTick }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { pageHtml, stderrBlock, showPage, langPrefFile, loadLangPref, onLangSwitch, loadInWin, showStatus, showPastePage, liveLogPre, liveLogSync, liveLogTick, liveRedraw }); // дополняем, а не заменяем: модули подключают друг друга по кругу

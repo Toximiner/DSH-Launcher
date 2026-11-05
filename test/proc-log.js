@@ -8,7 +8,7 @@
  */
 
 const assert = require('assert');
-const { runWithLiveLog, LOG_MAX_LINES } = require('../src/proc-log');
+const { runWithLiveLog, LOG_MAX_LINES, REDRAW_MS } = require('../src/proc-log');
 
 const node = process.execPath;
 
@@ -61,5 +61,7 @@ const node = process.execPath;
     await runWithLiveLog(st, node, ['-e', 'console.log(process.env.PL_TEST + " " + process.cwd())'], { env: { ...process.env, PL_TEST: 'x' }, cwd: '/' });
     assert.deepStrictEqual(st.log, ['x /'], 'env и cwd');
   }
+  // период живой отрисовки — его же используют страницы для тика прогресса
+  assert.strictEqual(REDRAW_MS, 800, 'REDRAW_MS');
   console.log('OK: proc-log — все проверки прошли');
 })().catch((e) => { console.error(e); process.exit(1); });

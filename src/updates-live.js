@@ -43,12 +43,15 @@ async function findUpdates(checks) {
   // Список релизов получен — если «Что нового» не смогло показать себя при
   // запуске (GitHub не ответил), показываем пропущенные изменения сейчас.
   if (l && l.releases) whatsNew.retryWhatsNew(l);
-  const lInst = await updates.launcherInstalledVersion();
+  // Локальные проверки независимы — параллельно, не друг за другом.
+  const lInstP = updates.launcherInstalledVersion();
+  const probeP = state.dshInstalledVersion ? null : probeDsh(state.dshBin);
+  const lInst = await lInstP;
   if (l && l.version && lInst && compareDebianVer(tagToPackageVersion(l.version), lInst) > 0) {
     found.launcher = { version: l.version, installed: lInst, releases: l.releases };
   }
-  if (!state.dshInstalledVersion) {
-    const r = await probeDsh(state.dshBin);
+  if (probeP) {
+    const r = await probeP;
     if (r.ok) state.dshInstalledVersion = r.version;
   }
   if (d && d.version && state.dshInstalledVersion && compareSemVer(d.version, state.dshInstalledVersion) > 0) {

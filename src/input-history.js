@@ -174,7 +174,7 @@ function buildInputHistoryScript(routeKey, items) {
 let inputHistoryCache = null; // ленивая загрузка из input-history.json
 
 function inputHistoryOn() {
-  return (loadSettings() || {}).inputHistory !== false; // по умолчанию — включено
+  return loadSettings().inputHistory !== false; // по умолчанию — включено
 }
 
 function inputHistoryItems() {

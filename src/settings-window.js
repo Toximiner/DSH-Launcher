@@ -43,7 +43,7 @@ function saveSettings(patch) {
 function setLanguage(lang) {
   if (lang === 'auto') {
     try { fs.rmSync(pages.langPrefFile(), { force: true }); } catch { /* noop */ }
-    i18n.setLang(/^ru/i.test(process.env.LC_ALL || process.env.LC_MESSAGES || process.env.LANG || '') ? 'ru' : 'en');
+    i18n.setLang(i18n.systemLang());
     menus.buildAppMenu();
     if (state.currentPage) state.currentPage();
   } else {

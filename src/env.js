@@ -47,6 +47,12 @@ delete process.env.DSH_LAUNCHER_INSTALL_VERSION;
 const SETTINGS_FILE = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'),
   'dsh-launcher', 'settings.json');
 
+// Пакетная ли установка (run.sh кладёт Electron в /opt/dsh-launcher) — один
+// источник истины: версия из dpkg против package.json, схема сравнения версий
+// (deb против semver), метка «сборка из исходников». execPath за жизнь
+// процесса не меняется, поэтому константа.
+const IS_PKG_INSTALL = process.execPath.startsWith('/opt/dsh-launcher/');
+
 function loadSettings() {
   try { const s = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); return s && typeof s === 'object' ? s : {}; }
   catch { return {}; }
@@ -85,5 +91,5 @@ const LANG_FORCED = (() => {
 
 module.exports = {
   GITHUB_TOKEN, GITHUB_API, ROUTE_KEY, UPDATE_NOW, INSTALL_VERSION, SETTINGS_FILE, loadSettings, CONFIG, DSH_BIN_DEFAULT, DSH_BIN_EXPLICIT, DSH_ARGS, CWD,
-  HOST, PORT, PLAIN_URL, START_TIMEOUT, LOG_DIR, LOG_FILE, LAUNCHER_LOG_FILE, MAX_LOG_BYTES, LANG_FORCED,
+  HOST, PORT, PLAIN_URL, START_TIMEOUT, LOG_DIR, LOG_FILE, LAUNCHER_LOG_FILE, MAX_LOG_BYTES, LANG_FORCED, IS_PKG_INSTALL,
 };

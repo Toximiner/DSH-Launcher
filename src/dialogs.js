@@ -1,14 +1,14 @@
 'use strict';
 // Окно-диалог поверх главного: открытие, содержимое, закрытие, «О программе», «Проверить обновления…».
-const { WebContentsView, shell, clipboard } = require('electron');
+const { WebContentsView, clipboard } = require('electron');
 const os = require('os');
-const { guardNavigation } = require('./guard');
+const { guardNavigation, denyExternalOpen } = require('./guard');
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc, timedCheck } = require('./util');
 const { updateStatus, notesBetween } = require('./versions');
-const { LOG_DIR } = require('./env');
+const { LOG_DIR, IS_PKG_INSTALL } = require('./env');
 const fileHelp = require('./file-help');
 const menus = require('./menus');
 const { isAltKey } = require('./ui');
@@ -48,10 +48,7 @@ function openDialog(title) {
   v.setBackgroundColor('#00000000'); // затемнение рисует страница слоя
   state.dialogView = v;
   const wc = v.webContents;
-  wc.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/i.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
+  denyExternalOpen(wc);
   guardNavigation(wc); // ссылка без target=_blank — тоже в браузере, не в слое
   wc.on('context-menu', (_e, params) => menus.showContextMenu(params, state.win, wc));
   wc.on('before-input-event', (e, input) => {
@@ -69,6 +66,8 @@ let resizeHooked = false;
 
 function closeDialog() {
   if (!dialogOpen()) return;
+  // слушатель resize один на всё окно (resizeHooked) и живёт с окном —
+  // не снимаем: пересоздавать его на каждый диалог только лишние события
   const v = state.dialogView;
   state.dialogView = null; state.dialogRender = null; dialogGen++;
   if (state.win && !state.win.isDestroyed()) {
@@ -112,8 +111,7 @@ async function showAboutDialog() {
   const ver = { lver: null, dver: null, loaded: false };
   const render = (copied) => {
     const gpu = fileHelp.gpuStatusNow();
-    const fromSrc = !process.execPath.startsWith('/opt/dsh-launcher/');
-    const lLabel = fromSrc ? tr(' (сборка из исходников)', ' (built from source)') : '';
+    const lLabel = !IS_PKG_INSTALL ? tr(' (сборка из исходников)', ' (built from source)') : '';
     const lDisp = ver.loaded ? (ver.lver || tr('неизвестно', 'unknown')) : tr('загружаю…', 'loading…');
     const dDisp = ver.loaded ? (ver.dver || tr('не установлен', 'not installed')) : tr('загружаю…', 'loading…');
     const rows = [
@@ -165,7 +163,7 @@ async function showUpdateCheckDialog() {
     timedCheck(updates.fetchDshLatest(), updates.UPDATE_CHECK_TIMEOUT),
   ]);
   const [lver, dver] = await Promise.all([menus.launcherVersionRaw(), menus.dshVersionRaw()]);
-  const isSrc = !process.execPath.startsWith('/opt/dsh-launcher/');
+  const isSrc = !IS_PKG_INSTALL;
   const lSt = updateStatus(latestL && latestL.version, lver, isSrc ? 'semver' : 'deb');
   const dSt = updateStatus(latestD && latestD.version, dver, 'semver');
   // найденное — и в меню «Справка» (уведомлять не нужно: окно и так открыто)

@@ -103,4 +103,6 @@ async function fetchDshLatest() {
   return meta;
 }
 
-module.exports = { DSH_NPM_PKG, UPDATE_GITHUB_REPO, RELEASES_MAX_AGE_MS, releasesCacheFile, githubReleases, fetchLauncherLatest, fakeLatest, fetchDshLatest };
+// RELEASES_MAX_AGE_MS / releasesCacheFile / fakeLatest — только внутри модуля
+// (кэш релизов, подставные версии dev/тестов) — не экспортируются.
+module.exports = { DSH_NPM_PKG, UPDATE_GITHUB_REPO, githubReleases, fetchLauncherLatest, fetchDshLatest };

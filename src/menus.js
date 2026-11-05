@@ -7,6 +7,7 @@ const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
 const { contextMenuItems } = require('./ui');
+const { IS_PKG_INSTALL } = require('./env');
 const { probeDsh } = require('./dsh-install');
 const diagnostics = require('./diagnostics');
 const dialogs = require('./dialogs');
@@ -151,7 +152,7 @@ function showContextMenu(params, w = state.win, wc = w && w.webContents) {
 // Версия лаунчера: пакетная установка — dpkg; сборка из исходников —
 // package.json корня репозитория (теперь синхронизирован с релизом, 1.2.0+).
 async function launcherVersionRaw() {
-  if (process.execPath.startsWith('/opt/dsh-launcher/')) return updates.launcherInstalledVersion();
+  if (IS_PKG_INSTALL) return updates.launcherInstalledVersion();
   try { return require('../package.json').version; } catch { return null; }
 }
 /* ===== end launcherVersionRaw ===== */

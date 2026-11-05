@@ -160,7 +160,7 @@ async function saveReport() {
     }
     const dshTail = dshLog.logTail(LOG_FILE, 5000, 1024 * 1024);
     if (dshTail !== null) put('dsh.log.tail', dshTail + '\n');
-    put('settings.json', JSON.stringify(loadSettings() || {}, null, 2) + '\n');
+    put('settings.json', JSON.stringify(loadSettings(), null, 2) + '\n');
     try { put('gpu.json', JSON.stringify(app.getGPUFeatureStatus(), null, 2) + '\n'); } catch { /* noop */ }
     // дампы падений (бинарные, как есть): последние за 30 дней
     const dumps = pickCrashDumps(listCrashDumps(), Date.now());
