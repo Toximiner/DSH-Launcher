@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+## [1.18.0] — 2026-11-05
+
 ### Added
 
 - dsh status in the tray icon tooltip: “dsh is running”, “dsh is not running”, or “dsh has stopped (auto-restart halted)”.
