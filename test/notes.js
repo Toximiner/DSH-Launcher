@@ -6,7 +6,7 @@
 const assert = require('assert');
 const { notesBetween, shouldShowWhatsNew } = require('../src/versions');
 const { redactLog } = require('../src/util');
-const { releaseNotesLang, mdToHtml } = require('../src/notes');
+const { releaseNotesLang, mdToHtml, dshNotesPart } = require('../src/notes');
 const { releasesCacheMode: mode, releasesCacheFresh: fresh } = require('../src/updates-logic');
 
 
@@ -42,6 +42,30 @@ assert.strictEqual(releaseNotesLang('## Русский\n\n- только рус�
 assert.strictEqual(releaseNotesLang('', 'ru'), '', 'пустое описание');
 assert.strictEqual(releaseNotesLang(null, 'en'), '', 'нет описания');
 assert.ok(releaseNotesLang(body.replace(/\n/g, '\r\n'), 'en').startsWith('### Fixed'), 'переводы строк \\r\\n');
+
+// ---- dshNotesPart: EN-часть двуязычного dsh-релиза (GitHub, deepseek-harness) ----
+const dshBody = `[中文](#cn-x) | [English](#en-x)
+
+<h3 id="cn-x">新增功能</h3>
+
+- Новая функция на китайском. @user
+
+<h3 id="en-x">New Features</h3>
+
+- New feature in English. by @user
+- Second EN item.
+
+Full Changelog: [dsh-v1...dsh-v2](https://github.com/deepseek-ai/deepseek-harness/compare/a...b)`;
+const dsh = dshNotesPart(dshBody);
+assert.ok(dsh.startsWith('## New Features'), 'заголовок <h3 id="en-…"> превращается в ##');
+assert.ok(dsh.includes('- New feature in English.') && dsh.includes('- Second EN item.'), 'EN-пункты на месте');
+assert.ok(!dsh.includes('新增功能') && !dsh.includes('китайском'), 'CN-часть отброшена');
+assert.ok(!/Full Changelog/.test(dsh), 'строка Full Changelog отбрасывается');
+assert.ok(!/<h3 id=/.test(dsh), 'HTML-якоря не остаются');
+assert.strictEqual(dshNotesPart('just a plain body'), 'just a plain body', 'якоря нет — всё описание');
+assert.strictEqual(dshNotesPart(null), '', 'нет описания');
+assert.strictEqual(dshNotesPart('<h3 id="en-only">Fixes</h3>\n- one\n\nFull Changelog: x'),
+  '## Fixes\n- one', 'EN-якорь в начале — заголовок, дальше пункты');
 
 // ---- notesBetween: какие релизы показать ----
 const rels = ['1.5.1', '1.5.0', '1.4.0', '1.3.1', '1.3.0', '1.2.0'].map((v) => ({ version: v, body: 'b' + v }));
@@ -130,4 +154,4 @@ assert.strictEqual(fresh(e({ fetchedAt: now - 2 * H }), now, H), false, 'ста�
 assert.strictEqual(fresh(e({ fetchedAt: undefined }), now, H), false, 'без времени — не свежий');
 assert.strictEqual(fresh(null, now, H), false, 'кэша нет');
 
-console.log('OK: releaseNotesLang, notesBetween, mdToHtml, redactLog, shouldShowWhatsNew, releasesCacheMode, releasesCacheFresh — все проверки прошли');
+console.log('OK: releaseNotesLang, dshNotesPart, notesBetween, mdToHtml, redactLog, shouldShowWhatsNew, releasesCacheMode, releasesCacheFresh — все проверки прошли');

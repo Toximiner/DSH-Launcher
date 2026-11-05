@@ -82,15 +82,17 @@ def test_releases_cache(start, gui):
         assert launcher.wait_log('последний dsh-launcher', 30), f'запуск {run}: проверка обновлений лаунчера прошла'
         assert launcher.wait_log('последний @deepseek-ai/dsh', 30), f'запуск {run}: проверка dsh прошла'
         if run == 2:
-            assert 'релизы GitHub: не изменились (304' in launcher.log(), 'второй запуск — 304 по метке ETag'
+            # 304 у обоих репозиториев (лаунчер ходит и за релизами dsh) — по метке ETag
+            assert github_log().count('/releases?per_page=100 304') >= 2, 'второй запуск — 304 по меткам ETag'
         launcher.term()
-    assert github() == 2, f'GitHub спрошен при каждом запуске ({github()})'
-    assert github_log().count('/releases?per_page=100 304') == 1, 'второй раз — 304'
+    assert github() == 4, f'GitHub спрошен при каждом запуске ({github()})'
 
-    # GitHub недоступен (на порту никого) — список из недавнего кэша
+    # GitHub недоступен (на порту никого) — списки из недавнего кэша
     launcher = start(FAKE, NO_PROMPTS, DSH_LAUNCHER_GITHUB_API='http://127.0.0.1:8799')
     gui.wait()
-    assert launcher.wait_log('— список из кэша', 30), launcher.log()[-1500:]
-    assert launcher.wait_log('последний dsh-launcher', 10), 'проверка лаунчера — по кэшу'
+    assert launcher.wait_log('последний dsh-launcher', 30), 'проверка лаунчера — по кэшу'
+    assert launcher.wait_log('последний @deepseek-ai/dsh', 30), 'проверка dsh — по кэшу'
+    assert launcher.log().count('— список из кэша') >= 2, 'оба списка (лаунчер + dsh) взяты из кэша'
     launcher.term()
     assert os.path.exists(f'{CONF}/releases-cache.json'), 'кэш релизов записан'
+    assert os.path.exists(f'{CONF}/dsh-releases-cache.json'), 'кэш релизов dsh записан'

@@ -11,6 +11,7 @@ import os
 import shutil
 
 from helpers.env import CONF, HOME
+from helpers.github import DSH_RELEASES, write_dsh_releases
 from helpers.procs import real_dsh_gone, sh, wait_for, wait_port
 
 NVM_NODE = f'{HOME}/.nvm/versions/node'
@@ -82,6 +83,40 @@ def test_dsh_update_root_prefix_nopkexec(start, prompt):
     assert wait_port(120), '«Не спрашивать больше» — dsh запускается'
     prefs = json.load(open(f'{CONF}/update-prefs.json'))
     assert prefs.get('dsh') == '0.2.0-rc.2', f'отказ запомнен на версию: {prefs}'
+    launcher.term()
+
+
+def test_dsh_update_notes(start, prompt):
+    """Вопрос об обновлении dsh показывает «Что нового»: описания релизов dsh
+    берутся из GitHub (deepseek-harness), EN-часть двуязычного описания."""
+    body = ('[中文](#cn) | [English](#en)\n'
+            '\n<h3 id="cn-v0.2.0-rc.2">新增功能</h3>\n'
+            '\n- 俄语界面测试功能。 @tester\n'
+            '\n<h3 id="en-v0.2.0-rc.2">New Features</h3>\n'
+            '\n- Russian interface test feature. by @tester\n'
+            '- A second EN line for the notes block.\n'
+            '\nFull Changelog: [dsh-v0.1.7-rc.2...dsh-v0.2.0-rc.2](https://github.com/deepseek-ai/deepseek-harness/compare/dsh-v0.1.7-rc.2...dsh-v0.2.0-rc.2)')
+    write_dsh_releases([
+        {'tag_name': 'dsh-v0.2.0-rc.2', 'name': 'v0.2.0-rc.2', 'body': body,
+         'draft': False, 'prerelease': True,
+         'html_url': 'https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.2',
+         'published_at': '2026-11-01T00:00:00Z', 'assets': []},
+        {'tag_name': 'dsh-v0.1.7-rc.2', 'name': 'v0.1.7-rc.2', 'body': 'old',
+         'draft': False, 'prerelease': True,
+         'html_url': 'https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-rc.2',
+         'published_at': '2026-10-01T00:00:00Z', 'assets': []},
+    ])
+    # Настоящий старый dsh 0.1.7-rc.2 в nvm — «установлен»; последний — 0.2.0-rc.2.
+    launcher = start(OLD_LAUNCHER, PATH=f'{NVM_BIN}:/usr/local/bin:/usr/bin:/bin')
+    prompt.wait(r'Update DeepSeek Harness.*0\.2\.0-rc\.2.*installed: 0\.1\.7-rc\.2')
+    prompt.wait('What’s new:', 30)
+    prompt.wait('Russian interface test feature', 10)
+    prompt.wait('A second EN line for the notes block', 10)
+    assert '新增功能' not in prompt.text(), 'CN-часть не показывается'
+    assert 'Full Changelog' not in prompt.text(), 'строка «Full Changelog» отбрасывается'
+    assert os.path.exists(f'{CONF}/dsh-releases-cache.json'), 'кэш релизов dsh записан'
+    prompt.later()
+    assert wait_port(120), '«Не сейчас» — dsh запускается'
     launcher.term()
 
 
