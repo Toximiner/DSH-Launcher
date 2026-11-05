@@ -124,7 +124,9 @@ async function dshInstallCheck() {
 
 // Есть ли npm и доступен ли глобальный prefix без sudo — от этого зависит,
 // можно ли ставить dsh кнопкой прямо из окна.
-const INSTALL_CMD = 'npm install -g @deepseek-ai/dsh';
+// @latest — явно: bare-спецификатор npm 10.x (Node 22) при latest-пререлизе
+// резолвится как диапазон * и падает ETARGET (все версии dsh — пререлизы).
+const INSTALL_CMD = 'npm install -g @deepseek-ai/dsh@latest';
 // Право записи проверяем у ближайшего существующего каталога: на чистой
 // системе <prefix>/lib/node_modules ещё нет (появится при первой глобальной
 // установке), и ENOENT от него раньше ошибочно означал «npm нет».
