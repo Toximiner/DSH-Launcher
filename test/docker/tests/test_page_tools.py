@@ -56,6 +56,14 @@ def test_find(start, gui):
     before = find.count()
     find.next()
     assert find.wait_count(lambda c: c != before), f'«следующее» сменило совпадение ({before})'
+    # «предыдущее» — назад к первому совпадению
+    find.prev()
+    assert find.wait_count(lambda c: c == before), f'«предыдущее» вернуло первое совпадение ({find.count()})'
     assert find.search('nothing-like-this', lambda c: c == 'none'), f'нет совпадений ({find.count()})'
+    # закрытие (×) и повторное открытие Ctrl+F
+    find.close()
+    find2 = gui.open_find()
+    assert find2.search('needle', lambda c: c.endswith('/ 3')), 'панель снова открылась, совпадения снова найдены'
+    find2.close()
     assert launcher.alive, 'лаунчер жив'
     launcher.term()
