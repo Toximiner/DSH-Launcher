@@ -387,12 +387,23 @@ function restartLauncher() {
   }, RESTART_SPAWN_GRACE_MS);
 }
 
+// Когда и куда лаунчер обновили (last-update.json): следующий запуск, если
+// обновлённая версия падает, по нему понимает «сбой связан с обновлением»
+// и предлагает откат (diagnostics.rollbackSuggested).
+const readLastUpdate = () => {
+  const u = readPref('last-update.json');
+  return u && typeof u === 'object' ? u : null;
+};
+const writeLastUpdate = () =>
+  writePref('last-update.json', { from: updateState.installed, to: tagToPackageVersion(updateState.latest), at: new Date().toISOString() });
+
 // Лаунчер обновлён на диске, а работает ещё старый: apt заменил файлы
 // /opt/dsh-launcher под нами. Уже открытые файлы живут (старые inode), но
 // новые процессы Chromium (GPU, утилиты) запустились бы из нового бинарника —
 // поэтому перезапускаемся быстро, а при падении любого процесса — сразу.
 function showUpdateSuccess() {
   state.launcherUpdatedOnDisk = true;
+  writeLastUpdate();
   if (updateState.debPath) {
     try { fs.unlinkSync(updateState.debPath); } catch { /* noop */ }
     updateState.debPath = null;
@@ -642,4 +653,4 @@ async function offerDshUpdate() {
   });
 }
 
-Object.assign(module.exports, { DSH_NPM_PKG, UPDATE_GITHUB_REPO, UPDATE_CHECK_TIMEOUT, NO_UPDATE_CHECK, launcherInstalledVersion, fetchLauncherLatest, notesBlockHtml, fetchDshLatest, startUpdateChecks, updateState, updatePrefFile, updatePrefs, onUpdateChoice, restartLauncher, offerLauncherUpdate, offerDshUpdate }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { DSH_NPM_PKG, UPDATE_GITHUB_REPO, UPDATE_CHECK_TIMEOUT, NO_UPDATE_CHECK, launcherInstalledVersion, fetchLauncherLatest, notesBlockHtml, fetchDshLatest, startUpdateChecks, updateState, updatePrefFile, updatePrefs, onUpdateChoice, restartLauncher, offerLauncherUpdate, offerDshUpdate, readLastUpdate }); // дополняем, а не заменяем: модули подключают друг друга по кругу

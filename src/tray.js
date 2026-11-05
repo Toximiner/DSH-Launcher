@@ -53,6 +53,49 @@ function trayMenu() {
   ]);
 }
 
+/* ===== trayStatusText (тест test/tray.js) =====
+   Подсказка значка о состоянии dsh: fatal — остановился (авто-перезапуск
+   остановлен), portState 'up' — запущен, 'down' — не запущен, null — ещё не
+   проверено (только имя лаунчера). tr — (ru, en) → строка. */
+function trayStatusText(portState, fatal, tr) {
+  const name = 'DeepSeek Harness';
+  if (fatal) return tr(`${name} — dsh остановлен (авто-перезапуск остановлен)`, `${name} — dsh has stopped (auto-restart halted)`);
+  if (portState === 'up') return tr(`${name} — dsh запущен`, `${name} — dsh is running`);
+  if (portState === 'down') return tr(`${name} — dsh не запущен`, `${name} — dsh is not running`);
+  return name;
+}
+/* ===== end trayStatusText ===== */
+
+/* ===== trayStatusLabel (тест test/tray.js) =====
+   То же состояние для лога (лог — на русском, tr не нужен). */
+function trayStatusLabel(portState, fatal) {
+  if (fatal) return 'dsh остановлен (авто-перезапуск остановлен)';
+  if (portState === 'up') return 'dsh запущен';
+  if (portState === 'down') return 'dsh не запущен';
+  return 'состояние dsh ещё не проверено';
+}
+/* ===== end trayStatusLabel ===== */
+
+// Подсказка о статусе dsh обновляется раз в 2 с (pollAgentState); кэш —
+// чтобы не трогать Electron при каждом тике, пока состояние не изменилось.
+let trayStatusCache = null;
+let trayAttention = false;
+
+/* ===== refreshTrayStatus (тест test/tray.js) =====
+   Обновляет подсказку значка по state.portState/dshFatal. Кэш (trayStatusCache,
+   trayAttention) — внешние: без изменения состояния в Electron не лезем.
+   state — { tray, portState, dshFatal }, tr — (ru, en) → строка,
+   console — лог, trayStatusText/trayStatusLabel — см. выше. */
+function refreshTrayStatus() {
+  if (!state.tray || trayAttention) return; // подсказка «агент закончил» важнее
+  const key = `${state.portState}|${state.dshFatal ? 1 : 0}`;
+  if (key === trayStatusCache) return;
+  trayStatusCache = key;
+  state.tray.setToolTip(trayStatusText(state.portState, state.dshFatal, tr));
+  console.log(`[launcher] трей: ${trayStatusLabel(state.portState, state.dshFatal)}`);
+}
+/* ===== end refreshTrayStatus ===== */
+
 function setTray(on) {
   if (Boolean(state.tray) === Boolean(on)) return;
   if (on) {
@@ -62,9 +105,12 @@ function setTray(on) {
     state.tray.setContextMenu(trayMenu());
     state.tray.on('click', () => showMainWindow());
     console.log('[launcher] трей включён: крестик прячет окно, dsh работает дальше');
+    trayStatusCache = null;
+    refreshTrayStatus(); // сразу показать статус dsh
   } else {
     state.tray.destroy();
     state.tray = null;
+    trayStatusCache = null;
     console.log('[launcher] трей выключен');
     if (state.win && !state.win.isDestroyed() && !state.win.isVisible()) showMainWindow(); // не оставить окно спрятанным без значка
   }
@@ -73,8 +119,14 @@ function setTray(on) {
 // ev — событие agentEvent: подсказка у значка — что именно случилось.
 function setTrayAttention(on, ev = { type: 'finished' }) {
   if (!state.tray || !trayIcons) return;
+  trayAttention = on;
   state.tray.setImage(on ? trayIcons.attention : trayIcons.normal);
-  state.tray.setToolTip(on ? `DeepSeek Harness — ${agentNotice(ev)}` : 'DeepSeek Harness');
+  if (on) {
+    state.tray.setToolTip(`DeepSeek Harness — ${agentNotice(ev)}`);
+  } else {
+    trayStatusCache = null; // вернуть подсказку о статусе dsh
+    refreshTrayStatus();
+  }
 }
 
 function showMainWindow() {
@@ -184,6 +236,7 @@ const AGENT_PROBE = `(() => ({
 }))()`;
 
 async function pollAgentState() {
+  refreshTrayStatus(); // статус dsh у значка — независимо от агента
   if (!state.win || state.win.isDestroyed() || state.stopping) return;
   try { if (new URL(state.win.webContents.getURL()).origin !== new URL(PLAIN_URL).origin) { agent = { running: false, waiting: null }; return; } } catch { return; }
   let cur;
@@ -205,4 +258,4 @@ async function pollAgentState() {
   if (attentionSoundOn()) playAgentSound();
 }
 
-Object.assign(module.exports, { closeToTrayOn, attentionOn, attentionSoundOn, trayMenu, setTray, setTrayAttention, clearAgentNotification, showMainWindow, onMainWindowClose, AGENT_POLL_MS, playAgentSound, pollAgentState }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { closeToTrayOn, attentionOn, attentionSoundOn, trayMenu, setTray, setTrayAttention, clearAgentNotification, showMainWindow, onMainWindowClose, AGENT_POLL_MS, playAgentSound, pollAgentState, trayStatusText, trayStatusLabel, refreshTrayStatus }); // дополняем, а не заменяем: модули подключают друг друга по кругу

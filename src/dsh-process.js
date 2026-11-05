@@ -143,6 +143,7 @@ async function handleDshExit(code, signal) {
   }
   const repeated = code !== 0 || Boolean(signal);
   if (repeated) console.log('[launcher] dsh падает снова и снова — авто-перезапуск остановлен');
+  if (repeated) state.dshFatal = true; // dsh остановлен и больше не перезапускается (статус у значка)
   if (state.win && !state.win.isDestroyed() && !state.stopping) {
     pages.showPage(() => pages.showStatus(tr('dsh остановился', 'dsh has stopped'), (repeated ? tr(
       `<p>Процесс DeepSeek Harness падает снова и снова — лаунчер перезапускал его

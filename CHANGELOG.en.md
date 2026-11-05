@@ -9,6 +9,11 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+### Added
+
+- dsh status in the tray icon tooltip: “dsh is running”, “dsh is not running”, or “dsh has stopped (auto-restart halted)”.
+- Roll-back offer: if a freshly updated launcher version crashed, the crash toast gains a “Roll back to the previous version…” button that opens the roll-back dialog.
+
 ## [1.17.4] — 2026-11-05
 
 ### Changed

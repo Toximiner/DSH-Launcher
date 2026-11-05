@@ -12,6 +12,7 @@ const { updatePollMs, announceUpdates } = require('./updates-logic');
 const { LOG_DIR, LAUNCHER_LOG_FILE, ROUTE_KEY } = require('./env');
 const { probeDsh } = require('./dsh-install');
 const diagnostics = require('./diagnostics');
+const rollback = require('./rollback');
 const dialogs = require('./dialogs');
 const dshLog = require('./dsh-log');
 const menus = require('./menus');
@@ -198,6 +199,9 @@ function onToastRequest(route, url) {
   } else if (route.startsWith('/toast/report/')) {
     closeUpdateToast();
     void diagnostics.saveReport();
+  } else if (route.startsWith('/toast/rollback/')) {
+    closeUpdateToast();
+    void rollback.showRollbackDialog(); // тост «прошлый запуск упал после обновления»
   }
   return noContentResponse();
 }
