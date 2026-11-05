@@ -184,6 +184,11 @@ async function onReady() {
       state.win.show();
     }
   }, 8000);
+  // Восстановленный при старте масштаб (см. setZoomLevel ниже) не задерживается
+  // после перехода на страницу dsh — каждый cross-origin-переход Chromium
+  // сбрасывает zoom к 0. Поэтому держим его здесь и переносим на GUI один раз,
+  // при первой загрузке страницы dsh, чтобы «масштаб между запусками» работал.
+  let savedZoomPending = null;
   state.win.webContents.on('did-finish-load', () => {
     // первая загрузка GUI dsh — показать «Что нового», если лаунчер обновился
     try {
@@ -191,6 +196,10 @@ async function onReady() {
         // Окно на странице dsh, а не служебной: смена языка не должна
         // перерисовать старую статус-страницу («Запуск dsh…») поверх GUI.
         state.currentPage = null;
+        if (savedZoomPending != null) {
+          state.win.webContents.setZoomLevel(savedZoomPending);
+          savedZoomPending = null;
+        }
         void maybeShowWhatsNew();
         maybeShowCrashNotice();
         maybeShowDshCrashNotice();
@@ -214,7 +223,9 @@ async function onReady() {
   try {
     const savedZoom = JSON.parse(fs.readFileSync(zoomFile(), 'utf8'));
     if (Number.isFinite(savedZoom.zoomLevel)) {
-      state.win.webContents.setZoomLevel(Math.max(-5, Math.min(5, savedZoom.zoomLevel)));
+      const z = Math.max(-5, Math.min(5, savedZoom.zoomLevel));
+      state.win.webContents.setZoomLevel(z);
+      savedZoomPending = z; // перенесём на страницу dsh (см. did-finish-load выше)
       console.log(`[launcher] восстановлен масштаб: ${savedZoom.zoomLevel}`);
     }
   } catch { /* noop */ }
