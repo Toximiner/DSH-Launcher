@@ -1,9 +1,10 @@
-"""«Язык интерфейса» в настройках: ru → ui-lang.json + разделы диалога на
-русском, en → обратно, auto → файл удалён и язык по системной (C.UTF-8 → en).
-Проверяет и фикс: смена языка не перерисовывает старую статус-страницу
-(«Запуск dsh…») поверх уже загруженного GUI dsh (main.js, did-finish-load).
-Заголовок CDP-страницы диалога зафиксирован при открытии окна (closure) и
-останется прежним — переводим контент, не заголовок."""
+"""'Interface language' in settings: ru → ui-lang.json + the dialog sections
+in Russian, en → back, auto → the file is removed and the language comes
+from the system locale (C.UTF-8 → en). Also checks a fix: changing the
+language does not redraw the old status page («Запуск dsh…») on top of the
+already-loaded dsh GUI (main.js, did-finish-load). The dialog's CDP page
+title is fixed when the window is opened (closure) and stays as it was —
+the content is translated, not the title."""
 import json
 
 from helpers.env import CONF, FAKE, NOUPD
@@ -13,7 +14,7 @@ LANG_FILE = f'{CONF}/ui-lang.json'
 
 
 class SettingsDialogRu(Dialog):
-    """То же окно настроек, когда заголовок был «Настройки» (открыто на ru)."""
+    """The same settings window when the title was «Настройки» (opened in ru)."""
     TITLE = r'^Настройки$'
 
 
@@ -28,8 +29,8 @@ def test_settings_lang(start, gui):
     launcher = start(FAKE, NOUPD)
     gui.wait()
 
-    # Русский: файл, лог; контент диалога перерисован на русском
-    # (заголовок CDP-страницы — в языке, при котором открыли окно).
+    # Russian: the file, the log; the dialog content is redrawn in Russian
+    # (the CDP page title — in the language the window was opened in).
     settings = gui.open_settings()
     settings.set('lang', 'ru')
     settings.wait_text('Общие.*Обновления.*Запуск dsh.*Графика', 15)
@@ -37,20 +38,20 @@ def test_settings_lang(start, gui):
     assert launcher.wait_log('настройки: lang = ru', 10), launcher.log()[-1000:]
     assert lang_file() == {'lang': 'ru'}, lang_file()
 
-    # GUI dsh при этом не затёрт старой статус-страницей.
+    # Meanwhile the dsh GUI is not clobbered by the old status page.
     assert 'FAKE DSH' in (gui.eval('document.body.innerText') or ''), \
-        'GUI dsh затёрт статус-страницей «Запуск dsh…»'
+        'the dsh GUI was clobbered by the «Запуск dsh…» status page'
 
-    # Английский: файл обновлён, контент снова по-английски.
+    # English: the file is updated, the content is in English again.
     settings.set('lang', 'en')
     settings.wait_text('General.*Updates.*Starting dsh.*Graphics', 15)
     assert launcher.wait_log('язык окна: en', 10), launcher.log()[-1000:]
     assert lang_file() == {'lang': 'en'}, lang_file()
 
-    # auto: файл удалён, язык — по системной (C.UTF-8 → en).
+    # auto: the file is removed, the language — from the system locale (C.UTF-8 → en).
     settings.set('lang', 'auto')
     assert launcher.wait_log('настройки: lang = auto', 10), launcher.log()[-1000:]
-    assert lang_file() is None, 'ui-lang.json удалён'
+    assert lang_file() is None, 'ui-lang.json removed'
     settings.wait_text('General.*Updates.*Starting dsh.*Graphics', 15)
 
     launcher.term()

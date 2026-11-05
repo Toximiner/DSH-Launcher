@@ -1,13 +1,13 @@
-"""Фикстуры Docker-сценариев.
+"""Fixtures for the Docker scenarios.
 
-Каждый сценарий — в свежем контейнере: run.sh вызывает
-`pytest /opt/t/tests --scenario <имя>`. Имя сценария — имя теста без «test_»;
-у параметризованного теста — id параметра (test_adopt[adopt_detached] →
-adopt_detached). `--list-scenarios` печатает все имена (run.sh берёт из них
-список по умолчанию).
+Each scenario runs in a fresh container: run.sh invokes
+`pytest /opt/t/tests --scenario <name>`. The scenario name is the test name
+without the «test_» prefix; for a parametrized test it is the parameter id
+(test_adopt[adopt_detached] → adopt_detached). `--list-scenarios` prints all
+names (run.sh builds its default list from them).
 
-Окружение контейнера: system dbus, polkitd (правило «tester — разрешить /
-запретить» по POLKIT=yes|no), Xvfb; лаунчер — от tester с CDP на 9222.
+Container environment: system dbus, polkitd (a “tester — allow / deny” rule
+per POLKIT=yes|no), Xvfb; the launcher runs as tester with CDP on 9222.
 """
 import json
 import os
@@ -24,11 +24,11 @@ from helpers.procs import as_tester, fakedsh_events, pgrep, sh, wait_for
 from helpers.windows import Gui, UpdatePrompt
 
 
-# ---------------- выбор сценария ----------------
+# ---------------- scenario selection ----------------
 
 def pytest_addoption(parser):
-    parser.addoption('--scenario', help='запустить один сценарий по имени')
-    parser.addoption('--list-scenarios', action='store_true', help='напечатать имена сценариев')
+    parser.addoption('--scenario', help='run a single scenario by name')
+    parser.addoption('--list-scenarios', action='store_true', help='print the scenario names')
 
 
 def scenario_name(item):
@@ -46,11 +46,11 @@ def pytest_collection_modifyitems(config, items):
     if name:
         selected = [i for i in items if scenario_name(i) == name]
         if not selected:
-            raise pytest.UsageError(f'нет сценария «{name}»')
+            raise pytest.UsageError(f'no scenario "{name}"')
         items[:] = selected
 
 
-# ---------------- окружение контейнера ----------------
+# ---------------- container environment ----------------
 
 @pytest.fixture(scope='session', autouse=True)
 def container_env(request):
@@ -65,17 +65,17 @@ def container_env(request):
     polkitd = next(p for p in ('/usr/lib/polkit-1/polkitd', '/usr/libexec/polkitd') if os.path.exists(p))
     subprocess.Popen(f'{polkitd} --no-debug >/tmp/polkitd.log 2>&1', shell=True)
     subprocess.Popen('Xvfb :99 -screen 0 1280x800x24 -nolisten tcp >/dev/null 2>&1', shell=True)
-    assert wait_for(lambda: os.path.exists('/tmp/.X11-unix/X99'), 15, 0.1), 'Xvfb не поднял дисплей :99'
-    assert wait_for(lambda: os.path.exists('/run/dbus/system_bus_socket'), 15, 0.1), 'нет системной шины D-Bus'
-    assert wait_for(lambda: pgrep('polkitd'), 15, 0.1), 'polkitd не запустился'
-    # Вопрос про маркет в тестах не нужен.
+    assert wait_for(lambda: os.path.exists('/tmp/.X11-unix/X99'), 15, 0.1), 'Xvfb did not bring up display :99'
+    assert wait_for(lambda: os.path.exists('/run/dbus/system_bus_socket'), 15, 0.1), 'no system D-Bus bus'
+    assert wait_for(lambda: pgrep('polkitd'), 15, 0.1), 'polkitd did not start'
+    # The market prompt is not needed in tests.
     as_tester('mkdir -p ~/.config/dsh-launcher && echo \'{"dontAsk":true}\' > ~/.config/dsh-launcher/market-prompt.json')
     if os.path.exists(FAKEDSH_LOG):
         os.remove(FAKEDSH_LOG)
-    # Подставной GitHub: список релизов и .deb (сценарий может подменить список).
+    # Fake GitHub: the list of releases and .deb files (a scenario may swap the list).
     write_releases(releases())
     subprocess.Popen(f'runuser -u tester -- python3 {SERVER} {PORT} {RELEASES} {DEBS} {DSH_RELEASES} >/tmp/github.out 2>&1', shell=True)
-    assert wait_for(lambda: 'listening' in github_log(), 5, 0.1), 'подставной GitHub не запустился'
+    assert wait_for(lambda: 'listening' in github_log(), 5, 0.1), 'the fake GitHub did not start'
     as_tester(f'mkdir -p {V8_COVERAGE}')
     yield
     collect_coverage()
@@ -85,9 +85,9 @@ LAUNCHER_SRC = 'file:///opt/dsh-launcher/'
 
 
 def collect_coverage():
-    """Покрытие от процессов лаунчера (NODE_V8_COVERAGE) — в /results: только
-    его собственные файлы (main.js, src/), без Electron и других процессов
-    Node (npm, dsh). Отчёт по всем сценариям строит run.sh."""
+    """Coverage from the launcher processes (NODE_V8_COVERAGE) — into /results:
+    only its own files (main.js, src/), no Electron and no other Node processes
+    (npm, dsh). run.sh assembles the report across all scenarios."""
     if not os.path.isdir(V8_COVERAGE) or not os.path.isdir('/results'):
         return
     for name in os.listdir(V8_COVERAGE):
@@ -95,7 +95,7 @@ def collect_coverage():
             with open(os.path.join(V8_COVERAGE, name)) as f:
                 result = json.load(f).get('result', [])
         except (OSError, ValueError):
-            continue  # процесс убили посреди записи
+            continue  # the process was killed mid-write
         own = [r for r in result if r.get('url', '').startswith(LAUNCHER_SRC)
                and not r['url'].startswith(LAUNCHER_SRC + 'electron/')]
         if own:
@@ -103,7 +103,7 @@ def collect_coverage():
                 json.dump({'result': own}, f)
 
 
-# ---------------- фикстуры тестов ----------------
+# ---------------- test fixtures ----------------
 
 WESTON_LOG = '/tmp/weston.log'
 
@@ -115,11 +115,11 @@ def os_version():
 
 @pytest.fixture
 def wayland():
-    """Wayland-сеанс: безголовый weston от tester. Окружение для лаунчера —
-    WAYLAND_DISPLAY, XDG_RUNTIME_DIR, XDG_SESSION_TYPE=wayland. Только на Ubuntu
-    26.04: остальные сценарии и системы — под X11 (Xvfb)."""
+    """Wayland session: headless weston from tester. Launcher environment —
+    WAYLAND_DISPLAY, XDG_RUNTIME_DIR, XDG_SESSION_TYPE=wayland. Ubuntu 26.04
+    only: the other scenarios and systems run under X11 (Xvfb)."""
     if os_version() != '26.04':
-        pytest.skip('Wayland-сценарии — только на Ubuntu 26.04')
+        pytest.skip('Wayland scenarios — only on Ubuntu 26.04')
     import pwd
     pw = pwd.getpwnam('tester')
     run_dir = f'/run/user/{pw.pw_uid}'
@@ -132,7 +132,7 @@ def wayland():
                                    '--idle-time=0'], user='tester', group='tester', extra_groups=[], env=env,
                                   stdout=log, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
     sock = f'{run_dir}/wayland-1'
-    assert wait_for(lambda: os.path.exists(sock), 15, 0.1), 'weston не поднял Wayland-сокет:\n' + open(WESTON_LOG).read()[-1500:]
+    assert wait_for(lambda: os.path.exists(sock), 15, 0.1), 'weston did not bring up the Wayland socket:\n' + open(WESTON_LOG).read()[-1500:]
     yield {'WAYLAND_DISPLAY': 'wayland-1', 'XDG_RUNTIME_DIR': run_dir, 'XDG_SESSION_TYPE': 'wayland'}
     weston.terminate()
     try:
@@ -143,14 +143,15 @@ def wayland():
 
 @pytest.fixture
 def drv():
-    """Драйвер окон (CDP)."""
+    """Window driver (CDP)."""
     return Driver()
 
 
 @pytest.fixture(autouse=True)
 def _dsh_releases():
-    """Релизы dsh (описания «Что нового») — только в сценарии, который их
-    создал: после теста файл убираем, остальные сценарии не видят."""
+    """dsh releases (the “What’s new” descriptions) — visible only in the
+    scenario that created them: after the test the file is removed, so the
+    other scenarios do not see it."""
     yield
     try:
         os.remove(DSH_RELEASES)
@@ -160,8 +161,8 @@ def _dsh_releases():
 
 @pytest.fixture
 def start():
-    """start(*наборы_env, **env) → Launcher. В конце теста оставшиеся
-    экземпляры лаунчера — SIGKILL."""
+    """start(*env_sets, **env) → Launcher. At the end of the test the
+    remaining launcher instances are SIGKILLed."""
     def _start(*envs, **kw):
         env = {}
         for e in envs:
@@ -175,29 +176,29 @@ def start():
 
 @pytest.fixture
 def gui(drv):
-    """Главное окно с GUI dsh."""
+    """Main window with the dsh GUI."""
     return Gui(drv)
 
 
 @pytest.fixture
 def prompt(drv):
-    """Вопрос об обновлении в главном окне."""
+    """Update prompt in the main window."""
     return UpdatePrompt(drv)
 
 
 @pytest.hookimpl(tryfirst=True)
 def pytest_runtest_makereport(item, call):
-    """В отчёт об ошибке — хвост лога лаунчера."""
+    """Adds the tail of the launcher log to the error report."""
     if call.when == 'call' and call.excinfo is not None:
-        item.add_report_section('call', 'хвост лога лаунчера', '\n'.join(launcher_log().splitlines()[-25:]))
-        item.add_report_section('call', 'журнал фейкового dsh', fakedsh_events() or '(пусто)')
-        # launcher.log — со временем и pid, общий для прежнего и перезапущенного экземпляров
+        item.add_report_section('call', 'launcher log tail', '\n'.join(launcher_log().splitlines()[-25:]))
+        item.add_report_section('call', 'fake dsh log', fakedsh_events() or '(empty)')
+        # launcher.log — with timestamp and pid, shared by the previous and restarted instances
         try:
             with open(f'{STATE}/launcher.log', encoding='utf-8', errors='replace') as f:
                 tail = '\n'.join(f.read().splitlines()[-40:])
         except OSError:
-            tail = '(нет)'
+            tail = '(none)'
         item.add_report_section('call', 'launcher.log', tail)
         if os.path.exists(WESTON_LOG):
             item.add_report_section('call', 'weston', '\n'.join(open(WESTON_LOG, errors='replace').read().splitlines()[-20:]))
-        item.add_report_section('call', 'процессы', sh('ps -eo pid,ppid,user,stat,etime,args --width 220')[1])
+        item.add_report_section('call', 'processes', sh('ps -eo pid,ppid,user,stat,etime,args --width 220')[1])

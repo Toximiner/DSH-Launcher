@@ -1,5 +1,5 @@
 'use strict';
-// Страница «dsh не установлен»: команда установки, установка в окне.
+// The "dsh is not installed" page: the install command, installing in the window.
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
@@ -8,16 +8,16 @@ const { DSH_BIN_DEFAULT, DSH_BIN_EXPLICIT } = require('./env');
 const { dshInstallCheck, MIN_NODE_MAJOR, npmInstallInfo } = require('./dsh-install');
 const pages = require('./pages');
 
-/* ---------------- страница «dsh не установлен» ----------------
- * Порт закрыт и бинарника dsh нет — вместо попытки старта и ENOENT показываем
- * инструкцию: команда установки, «Скопировать», (если глобальный npm prefix
- * доступен без sudo) «Установить» с живым логом, и «Проверить ещё раз».
- * Состояние кэшируем: во время установки страница перерисовывается каждые
- * 800 мс, и запускать проверки в каждом рендере незачем.
+/* ---------------- the "dsh is not installed" page ----------------
+ * The port is closed and there is no dsh binary — instead of an attempted
+ * start and ENOENT we show an instruction: the install command, "Copy",
+ * (if the global npm prefix is accessible without sudo) "Install" with a live
+ * log, and "Check again". The state is cached: during an install the page
+ * is redrawn every 800 ms, and running the checks on every render is pointless.
  */
 let installState = { check: null, npmInfo: null, running: false, log: [], timer: null, proc: null };
 
-// Закрытие лаунчера: процесс установки и таймер перерисовки (before-quit →
+// Closing the launcher: the install process and the redraw timer (before-quit →
 // state.settleAllOperations, main.js).
 function settleInstallState() {
   if (installState.proc) { try { installState.proc.kill('SIGTERM'); } catch { /* noop */ } }
@@ -84,4 +84,4 @@ async function showInstallPage(note, noteIsError = false) {
   pages.showStatus(installing ? tr('Устанавливаю dsh…', 'Installing dsh…') : tr('Нужен DeepSeek Harness', 'DeepSeek Harness is required'), body, !installing);
 }
 
-Object.assign(module.exports, { installState, refreshInstallState, showInstallPage }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { installState, refreshInstallState, showInstallPage }); // we extend, not replace: the modules require each other cyclically

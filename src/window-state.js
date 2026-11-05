@@ -1,13 +1,13 @@
 'use strict';
-// Размер окна между запусками.
+// The window size between starts.
 const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
-/* ---------------- размер окна между запусками ---------------- */
+/* ---------------- the window size between starts ---------------- */
 
-// Запоминаем размер и «развёрнуто» (позицию не трогаем: на Wayland её
-// выбирает композитор). Полноэкранный режим не сохраняем.
+// We remember the size and "maximized" (we don't touch the position: on
+// Wayland the compositor chooses it). We don't save the full-screen mode.
 const windowStateFile = () => path.join(app.getPath('userData'), 'window-state.json');
 
 function loadWindowState() {
@@ -17,14 +17,14 @@ function loadWindowState() {
 
 
 function trackWindowState(w) {
-  // Последнее известное состояние — в памяти: при закрытии из страницы
-  // (window.close()) Electron не шлёт 'close', и окно уже не спросить;
-  // 'closed' же приходит всегда — тогда и пишем.
+  // The last known state — in memory: on a close from the page
+  // (window.close()) Electron doesn't send 'close', and the window can
+  // no longer be asked; 'closed' comes always — that's when we write.
   let last = null;
   let timer = null;
   const snapshot = () => {
     if (w.isDestroyed() || w.isFullScreen()) return;
-    const b = w.getNormalBounds(); // размер «не развёрнутого» окна
+    const b = w.getNormalBounds(); // the "not maximized" window size
     last = { width: b.width, height: b.height, maximized: w.isMaximized() };
   };
   const write = () => {
@@ -33,13 +33,14 @@ function trackWindowState(w) {
   };
   const later = () => { snapshot(); clearTimeout(timer); timer = setTimeout(write, 500); };
   w.once('ready-to-show', snapshot);
-  w.once('show', snapshot); // Wayland: ready-to-show может не прийти — окно показывают по таймеру
+  w.once('show', snapshot); // Wayland: ready-to-show may not come — the window is shown by a timer
   for (const ev of ['resize', 'maximize', 'unmaximize']) w.on(ev, later);
-  // крестик / «Выйти» — самые свежие размеры; у спрятанного окна (трей, окно
-  // «закрывается…») размеры не те — остаётся снимок, сделанный до того
+  // the cross / «Выйти» — the freshest sizes; a hidden window (the tray,
+  // the «закрывается…» window) has the wrong sizes — the snapshot made
+  // before that stays
   w.on('close', () => { if (w.isVisible()) snapshot(); });
   w.on('closed', () => { clearTimeout(timer); write(); });
-  return snapshot; // снимок перед тем, как спрятать окно
+  return snapshot; // the snapshot before the window is hidden
 }
 
 module.exports = { loadWindowState, trackWindowState };

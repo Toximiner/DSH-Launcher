@@ -1,9 +1,9 @@
 'use strict';
-// Служебная схема dshlauncher://: подключение к GUI уже запущенного dsh,
-// страницы-хендлеры (вставка токена, установка dsh, обновления, маркет,
-// меню), таблица маршрутов и диспетчер protocol.handle. Модуль подключает
-// electron — из юнит-тестов проверяется только чистая функция matchRoute
-// (блок-маркер, test/_extract.js).
+// dshlauncher:// service scheme: connecting to the GUI of an already
+// running dsh, page handlers (token paste, dsh install, updates, market,
+// menu), the route table and the protocol.handle dispatcher. The module
+// requires electron — unit tests cover only the pure matchRoute function
+// (block marker, test/_extract.js).
 const { app, clipboard, net: electronNet, shell, protocol } = require('electron');
 const state = require('./state');
 const i18n = require('./i18n');
@@ -14,8 +14,8 @@ const { sleep, portOpen } = require('./port');
 const { launcherRoute, stripRouteKey } = require('./util');
 const { loadInWin, showPastePage, showPage, showStatus, liveRedraw, onLangSwitch } = require('./pages');
 const { envWithBinDir, listenerAuthUrl } = require('./system');
-const { blankResponse, noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
-const { pushInputHistory } = require('./input-history'); // история введённого (↑/↓ в поле dsh); тексты в журнал не пишутся
+const { blankResponse, noContentResponse } = require('./respond'); // pure module — direct require, no registry
+const { pushInputHistory } = require('./input-history'); // input history (↑/↓ in the dsh field); texts are not written to the log
 const { runWithLiveLog } = require('./proc-log');
 const { dshInstallCheck, pkexecNpmArgs } = require('./dsh-install');
 const { DSH_NPM_PKG } = require('./updates-github');
@@ -33,7 +33,7 @@ const { onSettingsSet, onSettingsPick, onSettingsResetUpdates, relaunchLauncher,
 const { onDialogClose, onDialogCopy, showAboutDialog, showUpdateCheckDialog } = require('./dialogs');
 const { showRollbackDialog, rollbackTo } = require('./rollback');
 
-const PLAIN_PROBE_TIMEOUT_MS = 1500; // сколько ждать ответа HTTP dsh (см. plainUrlResponds)
+const PLAIN_PROBE_TIMEOUT_MS = 1500; // how long to wait for dsh's HTTP reply (see plainUrlResponds)
 
 async function plainUrlIsAuthed() {
   try {
@@ -44,10 +44,11 @@ async function plainUrlIsAuthed() {
   }
 }
 
-// HTTP-сервер dsh отвечает (любой статус — даже 401): порт открылся раньше,
-// чем приложение готово, и в момент ответа сессионный куки может быть уже не
-// годится (перезапуск маркета с новым токеном) — 200 здесь не требуется.
-// Таймаут: сокет открыт, но сервер ещё не отвечает (бут) — считаем «нет».
+// dsh's HTTP server answers (any status — even 401): the port opened before
+// the app was ready, and by the time of the reply the session cookie may
+// may already have expired (market restart with a new token) — 200 is not
+// required here. Timeout: socket is open but the server still does not
+// answer (boot) — counted as "no".
 async function plainUrlResponds() {
   try {
     const res = await electronNet.fetch(PLAIN_URL, { redirect: 'manual', signal: AbortSignal.timeout(PLAIN_PROBE_TIMEOUT_MS) });
@@ -57,10 +58,11 @@ async function plainUrlResponds() {
   }
 }
 
-// Окно — на GUI уже работающего dsh, который запустил не лаунчер (перезапуск
-// из маркета, терминал): куки валидны → GUI; иначе ссылка входа из вывода
-// процесса на порту (listenerAuthUrl); иначе ещё раз куки — порт открывается
-// раньше, чем dsh готов проверять вход, — и только потом страница вставки.
+// Window — to the GUI of a dsh that is already running but was not started
+// by the launcher (restart from the market, terminal): cookie valid → GUI;
+// otherwise the login link from the process output on the port
+// (listenerAuthUrl); otherwise the cookie once more — the port opens before
+// dsh is ready to check login — and only then the paste page.
 const AUTH_WAIT_MS = 5000;
 
 async function openRunningGui(why) {
@@ -99,21 +101,21 @@ function onPasteRequest(route) {
   return blankResponse();
 }
 
-// «Проверить снова» на фатальной странице: если dsh запустили вручную
-// (например, в терминале), а окно оставили открытым — возвращаемся в GUI.
+// «Проверить снова» (Check again) on the fatal page: if dsh was started
+// manually (e.g. in a terminal) and the window was left open — return to the GUI.
 async function onRetryRequest() {
   try {
     if (state.win && !state.win.isDestroyed() && !state.stopping) {
       const up = await portOpen();
       if (up) {
-        state.weStartedDsh = false; // чужой dsh — при закрытии окна его не убиваем
+        state.weStartedDsh = false; // someone else's dsh — don't kill it on window close
         state.dshProc = null;
         state.dshFatal = false;
         state.portState = 'up';
         await openRunningGui('retry: dsh запущен');
       } else {
-        // Бинарник мог исчезнуть (разустановка, другой DSH_BIN) — тогда
-        // совет запускать его в терминале бессмысленен.
+        // The binary may have disappeared (uninstall, different DSH_BIN) — in
+        // that case the advice to start it in a terminal is pointless.
         if (!(await dshInstallCheck()).ok) {
           showInstallPage(() => tr('dsh не найден — установите его (команда на странице).',
             'dsh not found — install it (the command is on this page).'));
@@ -136,7 +138,7 @@ async function onRetryRequest() {
   return blankResponse();
 }
 
-// «Скопировать команду» на странице установки dsh.
+// «Скопировать команду» (Copy command) on the dsh install page.
 async function onInstallCopy() {
   try {
     if (!installState.npmInfo) await refreshInstallState();
@@ -150,10 +152,10 @@ async function onInstallCopy() {
   return blankResponse();
 }
 
-// «Проверить ещё раз»: dsh появился (поставили вручную или кнопкой) — продолжаем запуск.
+// «Проверить ещё раз» (Check again): dsh appeared (installed manually or via the button) — continue launching.
 async function onInstallRecheck() {
   try {
-    if (installState.running) return blankResponse(); // установка идёт — страница обновится сама
+    if (installState.running) return blankResponse(); // installation in progress — the page will refresh itself
     await refreshInstallState();
     if (installState.check.ok) {
       console.log(`[launcher] dsh найден (${installState.check.version}) — начинаю запуск`);
@@ -173,38 +175,40 @@ async function onInstallRecheck() {
   return blankResponse();
 }
 
-// «Установить»: npm install -g прямо из окна, с живым логом.
+// «Установить» (Install): npm install -g directly from the window, with a live log.
 async function onInstallRun() {
   try {
     if (installState.running || !state.win || state.win.isDestroyed() || state.stopping) return blankResponse();
     await refreshInstallState();
-    if (installState.running) return blankResponse(); // пока проверяли, установку уже запустили
+    if (installState.running) return blankResponse(); // while checking, an installation has already been started
     const npmInfo = installState.npmInfo;
-    // Системный npm (prefix root'а): ставим через pkexec — polkit спросит
-    // пароль системным диалогом, как при обновлении лаунчера.
+    // System npm (root's prefix): install via pkexec — polkit will ask for
+    // the password in a system dialog, as when updating the launcher.
     const viaPkexec = !npmInfo.canAuto && npmInfo.rootMode === 'pkexec';
     if (!npmInfo.canAuto && !viaPkexec) {
       showInstallPage(() => tr('Кнопка «Установить» недоступна: глобальный npm prefix требует sudo — выполните команду в терминале.', '“Install” is unavailable: the global npm prefix requires sudo — run the command in a terminal.'), true);
       return blankResponse();
     }
     console.log(`[launcher] установка dsh из окна: ${npmInfo.command}`);
-    installState.running = true; // страница «выполняется» — сразу, до первой строки
+    installState.running = true; // the page shows "running" — immediately, before the first line
     showInstallPage();
-    // @latest — явно: bare-спецификатор npm 10.x (Node 22) при latest-пререлизе
-    // резолвится как * и падает ETARGET (см. INSTALL_CMD в dsh-install.js).
+    // @latest — explicit: the bare spec in npm 10.x (Node 22) with a latest
+    // prerelease resolves as * and fails with ETARGET (see INSTALL_CMD in
+    // dsh-install.js).
     const args = ['install', '-g', `${DSH_NPM_PKG}@latest`];
     const code = await runWithLiveLog(installState,
       viaPkexec ? npmInfo.pkexec : npmInfo.npm,
       viaPkexec ? pkexecNpmArgs(npmInfo.npm, args) : args,
       {
         env: viaPkexec ? undefined : envWithBinDir(npmInfo.npm),
-        // running — иначе установка закончилась и страница уже переключилась
-        // (успех/ошибка), и доп. перерисовка затёрла бы её note.
+        // running — otherwise the installation is over and the page has
+        // already switched (success/error), and the extra redraw would
+        // overwrite its note.
         redraw: liveRedraw(installState, () => installState.running, showInstallPage),
       });
     if (code === 0) {
       console.log('[launcher] dsh установлен — продолжаю запуск');
-      // Если prefix не /usr, бинарник лёг не в /usr/bin — находим и запоминаем фактический путь.
+      // If the prefix is not /usr, the binary landed outside /usr/bin — find and remember the actual path.
       const check = await dshInstallCheck();
       if (!check.ok) {
         showInstallPage(() => tr('npm сообщил об успехе, но dsh так и не запускается — см. детали ниже.',
@@ -223,9 +227,9 @@ async function onInstallRun() {
   return blankResponse();
 }
 
-/* ===== matchRoute (тест test/routes.js) =====
-   Таблица маршрутов dshlauncher:// (порядок важен: /menu/rollback/ раньше
-   /rollback/). Чистая функция: префикс маршрута → имя; null — не наш. */
+/* ===== matchRoute (test test/routes.js) =====
+   dshlauncher:// route table (order matters: /menu/rollback/ before
+   /rollback/). Pure function: route prefix → name; null — not ours. */
 const ROUTE_TABLE = [
   ['/retry/', 'retry'],
   ['/lang/', 'lang'],
@@ -277,8 +281,8 @@ function matchRoute(route) {
 }
 /* ===== end matchRoute ===== */
 
-// Имена из matchRoute → действия. route — строка маршрута, url — один
-// разобранный URL запроса (параметры — из url.searchParams).
+// Names from matchRoute → actions. route — the route string, url — one
+// parsed request URL (params come from url.searchParams).
 const ROUTE_HANDLERS = {
   retry: () => onRetryRequest(),
   lang: (route) => onLangSwitch(route.split('/')[2]),
@@ -294,9 +298,9 @@ const ROUTE_HANDLERS = {
   'update/recheck': () => onUpdateChoice('recheck'),
   'update/copy': () => onUpdateChoice('copy'),
   'update/restart': () => onUpdateChoice('restart'),
-  // О программе / проверка обновлений по URL — для Docker-сценариев
-  // (driver.js не умеет кликать по нативному меню); штатно — пункт меню.
-  // Ответ 204: страница, с которой перешли (GUI dsh), остаётся на месте.
+  // About / update check via URL — for Docker scenarios (driver.js cannot
+  // click the native menu); normally — a menu item. 204 response: the page
+  // you came from (the dsh GUI) stays in place.
   'menu/about': () => { void showAboutDialog(); return noContentResponse(); },
   'menu/check': () => { void showUpdateCheckDialog(); return noContentResponse(); },
   'menu/rollback': () => { void showRollbackDialog(); return noContentResponse(); },
@@ -306,7 +310,7 @@ const ROUTE_HANDLERS = {
   'update-now': (route, url) => { updateNow(url.searchParams.get('k')); return noContentResponse(); },
   find: (route, url) => onFindRequest(route, url),
   'dialog/logs': () => { void openLogsFolder(); return noContentResponse(); },
-  'menu/quit': () => { app.quit(); return noContentResponse(); }, // «Файл → Выйти» (role: 'quit')
+  'menu/quit': () => { app.quit(); return noContentResponse(); }, // «Файл → Выйти» (File → Quit) (role: 'quit')
   'window/close': () => { if (state.win && !state.win.isDestroyed()) state.win.close(); return noContentResponse(); },
   'menu/report': () => { void saveReport(); return noContentResponse(); },
   'dialog/report-show': () => { if (state.lastReportPath) shell.showItemInFolder(state.lastReportPath); return noContentResponse(); },
@@ -328,8 +332,9 @@ const ROUTE_HANDLERS = {
   'menu/restart-dsh': () => { void restartDsh({ confirm: false }); return noContentResponse(); },
   'dialog/close': () => onDialogClose(),
   'dialog/copy': () => onDialogCopy(),
-  // История введённого (страница dsh → main): текст приходит параметром, в
-  // журнал не пишется — только длина и счётчик. Ответ 204: страница остаётся.
+  // Input history (dsh page → main): the text arrives as a param and is not
+  // written to the log — only the length and a counter. 204 response: the
+  // page stays.
   'history/push': (route, url) => {
     const text = url.searchParams.get('text') || '';
     const r = pushInputHistory(text);
@@ -338,23 +343,24 @@ const ROUTE_HANDLERS = {
   },
 };
 
-// Диспетчер dshlauncher:// — вызывается main.js из onReady (до первого окна
-// схема уже зарегистрирована как privileged).
+// dshlauncher:// dispatcher — called by main.js from onReady (before the
+// first window, the scheme is already registered as privileged).
 function registerProtocol() {
   protocol.handle('dshlauncher', (request) => {
     try {
-      // Без ключа запуска — не со страницы лаунчера (GUI dsh, плагин, внешний
-      // сайт в окне): ничего не делаем. В журнал — только путь, без параметров.
+      // No launch key — not from the launcher page (the dsh GUI, a plugin,
+      // an external site in the window): do nothing. The log gets only the
+      // path, without params.
       const route = stripRouteKey(launcherRoute(request.url), ROUTE_KEY);
       if (route === null) {
         console.error(`[launcher] dshlauncher: запрос без ключа запуска — отклонён: ${launcherRoute(request.url).slice(0, 80)}`);
         return noContentResponse();
       }
-      // URL разбираем один раз: хендлеры берут параметры из url.searchParams.
+      // Parse the URL once: handlers take params from url.searchParams.
       const url = new URL(request.url);
       const handler = ROUTE_HANDLERS[matchRoute(route)];
       return handler ? handler(route, url) : onPasteRequest(route);
-    } catch { return blankResponse(); } // как раньше: сбой обработчика — пустая страница
+    } catch { return blankResponse(); } // as before: a handler failure — a blank page
   });
 }
 

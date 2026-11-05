@@ -1,10 +1,10 @@
 'use strict';
-// Версии: сравнение (Debian и semver), статус обновления, версия пакета из
-// базы dpkg, «показывать ли „Что нового“», изменения между версиями.
+// Versions: comparison (Debian and semver), update status, package version
+// from the dpkg database, "should we show What's new", changes between versions.
 
-// Debian-версия (лаунчер): X.Y.Z[-R]. Числовые части сравниваются
-// попорядково; отсутствующая ревизия считается 0 (CI собирает релиз vX.Y.Z
-// в пакет X.Y.Z-1, поэтому тег с тем же upstream новее «голого» X.Y.Z).
+// Debian version (launcher): X.Y.Z[-R]. Numeric parts are compared in order;
+// a missing revision counts as 0 (CI builds the vX.Y.Z release into the
+// X.Y.Z-1 package, so a tag with the same upstream is newer than "bare" X.Y.Z).
 function parseDebianVer(s) {
   const m = /^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-(\d+))?$/.exec(String(s).trim());
   if (!m) return null;
@@ -13,9 +13,10 @@ function parseDebianVer(s) {
     rev: m[4] === undefined ? 0 : Number(m[4]),
   };
 }
-// semver (dsh): X.Y.Z[-prerelease]. Prerelease ниже релиза (0.2.0-rc.2 <
-// 0.2.0); prerelease сравниваются посегментно (0.2.0-rc.2 < 0.2.0-rc.10),
-// числовой сегмент ниже буквенного (0.2.0-1 < 0.2.0-alpha).
+// semver (dsh): X.Y.Z[-prerelease]. A prerelease is lower than the release
+// (0.2.0-rc.2 < 0.2.0); prereleases are compared segment by segment
+// (0.2.0-rc.2 < 0.2.0-rc.10), a numeric segment is lower than an alphabetic
+// one (0.2.0-1 < 0.2.0-alpha).
 function parseSemVer(s) {
   const m = /^v?(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?/.exec(String(s).trim());
   if (!m) return null;
@@ -28,7 +29,7 @@ function cmpUpstream(a, b) {
 function compareDebianVer(a, b) {
   const pa = parseDebianVer(a);
   const pb = parseDebianVer(b);
-  if (!pa || !pb) return 0; // не распознано — обновление не предлагаем
+  if (!pa || !pb) return 0; // unrecognized — no update is offered
   const c = cmpUpstream(pa.upstream, pb.upstream);
   if (c !== 0) return c;
   return pa.rev === pb.rev ? 0 : pa.rev < pb.rev ? -1 : 1;
@@ -40,7 +41,7 @@ function compareSemVer(a, b) {
   const c = cmpUpstream(pa.upstream, pb.upstream);
   if (c !== 0) return c;
   if (pa.pre === pb.pre) return 0;
-  if (pa.pre === null) return 1; // релиз > prerelease
+  if (pa.pre === null) return 1; // release > prerelease
   if (pb.pre === null) return -1;
   const sa = pa.pre.split('.');
   const sb = pb.pre.split('.');
@@ -57,7 +58,7 @@ function compareSemVer(a, b) {
   }
   return 0;
 }
-// GitHub-тег → версия пакета (правило CI: vX.Y.Z → X.Y.Z-1, vX.Y.Z-R → X.Y.Z-R)
+// GitHub tag → package version (CI rule: vX.Y.Z → X.Y.Z-1, vX.Y.Z-R → X.Y.Z-R)
 function tagToPackageVersion(tag) {
   const t = String(tag).replace(/^v/, '').trim();
   return t.includes('-') ? t : t + '-1';

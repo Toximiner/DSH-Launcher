@@ -1,5 +1,5 @@
 'use strict';
-// Плагин маркета (dshmarket): вопрос и установка.
+// The marketplace plugin (dshmarket): the prompt and installation.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -13,26 +13,26 @@ const { prefFile, readPref, writePref } = require('./prefs');
 const { DSH_ARGS, CWD } = require('./env');
 const { dshEnv, findBin, npmInstallInfo, pkexecNpmArgs } = require('./dsh-install');
 const pages = require('./pages');
-const { blankResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
+const { blankResponse } = require('./respond'); // pure module — direct require, no registry
 
-/* ---------------- плагин маркета (dshmarket) ----------------
- * Перед тем как лаунчер сам запускает dsh, проверяем, что в профиле стоит
- * плагин маркета. Если нет — спрашиваем пользователя: «Установить»
- * (dsh plugin --profile <профиль> add dshmarket, с живым логом), «Не сейчас»
- * или «Не спрашивать больше» (запоминается в userData/market-prompt.json).
- * Ставим именно до старта: плагины dsh подхватывает при запуске. К уже
- * запущенному dsh (режим подключения) вопрос не задаём.
- * Проверка — чтение $DSH_HOME/profiles/<профиль>/package.json (по умолчанию
- * ~/.dsh), без запуска dsh.
+/* ---------------- the marketplace plugin (dshmarket) ----------------
+ * Before the launcher starts dsh on its own, we check that the marketplace
+ * plugin is installed in the profile. If not — we ask the user: "Install"
+ * (dsh plugin --profile <profile> add dshmarket, with a live log), "Not now",
+ * or "Don't ask again" (remembered in userData/market-prompt.json).
+ * We install it right before the start: dsh picks up plugins at launch. We do
+ * not ask for an already running dsh (attach mode).
+ * The check — reading $DSH_HOME/profiles/<profile>/package.json (default
+ * ~/.dsh), without starting dsh.
  */
 const MARKET_PKG = 'dshmarket';
 
 
 const DSH_PROFILE = profileFromArgs(DSH_ARGS);
 
-/* ===== marketInPkg (чистая функция, тест test/parsing.js) =====
-   Есть ли плагин маркета в package.json профиля: в dependencies или в
-   dsh.profile.bundles. */
+/* ===== marketInPkg (pure function, test test/parsing.js) =====
+   Whether the marketplace plugin is in the profile's package.json: in
+   dependencies or in dsh.profile.bundles. */
 function marketInPkg(pkg) {
   const bundles = (pkg.dsh && pkg.dsh.profile && pkg.dsh.profile.bundles) || [];
   return Boolean(pkg.dependencies && pkg.dependencies[MARKET_PKG]) || bundles.includes(MARKET_PKG);
@@ -40,14 +40,14 @@ function marketInPkg(pkg) {
 /* ===== end marketInPkg ===== */
 
 function marketInstalled() {
-  if (!DSH_PROFILE) return true; // профиль не задан — не знаем, где смотреть, не спрашиваем
+  if (!DSH_PROFILE) return true; // no profile given — we do not know where to look, we do not ask
   try {
     const dshHome = process.env.DSH_HOME || path.join(os.homedir(), '.dsh');
     const pkgFile = path.join(dshHome, 'profiles', DSH_PROFILE, 'package.json');
     const pkg = JSON.parse(fs.readFileSync(pkgFile, 'utf8'));
     return marketInPkg(pkg);
   } catch {
-    return false; // профиля ещё нет — dsh plugin add создаст его сам
+    return false; // the profile does not exist yet — dsh plugin add will create it itself
   }
 }
 
@@ -60,7 +60,7 @@ function marketPromptDisabled() {
 
 let marketState = { resolve: null, running: false, log: [], timer: null, proc: null, cmdLine: null };
 
-// Закрытие лаунчера: процесс установки и таймер перерисовки (before-quit →
+// Closing the launcher: the install process and the redraw timer (before-quit →
 // state.settleAllOperations, main.js).
 function settleMarketState() {
   if (marketState.proc) { try { marketState.proc.kill('SIGTERM'); } catch { /* noop */ } }
@@ -100,7 +100,7 @@ function showMarketPage(note, noteIsError = false) {
     : tr(`Установить ${MARKET_PKG}?`, `Install ${MARKET_PKG}?`), body, noteIsError);
 }
 
-// Показывает вопрос и ждёт нажатия: 'install' | 'skip' | 'never'.
+// Shows the question and waits for the click: 'install' | 'skip' | 'never'.
 function askMarket(note, noteIsError) {
   return new Promise((resolve) => {
     marketState.resolve = resolve;
@@ -117,7 +117,7 @@ function onMarketChoice(choice) {
   return blankResponse();
 }
 
-// dsh plugin add вызывает pnpm — его каталог тоже должен быть в PATH.
+// dsh plugin add invokes pnpm — its directory must also be in PATH.
 function marketEnv() {
   const env = dshEnv();
   const pnpm = findBin('pnpm');
@@ -125,9 +125,9 @@ function marketEnv() {
   return env;
 }
 
-// Запуск шага установки (pnpm или сам маркет) с живым логом на странице
-// (pages.liveLogTick — строки дописываются без перезагрузки, скролл за
-// пользователем).
+// Running a step of the installation (pnpm or the market itself) with a live log on the page
+// (pages.liveLogTick — lines are appended without a reload, the scroll
+// is left to the user).
 function runMarketInstall(cmd, args, env) {
   marketState.cmdLine = [cmd, ...args].join(' ');
   console.log(`[launcher] установка: ${marketState.cmdLine}`);
@@ -136,8 +136,8 @@ function runMarketInstall(cmd, args, env) {
   return runWithLiveLog(marketState, cmd, args, {
     cwd: CWD,
     env,
-    // running — иначе страница уже переключилась (успех/ошибка/новый вопрос),
-    // и доп. перерисовка затёрла бы её note (тик мог разрешиться позже).
+    // running — otherwise the page has already switched (success/error/new question),
+    // and an extra redraw would wipe its note (the tick could resolve later).
     redraw: pages.liveRedraw(marketState, () => marketState.running, showMarketPage),
   });
 }
@@ -163,13 +163,13 @@ async function offerMarketIfMissing() {
       console.log('[launcher] установка маркета отложена (не сейчас)');
       return;
     }
-    // dsh plugin add требует pnpm: на чистой системе его нет (код 127).
+    // dsh plugin add requires pnpm: on a clean system it is missing (code 127).
     if (!findBin('pnpm')) {
       const npmInfo = await npmInstallInfo();
       if (state.stopping) return;
       const pnpmArgs = ['install', '-g', 'pnpm'];
-      // Системный npm — ставим через pkexec (пароль спросит polkit), иначе
-      // просим выполнить в терминале: root в nvm/~/.npm-global — нельзя.
+      // System npm — we install via pkexec (polkit will ask for the password), otherwise
+      // we ask to run it in a terminal: root in nvm/~/.npm-global — not allowed.
       const viaPkexec = !npmInfo.canAuto && npmInfo.rootMode === 'pkexec';
       if (!npmInfo.canAuto && !viaPkexec) {
         const cmd = npmInfo.hasNpm ? 'sudo npm install -g pnpm' : 'npm install -g pnpm';
@@ -207,4 +207,4 @@ async function offerMarketIfMissing() {
   }
 }
 
-Object.assign(module.exports, { marketState, onMarketChoice, offerMarketIfMissing }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { marketState, onMarketChoice, offerMarketIfMissing }); // we extend, not replace: the modules require each other cyclically

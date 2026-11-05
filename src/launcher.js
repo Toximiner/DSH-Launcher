@@ -1,6 +1,6 @@
 'use strict';
-// Общий реестр лаунчера: функции и значения, которыми модули пользуются друг у
-// друга (launcher.showPage(), launcher.PORT …). Наполняет main.js — живыми
-// геттерами, поэтому вызовы разрешаются в момент вызова и циклические
-// зависимости между модулями не мешают.
+// The launcher's shared registry: functions and values that the modules use from
+// each other (launcher.showPage(), launcher.PORT …). Populated by main.js — with live
+// getters, so calls are resolved at call time and cyclic
+// dependencies between the modules are no obstacle.
 module.exports = {};

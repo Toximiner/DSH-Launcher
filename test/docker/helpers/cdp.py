@@ -1,9 +1,9 @@
-"""Драйвер окна лаунчера через Chrome DevTools Protocol (CDP).
+"""Launcher window driver over Chrome DevTools Protocol (CDP).
 
-Лаунчер запускается с --remote-debugging-port=9222; каждое окно (главное,
-окно-диалог, панель поиска) — отдельная «страница» в списке /json/list.
-Страницу выбираем регулярным выражением по заголовку или URL (page=...);
-без него — первая в списке.
+The launcher is started with --remote-debugging-port=9222; each window (the
+main one, the dialog window, the search panel) is a separate “page” in the
+/json/list listing. A page is selected by a regex on the title or URL
+(page=...); without it — the first one in the list.
 """
 import html
 import json
@@ -20,8 +20,8 @@ CDP = 'http://127.0.0.1:9222'
 
 
 def _page_text(url):
-    """Текст служебной страницы (data:-URL) — для проверок по содержимому;
-    для обычной страницы — сам URL."""
+    """Text of a helper page (data: URL) — for content checks;
+    for a regular page — the URL itself."""
     if not url.startswith('data:'):
         return url
     doc = urllib.parse.unquote(url[url.index(',') + 1:])
@@ -57,8 +57,9 @@ class Driver:
         return _page_text(self.url(page))
 
     def wait_page(self, page=None, timeout=10):
-        """Страница, дождавшись её: во время перехода (например, обмен токена на
-        куки → чистый адрес GUI) окна с нужным адресом в списке на миг нет."""
+        """The page, after waiting for it: during a transition (e.g. token exchange for
+        a cookie → the clean GUI address) a window with the needed address is briefly
+        absent from the list."""
         end = time.time() + timeout
         while True:
             p = self.page(page)
@@ -69,8 +70,8 @@ class Driver:
     def _call(self, calls, page=None):
         p = self.wait_page(page)
         if not p:
-            raise AssertionError(f'CDP: нет страницы {page!r}')
-        # Origin не шлём: Chromium отклоняет WebSocket DevTools с чужим Origin.
+            raise AssertionError(f'CDP: no page {page!r}')
+        # We do not send Origin: Chromium rejects DevTools WebSockets with a foreign Origin.
         ws = websocket.create_connection(p['webSocketDebuggerUrl'], timeout=5, suppress_origin=True)
         try:
             res = None
@@ -83,18 +84,18 @@ class Driver:
                         break
             return res
         except (websocket.WebSocketException, OSError):
-            return None  # страница закрылась / ушла на другой адрес, не ответив (window.close())
+            return None  # the page closed / navigated to another address without answering (window.close())
         finally:
             ws.close()
 
     def eval(self, expr, page=None):
-        """Выполнить JS на странице, вернуть значение (None — нет значения/ошибка)."""
+        """Run JS on the page and return the value (None — no value / an error)."""
         r = self._call([('Runtime.evaluate', {'expression': expr, 'returnByValue': True})], page)
         return ((r or {}).get('result') or {}).get('result', {}).get('value')
 
     def go(self, url, page=None, keyed=True):
-        """Переход страницы на URL (маршруты dshlauncher://…: с ключом запуска,
-        keyed=False — без него, как у чужой страницы)."""
+        """Navigate the page to a URL (dshlauncher://… routes: with the launch key,
+        keyed=False — without it, like on a foreign page)."""
         if keyed and url.startswith('dshlauncher://'):
             url = f'dshlauncher://{ROUTE_KEY}/' + url[len('dshlauncher://'):]
         self.eval(f'(() => {{ location.href = {json.dumps(url)}; return 1; }})()', page)
@@ -108,14 +109,14 @@ class Driver:
             try:
                 last = get()
                 err = ''
-            except Exception as e:  # страница как раз перезагружается
+            except Exception as e:  # the page is reloading right now
                 last = ''
                 err = f'{type(e).__name__}: {e}'
             if rx.search(last):
                 return last
             time.sleep(0.5)
-        tail = f' (ошибка: {err[:200]})' if err else ''
-        raise AssertionError(f'не дождались /{pattern}/ за {timeout} с; последнее: {last[:600]}{tail}')
+        tail = f' (error: {err[:200]})' if err else ''
+        raise AssertionError(f'timed out waiting for /{pattern}/ within {timeout} s; last: {last[:600]}{tail}')
 
     def wait_text(self, pattern, timeout=30, page=None):
         return self._wait(lambda: self.text(page), pattern, timeout)
@@ -124,15 +125,15 @@ class Driver:
         return self._wait(lambda: self.url(page), pattern, timeout)
 
     def right_click(self, x, y, page=None):
-        """Настоящее событие мыши — Chromium обрабатывает как клик пользователя
-        (для правой кнопки приходит context-menu)."""
+        """A real mouse event — Chromium treats it as a user click
+        (for the right button a context-menu comes)."""
         ev = lambda t: ('Input.dispatchMouseEvent', {'type': t, 'x': x, 'y': y, 'button': 'right', 'buttons': 2, 'clickCount': 1})
         r = self._call([('Input.dispatchMouseEvent', {'type': 'mouseMoved', 'x': x, 'y': y}),
                         ev('mousePressed'), ev('mouseReleased')], page)
-        assert r is None or 'error' not in r, f'CDP: правый клик не прошёл: {r}'
+        assert r is None or 'error' not in r, f'CDP: right click did not go through: {r}'
 
     def key(self, spec, page=None):
-        """Нажатие: «Ctrl+Shift+KeyF», «F3», «Escape»; последняя часть —
+        """Key press: “Ctrl+Shift+KeyF”, “F3”, “Escape”; the last part is
         KeyboardEvent.code."""
         *mods, code = spec.split('+')
         modifiers = sum({'Alt': 1, 'Ctrl': 2, 'Meta': 4, 'Shift': 8}.get(m, 0) for m in mods)
@@ -150,6 +151,6 @@ class Driver:
         ev = lambda t: ('Input.dispatchKeyEvent', {'type': t, 'modifiers': modifiers, 'code': code, 'key': key,
                                                    'windowsVirtualKeyCode': vk, 'nativeVirtualKeyCode': vk})
         r = self._call([ev('rawKeyDown'), ev('keyUp')], page)
-        # None — страница закрылась, не ответив (Esc в окне-диалоге закрывает его
-        # уже на нажатии); это не ошибка
-        assert r is None or 'error' not in r, f'CDP: нажатие не прошло: {r}'
+        # None — the page closed without answering (Esc in the dialog window closes it
+        # already on keydown); that is not an error
+        assert r is None or 'error' not in r, f'CDP: key press did not go through: {r}'

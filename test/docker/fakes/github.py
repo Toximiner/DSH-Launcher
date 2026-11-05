@@ -1,17 +1,17 @@
 #!/usr/bin/python3
-"""Подставной GitHub для сценариев обновления и отката лаунчера: лаунчер
-ходит сюда вместо api.github.com (DSH_LAUNCHER_GITHUB_API).
-  github.py <порт> <файл со списком релизов> <каталог с .deb> [файл релизов dsh]
+"""Fake GitHub for the launcher update and rollback scenarios: the launcher
+goes here instead of api.github.com (DSH_LAUNCHER_GITHUB_API).
+  github.py <port> <releases list file> <.deb directory> [dsh releases file]
 
-  GET /repos/<владелец>/<репо>/releases?per_page=N&page=P — список релизов из
-      файла (читается при каждом запросе — сценарий может его подменить);
-      по умолчанию 30 на страницу, как у GitHub; ETag / If-None-Match → 304;
-      deepseek-ai/deepseek-harness (релизы dsh) — из 4-го файла, если он
-      есть (сценарий может создать), иначе из основного;
-  GET /download/<файл> — 302 на /files/<файл> (ассеты GitHub тоже отдаются
-      через перенаправление);
-  GET /files/<файл> — .deb из каталога.
-Каждый запрос — строка в /tmp/github.log.
+  GET /repos/<owner>/<repo>/releases?per_page=N&page=P — the release list from
+      the file (read on every request — a scenario may replace it);
+      30 per page by default, like GitHub; ETag / If-None-Match → 304;
+      deepseek-ai/deepseek-harness (dsh releases) — from the 4th file, if it
+      exists (a scenario may create it), otherwise from the main one;
+  GET /download/<file> — 302 to /files/<file> (GitHub assets are also served
+      via redirect);
+  GET /files/<file> — a .deb from the directory.
+Every request — a line in /tmp/github.log.
 """
 import hashlib
 import http.server
@@ -23,7 +23,7 @@ import urllib.parse
 
 LOG = '/tmp/github.log'
 PORT, RELEASES, DEBS = int(sys.argv[1]), sys.argv[2], sys.argv[3]
-DSH_RELEASES = sys.argv[4] if len(sys.argv) > 4 else None  # релизы dsh (отдельный репозиторий)
+DSH_RELEASES = sys.argv[4] if len(sys.argv) > 4 else None  # dsh releases (separate repository)
 DSH_REPO = ('deepseek-ai', 'deepseek-harness')
 
 

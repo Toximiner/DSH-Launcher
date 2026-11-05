@@ -1,5 +1,5 @@
 'use strict';
-// «Вид»: перезагрузка, масштаб, поиск по странице, полный экран, орфография, горячие клавиши.
+// «Вид» (View): reload, zoom, in-page search, full screen, spellcheck, hotkeys.
 const { app, WebContentsView, session } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -12,15 +12,15 @@ const { ROUTE_KEY } = require('./env');
 const menus = require('./menus');
 const settingsWindow = require('./settings-window');
 const updatesLive = require('./updates-live');
-const { noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
+const { noContentResponse } = require('./respond'); // pure module — direct require, no registry
 
-/* ---------------- «Вид»: перезагрузка, масштаб, поиск, полный экран ---------------- */
+/* ---------------- «Вид» (View): reload, zoom, search, full screen ---------------- */
 
-// Действия доступны и из меню «Вид», и с клавиатуры (keyAction). Масштаб
-// сохраняем в userData, чтобы не сбрасывался между запусками. (Ctrl+колесо
-// не поддержано: в свежих Electron wheel-события в main-процесс приходят
-// ненадёжно, а перехват колеса в самой странице конфликтует с её
-// обработчиками.)
+// The actions are available both from the «Вид» menu and from the
+// keyboard (keyAction). We save the zoom in userData so it isn't reset
+// between starts. (Ctrl+wheel is not supported: in recent Electron the
+// wheel events in the main process arrive unreliably, and intercepting
+// the wheel in the page itself conflicts with its handlers.)
 const zoomFile = () => path.join(app.getPath('userData'), 'zoom-level.json');
 let zoomSaveTimer = null;
 
@@ -51,11 +51,12 @@ const viewActions = {
 
 
 
-// Поиск по странице (Ctrl+F): панель в правом верхнем углу окна — отдельный
-// WebContentsView поверх страницы (не окно: на Wayland его не поставить в
-// нужное место). Панель — data:-страница; ввод и кнопки — переходы на
-// dshlauncher://find/… (ответ 204: панель остаётся как есть, фокус в поле).
-// Счётчик «N из M» — по событию found-in-page главного окна.
+// In-page search (Ctrl+F): a panel in the top-right corner of the window —
+// a separate WebContentsView over the page (not a window: on Wayland you
+// can't place it where it needs to be). The panel — a data: page; the
+// input and the buttons — navigations to dshlauncher://find/… (response
+// 204: the panel stays as it is, focus in the field). The "N of M"
+// counter — from the main window's found-in-page event.
 const FIND_W = 430;
 const FIND_H = 46;
 
@@ -114,7 +115,7 @@ function openFind() {
     state.win.webContents.on('found-in-page', (_e, r) => {
       if (r.finalUpdate) setFindCount(r.matches ? `${r.activeMatchOrdinal} / ${r.matches}` : tr('нет', 'none'));
     });
-    // Ушли на другую страницу — старые совпадения неактуальны.
+    // We went to another page — the old matches are stale.
     state.win.webContents.on('did-navigate', () => { if (findText) { findText = ''; closeFind(); } });
   }
   placeFind();
@@ -152,14 +153,15 @@ function onFindRequest(route, url) {
   return noContentResponse();
 }
 
-// Проверка орфографии в полях ввода (русский и английский). Словари
-// Chromium на Linux скачивает при первом включении (с серверов Google); без
-// сети проверка просто не работает. Вкл/выкл — меню «Вид», запоминается.
+// Spellchecking in the input fields (Russian and English). The Chromium
+// dictionaries on Linux are downloaded on the first enable (from Google's
+// servers); without a network the check simply doesn't work. On/off — the
+// «Вид» menu, it is remembered.
 const spellFile = () => path.join(app.getPath('userData'), 'spellcheck.json');
 
 
 function initSpellcheck() {
-  try { state.spellcheckOn = JSON.parse(fs.readFileSync(spellFile(), 'utf8')).enabled !== false; } catch { /* по умолчанию вкл */ }
+  try { state.spellcheckOn = JSON.parse(fs.readFileSync(spellFile(), 'utf8')).enabled !== false; } catch { /* on by default */ }
   const ses = session.defaultSession;
   const langs = ['ru', 'en-US'].filter((l) => ses.availableSpellCheckerLanguages.includes(l));
   if (langs.length) ses.setSpellCheckerLanguages(langs);
@@ -171,7 +173,7 @@ function setSpellcheck(on) {
   session.defaultSession.setSpellCheckerEnabled(on);
   try { fs.writeFileSync(spellFile(), JSON.stringify({ enabled: on })); } catch { /* noop */ }
   console.log(`[launcher] проверка орфографии: ${on ? 'вкл' : 'выкл'}`);
-  menus.buildAppMenu(); // галочка в «Виде»
+  menus.buildAppMenu(); // the checkbox in «Вид»
 }
 
-Object.assign(module.exports, { zoomFile, viewActions, FIND_H, onFindRequest, initSpellcheck, setSpellcheck }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { zoomFile, viewActions, FIND_H, onFindRequest, initSpellcheck, setSpellcheck }); // extend, don't replace: the modules require each other in a circle

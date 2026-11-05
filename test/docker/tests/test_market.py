@@ -1,6 +1,6 @@
-"""Плагин маркета (dshmarket) перед запуском dsh: вопрос «Установить / Не
-сейчас / Не спрашивать больше», установка с живым логом (и pnpm, если его
-нет), ошибка установки. Плагин ставит подставной dsh (`plugin add`)."""
+"""The market plugin (dshmarket) before dsh starts: the prompt «Install / Not
+now / Don't ask again», installation with a live log (and pnpm, if there is
+none), install failure. The plugin installs a stub dsh (`plugin add`)."""
 import json
 import os
 
@@ -17,7 +17,7 @@ FAKE_PNPM = '/usr/local/bin/pnpm'
 
 @pytest.fixture
 def market(drv):
-    """Вопрос включён (conftest по умолчанию его отключает), плагина нет."""
+    """The prompt is enabled (conftest disables it by default), the plugin is absent."""
     for f in (PREF, PROFILE_PKG):
         if os.path.exists(f):
             os.remove(f)
@@ -33,9 +33,9 @@ def fake_pnpm():
 
 
 def test_market_install(start, gui, market):
-    """«Установить»: pnpm нет — лаунчер ставит его через npm (nvm
-    пользователя), затем `dsh plugin add dshmarket` с живым логом; плагин в
-    профиле, dsh запускается."""
+    """«Install»: no pnpm — the launcher installs it via npm (the user's
+    nvm), then `dsh plugin add dshmarket` with a live log; the plugin is in
+    the profile, dsh starts."""
     launcher = start(FAKE, NOUPD)
     market.wait(r'Install dshmarket\?.*plugin --profile web add dshmarket', 60)
 
@@ -43,18 +43,18 @@ def test_market_install(start, gui, market):
 
     assert launcher.wait_log('pnpm нет — ставлю через npm', 10), launcher.log()[-1500:]
     assert launcher.wait_log('[launcher] dshmarket установлен', 300), launcher.log()[-1500:]
-    assert json.load(open(PROFILE_PKG))['dependencies']['dshmarket'], 'плагин в профиле'
+    assert json.load(open(PROFILE_PKG))['dependencies']['dshmarket'], 'the plugin is in the profile'
     plugin_add = [l for l in open(FAKEDSH_LOG) if 'plugin add dshmarket' in l]
-    assert plugin_add and 'pnpm=None' not in plugin_add[0], f'pnpm в PATH команды: {plugin_add}'
-    assert wait_port(60), 'dsh запущен'
+    assert plugin_add and 'pnpm=None' not in plugin_add[0], f'pnpm is in the command PATH: {plugin_add}'
+    assert wait_port(60), 'dsh started'
     gui.wait()
-    assert not os.path.exists(PREF), 'отказа не было — ничего не запоминается'
+    assert not os.path.exists(PREF), 'no refusal — nothing is remembered'
     launcher.term()
 
 
 def test_market_fail(start, gui, market):
-    """Установка не удалась — код и вывод команды на странице, вопрос снова;
-    «Не сейчас» — dsh запускается без плагина, отказ не запоминается."""
+    """The installation failed — the code and the command output on the page, the prompt
+    again; «Not now» — dsh starts without the plugin, the refusal is not remembered."""
     fake_pnpm()
     launcher = start(FAKE, NOUPD, FAKE_PLUGIN_FAIL='1')
     market.wait(r'Install dshmarket\?', 60)
@@ -66,12 +66,12 @@ def test_market_fail(start, gui, market):
     market.skip()
     assert launcher.wait_log('установка маркета отложена (не сейчас)', 10)
     gui.wait()
-    assert not os.path.exists(PROFILE_PKG) and not os.path.exists(PREF), 'плагина нет, отказ не запомнен'
+    assert not os.path.exists(PROFILE_PKG) and not os.path.exists(PREF), 'no plugin, the refusal is not remembered'
     launcher.term()
 
 
 def test_market_never(start, gui, market):
-    """«Не спрашивать больше» — запоминается; следующий запуск без вопроса."""
+    """«Don't ask again» — remembered; the next start without the prompt."""
     launcher = start(FAKE, NOUPD)
     market.wait(r'Install dshmarket\?', 60)
 
@@ -79,7 +79,7 @@ def test_market_never(start, gui, market):
 
     assert launcher.wait_log('пользователь отказался от маркета навсегда', 10)
     gui.wait()
-    assert json.load(open(PREF)) == {'dontAsk': True}, 'отказ записан'
+    assert json.load(open(PREF)) == {'dontAsk': True}, 'the refusal was written'
     launcher.term()
 
     launcher = start(FAKE, NOUPD)

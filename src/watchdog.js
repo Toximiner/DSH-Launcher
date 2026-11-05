@@ -1,24 +1,26 @@
 'use strict';
-// Авто-восстановление окна после перезапуска dsh.
-/* ---------------- авто-восстановление после перезапуска dsh ----------------
- * GUI сам не возобновляет текущую сессию, когда процесс dsh перезапускается:
- * окно застревает на «сессия завершена». Но всё нужное для возобновления
- * сохраняется на диске: сессионный куки (секрет подписи живёт в
- * ~/.dsh/.credentials.yaml), сами сессии (~/.dsh/sessions) и состояние
- * интерфейса (localStorage). Поэтому при переходе порта down→up достаточно
- * перезагрузить страницу — приложение восстановится само.
+// Auto-recovery of the window after a dsh restart.
+/* ---------------- auto-recovery after a dsh restart ----------------
+ * The GUI doesn't resume the current session itself when the dsh process
+ * restarts: the window sticks on "session ended". But everything needed
+ * for the resumption is saved on disk: the session cookie (the signing
+ * secret lives in ~/.dsh/.credentials.yaml), the sessions themselves
+ * (~/.dsh/sessions) and the UI state (localStorage). So on a port
+ * down→up transition it is enough to reload the page — the app will
+ * recover itself.
  *
- * Но порт dsh открывается РАНЬШЕ, чем приложение готово (бут плагинов,
- * сессионная подсистема, подключение bili). Перезагрузка окна в этот момент
- * — «вслепую» против бутащегося сервера — не восстанавливает сессию и
- * оставляет серое (пустое) окно; пользователь вынужден перезапускать dsh
- * руками. Поэтому при down→up сначала не перезагружаем, а ждём, пока
- * HTTP-сервер dsh действительно ОТВЕЧАЕТ (plainUrlResponds — любой статус:
- * 200 — сессионный куки валидны; 401 — dsh поднялся, но токен сменился,
- * и ссылку входа openRunningGui возьмёт из вывода процесса на порту), и
- * только тогда подключаемся тем же путём, что «dsh запущен вручную».
- * Не отвечал за READY_WAIT_MS — показываем страницу «dsh не готов» с
- * кнопками «Проверить снова» и «Перезапустить dsh» (вместо серого окна).
+ * But the dsh port opens EARLIER than the app is ready (the plugin boot,
+ * the session subsystem, the bili connection). Reloading the window at
+ * that moment — "blindly" against a booting server — doesn't resume the
+ * session and leaves a grey (empty) window; the user has to restart dsh
+ * by hand. So on down→up we first don't reload but wait until the dsh
+ * HTTP server really RESPONDS (plainUrlResponds — any status: 200 — the
+ * session cookie is valid; 401 — dsh is up but the token changed, and
+ * the login link openRunningGui takes from the process output on the
+ * port), and only then connect by the same path as "dsh started
+ * manually". It didn't answer within READY_WAIT_MS — we show the "dsh
+ * is not ready" page with the «Проверить снова» and «Перезапустить dsh»
+ * buttons (instead of the grey window).
  */
 const state = require('./state');
 const i18n = require('./i18n');
@@ -30,24 +32,25 @@ const { openRunningGui, plainUrlResponds } = require('./routes');
 
 let watchdogStarted = false;
 let lastAutoReloadAt = 0;
-let recovering = false; // восстановление окна уже идёт — не дублируем
-// Сколько ждать готовности dsh после открытия порта: бут после обновления
-// плагинов (загрузка, подключение bili) может занять несколько секунд.
+let recovering = false; // the window recovery is already in progress — don't duplicate it
+// How long to wait for dsh readiness after the port opens: the boot after
+// a plugin update (loading, the bili connection) can take a few seconds.
 const READY_WAIT_MS = 15000;
 
-/* ===== waitForReady (тест test/watchdog.js) =====
-   Порт dsh открывается раньше, чем приложение готово. Ждём, пока checkReady()
-   вернёт true (dsh готов), до таймаута или остановки лаунчера. true — готов;
-   false — так и не стал (таймаут или stop). checkReady/isStopping —
-   инжектимые; pollMs — интервал опроса (тест — маленький). Исключение из
-   checkReady (сеть ещё не отвечает) — «не готов», не пробрасывается. */
-const waitReadySleep = (ms) => new Promise((r) => setTimeout(r, ms)); // только внутри блока — видит тест
+/* ===== waitForReady (test test/watchdog.js) =====
+   The dsh port opens earlier than the app is ready. We wait until
+   checkReady() returns true (dsh is ready), up to a timeout or the
+   launcher stop. true — ready; false — it never became (a timeout or
+   stop). checkReady/isStopping — injectable; pollMs — the polling
+   interval (the test — small). An exception from checkReady (the network
+   doesn't answer yet) — "not ready", not propagated. */
+const waitReadySleep = (ms) => new Promise((r) => setTimeout(r, ms)); // only inside the block — the test sees it
 async function waitForReady(checkReady, timeoutMs, isStopping, pollMs = 100) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
     if (isStopping()) return false;
     let ok;
-    try { ok = await checkReady(); } catch { /* сеть ещё не отвечает — не готов */ }
+    try { ok = await checkReady(); } catch { /* the network doesn't answer yet — not ready */ }
     if (ok) return true;
     if (Date.now() >= deadline) return false;
     await waitReadySleep(pollMs);
@@ -55,9 +58,10 @@ async function waitForReady(checkReady, timeoutMs, isStopping, pollMs = 100) {
 }
 /* ===== end waitForReady ===== */
 
-// Страница «dsh не готов»: порт открыт, но приложение не отвечает (бут после
-// обновления плагинов). Вместо серого окна — понятные действия: дождаться и
-// «Проверить снова» (подключаемся, как «dsh запущен вручную») или перезапуск.
+// The «dsh не готов» page: the port is open but the app doesn't answer
+// (the boot after a plugin update). Instead of the grey window — clear
+// actions: wait and «Проверить снова» (we connect as "dsh started
+// manually") or a restart.
 function showNotReady() {
   if (!state.win || state.win.isDestroyed()) return;
   const body = tr(
@@ -78,9 +82,9 @@ function showNotReady() {
 
 async function recoverWindow(force = false) {
   if (!state.win || state.win.isDestroyed() || state.stopping) return;
-  if (recovering) return; // восстановление уже идёт (ждёт готовности)
+  if (recovering) return; // the recovery is already in progress (waiting for readiness)
   const now = Date.now();
-  if (!force && now - lastAutoReloadAt < 3000) return; // защита от флаттера порта
+  if (!force && now - lastAutoReloadAt < 3000) return; // protection against port flapping
   lastAutoReloadAt = now;
   recovering = true;
   try {
@@ -91,8 +95,9 @@ async function recoverWindow(force = false) {
       showNotReady();
       return;
     }
-    // Готово — подключаемся тем же путём, что «dsh запущен вручную»
-    // (куки валидны → GUI; иначе ссылка входа / страница вставки токена).
+    // Ready — we connect by the same path as "dsh started manually"
+    // (the cookie is valid → GUI; otherwise the login link / the token
+    // paste page).
     await openRunningGui('dsh снова на порту');
   } catch (e) {
     console.error('[launcher] recover:', e.message);
@@ -105,13 +110,13 @@ function startWatchdog() {
   if (watchdogStarted) return;
   watchdogStarted = true;
   (async () => {
-    state.portState = (await portOpen()) ? 'up' : 'down'; // базовое состояние, без срабатываний
+    state.portState = (await portOpen()) ? 'up' : 'down'; // the base state, without firing
     setInterval(async () => {
       if (state.stopping) return;
       const now = (await portOpen()) ? 'up' : 'down';
       if (now === state.portState) return;
       if (now === 'up' && state.launching) {
-        state.portState = now; // окно доведёт до GUI сам launchDsh — не мешаем ему второй навигацией
+        state.portState = now; // the launchDsh itself will bring the window to the GUI — don't interfere with a second navigation
         return;
       }
       if (now === 'up') {

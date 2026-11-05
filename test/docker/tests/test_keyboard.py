@@ -1,7 +1,7 @@
-"""Клавиатура под X11 (настоящие нажатия через xdotool): одиночный Alt и смена
-раскладки Shift+Alt не уводят фокус из поля ввода в строку меню; AltGr
-(правый Alt) по-прежнему набирает символы третьего уровня (AltGr+Q → @ на
-немецкой раскладке)."""
+"""Keyboard under X11 (real key presses via xdotool): a lone Alt and the
+Shift+Alt layout switch do not move focus out of the input field into the
+menu bar; AltGr (right Alt) still types third-level characters (AltGr+Q → @
+on the German layout)."""
 import subprocess
 
 from helpers.env import FAKE, NOUPD
@@ -15,12 +15,12 @@ def x(*args):
 
 
 def focus_field(gui):
-    """Поле ввода в GUI (фейкового) dsh, окно лаунчера — в фокусе X."""
+    """The input field in the (fake) dsh GUI, the launcher window — X-focused."""
     gui.set_body('<input id="t" autofocus>')
     gui.eval("document.getElementById('t').focus(); 1")
     win = x('xdotool', 'search', '--onlyvisible', '--name', 'DeepSeek Harness').split()[0]
     x('xdotool', 'windowfocus', '--sync', win)
-    assert wait_for(lambda: gui.eval("document.activeElement && document.activeElement.id === 't'"), 5, 0.1), 'поле в фокусе'
+    assert wait_for(lambda: gui.eval("document.activeElement && document.activeElement.id === 't'"), 5, 0.1), 'field in focus'
 
 
 def value(gui):
@@ -33,18 +33,18 @@ def test_keyboard_alt(start, gui):
     x('setxkbmap', '-layout', 'us,ru', '-option', '', '-option', 'grp:alt_shift_toggle')
     focus_field(gui)
 
-    # одиночный Alt (левый, правый) — затем «1» попадает в поле, а не в меню
+    # a lone Alt (left, right) — then «1» lands in the field, not in the menu
     x('xdotool', 'key', 'Alt_L')
     x('xdotool', 'key', 'Alt_R')
     x('xdotool', 'key', '1')
-    assert wait_for(lambda: value(gui) == '1', 5, 0.1), f'после Alt фокус в поле: {value(gui)!r}'
+    assert wait_for(lambda: value(gui) == '1', 5, 0.1), f'after Alt focus is in the field: {value(gui)!r}'
 
-    # Shift+Alt — смена раскладки; цифра на обеих раскладках та же
+    # Shift+Alt — layout switch; the digit is the same on both layouts
     x('xdotool', 'key', 'shift+alt')
     x('xdotool', 'key', '2')
-    assert wait_for(lambda: value(gui) == '12', 5, 0.1), f'после Shift+Alt фокус в поле: {value(gui)!r}'
+    assert wait_for(lambda: value(gui) == '12', 5, 0.1), f'after Shift+Alt focus is in the field: {value(gui)!r}'
 
-    # AltGr+Q на немецкой раскладке — «@»
+    # AltGr+Q on the German layout — «@»
     x('setxkbmap', '-layout', 'de', '-option', '')
     x('xdotool', 'keydown', 'ISO_Level3_Shift', 'key', 'q', 'keyup', 'ISO_Level3_Shift')
     assert wait_for(lambda: value(gui) == '12@', 5, 0.1), f'AltGr+Q → @: {value(gui)!r}'

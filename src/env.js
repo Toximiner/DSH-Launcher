@@ -1,7 +1,7 @@
 'use strict';
-// Параметры запуска: что пришло из окружения и settings.json (см. config.js),
-// пути, порт, журналы. Модуль подключается первым: токен CI и флаг
-// «Обновить сейчас» убираются из окружения до запуска любых процессов.
+// Launch parameters: what came from the environment and settings.json (see config.js),
+// paths, port, logs. This module is loaded first: the CI token and the
+// "Update now" flag are removed from the environment before any processes are spawned.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -9,48 +9,48 @@ const crypto = require('crypto');
 const { effectiveConfig } = require('./config');
 const { validRouteKey } = require('./util');
 
-// Только для разработки и тестов (CI): токен GitHub для запроса списка
-// релизов — лимит 5000 запросов в час вместо 60 без авторизации. Читаем и
-// убираем из окружения первым делом — до любого запуска дочерних процессов:
-// его не унаследуют dsh, npm и плагины. Значение нигде не печатается.
+// Only for development and tests (CI): GitHub token for requesting the list
+// of releases — the limit is 5000 requests per hour instead of 60 unauthenticated. We read it
+// and remove it from the environment first thing — before spawning any child processes:
+// dsh, npm and the plugins must not inherit it. The value is never printed anywhere.
 const GITHUB_TOKEN = process.env.DSH_LAUNCHER_GITHUB_TOKEN || '';
 delete process.env.DSH_LAUNCHER_GITHUB_TOKEN;
-// Ключ маршрутов dshlauncher://… (см. withRouteKey в util.js) — случайный на
-// каждый запуск. DSH_LAUNCHER_ROUTE_KEY — только для тестов (Docker): ключ
-// известен заранее, и драйвер окон ходит по маршрутам. Перезапущенный
-// экземпляр наследует переменную и тот же ключ.
+// Key for the dshlauncher://… routes (see withRouteKey in util.js) — random for
+// each start. DSH_LAUNCHER_ROUTE_KEY — for tests only (Docker): the key
+// is known in advance, and the window driver goes through the routes. A restarted
+// instance inherits the variable and the same key.
 const ROUTE_KEY = validRouteKey(process.env.DSH_LAUNCHER_ROUTE_KEY)
   ? process.env.DSH_LAUNCHER_ROUTE_KEY : crypto.randomBytes(16).toString('hex');
-// Только для тестов (Docker): подставной GitHub API на этой машине
-// (test/docker/fakes/github.py) — релизы и .deb без настоящего GitHub.
-/* ===== githubApiBase (чистая функция, тест test/parsing.js) =====
-   Принимается только http://127.0.0.1:<порт>, иначе — настоящий GitHub. */
+// For tests only (Docker): a stand-in GitHub API on this machine
+// (test/docker/fakes/github.py) — releases and .deb without the real GitHub.
+/* ===== githubApiBase (pure function, test test/parsing.js) =====
+   Only http://127.0.0.1:<port> is accepted, otherwise — the real GitHub. */
 function githubApiBase(v) {
   return /^http:\/\/127\.0\.0\.1:\d{1,5}$/.test(String(v || '')) ? v : 'https://api.github.com';
 }
 /* ===== end githubApiBase ===== */
 const GITHUB_API = githubApiBase(process.env.DSH_LAUNCHER_GITHUB_API);
-// «Обновить сейчас» (окно обновления во время работы) перезапускает лаунчер с
-// этой переменной: новый экземпляр сразу ставит обновление, без вопроса.
+// "Update now" (the update window while running) restarts the launcher with
+// this variable: the new instance applies the update immediately, without a prompt.
 const UPDATE_NOW = /^(launcher|dsh)$/.test(process.env.DSH_LAUNCHER_UPDATE_NOW || '') ? process.env.DSH_LAUNCHER_UPDATE_NOW : null;
 delete process.env.DSH_LAUNCHER_UPDATE_NOW;
-// «Вернуть предыдущую версию…»: какую версию лаунчера поставить (вместе с
-// DSH_LAUNCHER_UPDATE_NOW=launcher). Только вида 1.2.3[-N].
+// "Revert to the previous version…": which launcher version to install (together with
+// DSH_LAUNCHER_UPDATE_NOW=launcher). Only of the form 1.2.3[-N].
 const INSTALL_VERSION = UPDATE_NOW === 'launcher' && /^\d+\.\d+\.\d+(-\d+)?$/.test(process.env.DSH_LAUNCHER_INSTALL_VERSION || '')
   ? process.env.DSH_LAUNCHER_INSTALL_VERSION : null;
 delete process.env.DSH_LAUNCHER_INSTALL_VERSION;
 
-// Окно «Настройки» пишет ~/.config/dsh-launcher/settings.json (это же userData
-// лаунчера — путь считаем сами: настройки нужны до app.setName). Переменные
-// окружения важнее файла — ими пользуются тесты и те, кто настроил лаунчер
-// раньше; поле в окне тогда неактивно.
+// The "Settings" window writes ~/.config/dsh-launcher/settings.json (this is also the
+// launcher's userData — the path is computed here: the settings are needed before app.setName). Environment
+// variables are stronger than the file — tests and people who configured the launcher
+// earlier use them; the field in the window is then inactive.
 const SETTINGS_FILE = path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'),
   'dsh-launcher', 'settings.json');
 
-// Пакетная ли установка (run.sh кладёт Electron в /opt/dsh-launcher) — один
-// источник истины: версия из dpkg против package.json, схема сравнения версий
-// (deb против semver), метка «сборка из исходников». execPath за жизнь
-// процесса не меняется, поэтому константа.
+// Whether this is a package install (run.sh places Electron in /opt/dsh-launcher) — one
+// source of truth: the dpkg version against package.json, the version comparison scheme
+// (deb against semver), the "built from source" label. execPath does not change over
+// the life of the process, hence the constant.
 const IS_PKG_INSTALL = process.execPath.startsWith('/opt/dsh-launcher/');
 
 function loadSettings() {
@@ -61,29 +61,29 @@ function loadSettings() {
 const CONFIG = effectiveConfig(process.env, loadSettings(), os.homedir());
 
 const DSH_BIN_DEFAULT = '/usr/bin/dsh';
-// путь к dsh задан явно (переменная DSH_BIN или «Настройки»); иначе, если
-// /usr/bin/dsh нет, — ищется в PATH, npm prefix, nvm и т.п. (см. findDsh),
-// найденный путь запоминается
+// the path to dsh is given explicitly (DSH_BIN variable or "Settings"); otherwise, if
+// /usr/bin/dsh is missing, — it is searched in PATH, the npm prefix, nvm, etc. (see findDsh),
+// and the found path is remembered
 const DSH_BIN_EXPLICIT = Boolean(CONFIG.dshBin);
 const DSH_ARGS = CONFIG.args;
-const CWD = CONFIG.cwd; // рабочая директория для dsh
+const CWD = CONFIG.cwd; // working directory for dsh
 const HOST = '127.0.0.1';
 const PORT = CONFIG.port;
 const PLAIN_URL = `http://${HOST}:${PORT}/`;
-const START_TIMEOUT = Number(process.env.DSH_START_TIMEOUT_MS || 120000); // сколько ждать старта
-// в установленной версии (run.sh ставит DSH_LOG_DIR) — в ~/.local/state,
-// в dev-режиме — рядом с приложением
+const START_TIMEOUT = Number(process.env.DSH_START_TIMEOUT_MS || 120000); // how long to wait for the start
+// in the installed version (run.sh sets DSH_LOG_DIR) — in ~/.local/state,
+// in dev mode — next to the application
 const LOG_DIR = process.env.DSH_LOG_DIR || path.join(__dirname, '..', 'logs');
 const LOG_FILE = path.join(LOG_DIR, 'dsh.log');
 const LAUNCHER_LOG_FILE = path.join(LOG_DIR, 'launcher.log');
-// 2 МБ — дальше файл сдвигается в *.1 (DSH_LAUNCHER_LOG_MAX_BYTES — для тестов).
-// Старый *.1 при этом заменяется: на каждый журнал не больше двух файлов.
+// 2 MB — beyond that the file is rolled to *.1 (DSH_LAUNCHER_LOG_MAX_BYTES — for tests).
+// The old *.1 is replaced at the same time: at most two files per log.
 const MAX_LOG_BYTES = Number(process.env.DSH_LAUNCHER_LOG_MAX_BYTES) > 0
   ? Number(process.env.DSH_LAUNCHER_LOG_MAX_BYTES) : 2 * 1024 * 1024;
 
-// Язык окон лаунчера: DSH_LAUNCHER_LANG=ru|en, иначе выбор переключателем
-// RU | EN в окне (userData/ui-lang.json, подхватывается в onReady), иначе по
-// локали системы (LC_ALL / LC_MESSAGES / LANG): ru* — русский, иначе английский.
+// Language of the launcher's windows: DSH_LAUNCHER_LANG=ru|en, otherwise chosen by the
+// RU | EN switch in the window (userData/ui-lang.json, picked up in onReady), otherwise by the
+// system locale (LC_ALL / LC_MESSAGES / LANG): ru* — Russian, otherwise English.
 const LANG_FORCED = (() => {
   const v = String(process.env.DSH_LAUNCHER_LANG || '').toLowerCase();
   return v === 'ru' || v === 'en' ? v : null;

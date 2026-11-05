@@ -1,9 +1,9 @@
 'use strict';
-// Окошко «DeepSeek Harness закрывается…» на время остановки dsh при выходе.
-// Штатная остановка — SIGTERM и до 4 с ожидания (потом SIGKILL): всё это
-// время окно уже спрятано, а процесс ещё жив — без окошка выход выглядит
-// зависшим. Показываем его, только если остановка затянулась (CLOSING_DELAY_MS):
-// быстрый выход обходится без мелькания. Закрывается вместе с приложением.
+// The «DeepSeek Harness закрывается…» window while dsh is stopped on exit.
+// A normal stop — SIGTERM and up to 4 s of waiting (then SIGKILL): all this
+// time the window is already hidden but the process is still alive — without
+// the window, exit looks hung. We show it only if the stop drags on
+// (CLOSING_DELAY_MS): a fast exit goes by without flicker. Closes with the app.
 const { BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -12,8 +12,8 @@ const { esc, CSP_META } = require('./util');
 
 const CLOSING_DELAY_MS = 300;
 
-/* ===== closingHtml (тест test/pages.js) =====
-   Разметка окошка: значок, крутилка, заголовок и пояснение. Без скриптов. */
+/* ===== closingHtml (test test/pages.js) =====
+   The window markup: icon, spinner, heading and explanation. No scripts. */
 function closingHtml(title, text, icon) {
   const img = icon ? `<img src="${esc(icon)}" alt="">` : '';
   const html = `<!doctype html><html><head><meta charset="utf-8">${CSP_META}<title>${esc(title)}</title><style>

@@ -1,19 +1,19 @@
 'use strict';
-// Общий помощник для юнит-тестов: извлекает функцию из main.js по парным
-// маркерам «/* ===== имя … ===== */» / «/* ===== end имя ===== */».
-// main.js целиком не загружается (он требует electron).
+// A common helper for the unit tests: extracts a function from main.js by
+// the paired markers "/* ===== name … ===== */" / "/* ===== end name ===== */".
+// main.js is not loaded whole (it requires electron).
 const fs = require('fs');
 const path = require('path');
 
 const mainSrc = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 
-// помеченные блоки ищем в main.js и в модулях src/ (код переезжает из main.js)
+// we look for the marked blocks in main.js and the src/ modules (the code is moving out of main.js)
 const srcDir = path.join(__dirname, '..', 'src');
 const sources = [mainSrc, ...fs.readdirSync(srcDir).filter((f) => f.endsWith('.js')).map((f) => fs.readFileSync(path.join(srcDir, f), 'utf8'))];
 
 function extract(name, deps = {}) {
   const text = sources.find((t) => t.includes('/* ===== ' + name + ' ') && t.includes('/* ===== end ' + name + ' ===== */'));
-  if (!text) throw new Error('маркеры не найдены: ' + name);
+  if (!text) throw new Error('markers not found: ' + name);
   const s = text.indexOf('/* ===== ' + name + ' ');
   const e = text.indexOf('/* ===== end ' + name + ' ===== */');
   const code = text.slice(s, e);

@@ -1,19 +1,19 @@
 'use strict';
-// Маленькие JSON-файлы настроек в userData (update-prefs.json,
-// market-prompt.json, ui-lang.json): чтение с запасным значением и запись.
+// Small JSON settings files in userData (update-prefs.json,
+// market-prompt.json, ui-lang.json): read with a fallback value and write.
 const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
 const prefFile = (name) => path.join(app.getPath('userData'), name);
 
-// Файла нет или он битый — null.
+// File missing or corrupted — null.
 function readPref(name) {
   try { return JSON.parse(fs.readFileSync(prefFile(name), 'utf8')); }
   catch { return null; }
 }
 
-// Ошибка записи — в лог, без исключения: настройка просто не запомнится.
+// Write error goes to the log, no exception: the setting simply won't be remembered.
 function writePref(name, obj) {
   try {
     fs.mkdirSync(path.dirname(prefFile(name)), { recursive: true });

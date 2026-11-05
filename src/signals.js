@@ -1,8 +1,8 @@
 'use strict';
-// «Жёсткое» завершение самого лаунчера: SIGTERM/SIGINT/SIGHUP (pkill,
-// завершение сессии) и exit процесса. Поймать SIGKILL, отправленный самому
-// лаунчеру, нельзя — в том случае dsh переживёт его (это ограничение
-// отделимого процесса, лечится только системно — cgroup/supervisor).
+// "Hard" termination of the launcher itself: SIGTERM/SIGINT/SIGHUP (pkill,
+// session end) and process exit. A SIGKILL sent to the launcher itself
+// cannot be caught — in that case dsh will outlive it (this is a limitation
+// of the detached process, fixable only system-wide — cgroup/supervisor).
 const state = require('./state');
 const { killGroup, dshLeaderExited, adoptedTargets } = require('./dsh-stop');
 
@@ -15,12 +15,12 @@ function killDshNow() {
   }
 }
 
-// По сигналу — штатное закрытие через before-quit (dsh получает SIGTERM и
-// успевает сохраниться, через 4 с — SIGKILL). Жёстко (SIGKILL дереву и
-// выход) — по повторному сигналу, если приложение ещё не готово или если
-// штатное закрытие не уложилось в 8 с.
+// On a signal — the regular shutdown via before-quit (dsh gets SIGTERM and
+// has time to save, SIGKILL after 4 s). Hard (SIGKILL the tree and exit) —
+// on a repeated signal, if the app is not ready yet or if the regular
+// shutdown did not finish within 8 s.
 let termSignalSeen = false;
-let appRef = null; // app передаётся в installSignalHandlers (после ready)
+let appRef = null; // app is passed to installSignalHandlers (after ready)
 function onTermSignal(name, exitCode) {
   console.log(`[launcher] ${name} — останавливаю dsh`);
   if (termSignalSeen || !appRef.isReady()) {
@@ -36,11 +36,11 @@ function onTermSignal(name, exitCode) {
   appRef.quit();
 }
 
-// Ставить — после ready: Chromium при старте ставит свой обработчик
-// SIGTERM/SIGINT/SIGHUP поверх раннего process.on (тот так и не вызывается),
-// а после первого сигнала возвращает обработчик по умолчанию — повторный
-// сигнал убивал лаунчер мгновенно, и медленно завершающийся dsh оставался
-// сиротой. Поставленный позже, наш обработчик заменяет chromium-овский.
+// Install it — after ready: on startup Chromium puts its own SIGTERM/
+// SIGINT/SIGHUP handler over the early process.on (which is never called),
+// and after the first signal restores the default handler — a repeated
+// signal killed the launcher instantly, and a slowly terminating dsh was
+// left orphaned. Installed later, our handler replaces chromium's.
 function installSignalHandlers(app) {
   appRef = app;
   process.on('SIGINT', () => onTermSignal('SIGINT', 130));

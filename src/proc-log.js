@@ -1,12 +1,12 @@
 'use strict';
-// Команда с живым логом на служебной странице: установка dsh, плагина маркета,
-// шаги обновления. Вывод (stdout и stderr) — построчно в st.log (последние
-// LOG_MAX_LINES строк) и в счётчик st.logSeq (суммарно всех строк — для
-// живой отрисовки, pages.js), страница перерисовывается сразу и каждые
-// REDRAW_MS. st — объект состояния страницы ({ running, log, proc, timer });
-// на время работы running = true и proc — процесс, после — сброшены, что бы
-// ни случилось. Результат — код выхода; -1, если процесс не запустился или
-// убит сигналом.
+// Command with a live log on the service page: dsh installation, market
+// plugin, update steps. Output (stdout and stderr) goes line by line into
+// st.log (the last LOG_MAX_LINES lines) and the st.logSeq counter (total of
+// all lines — for live rendering, pages.js); the page is redrawn immediately
+// and every REDRAW_MS. st — the page state object ({ running, log, proc,
+// timer }); while running, running = true and proc is the process; both are
+// reset afterwards, whatever happens. The result is the exit code; -1 if the
+// process failed to start or was killed by a signal.
 const { spawn } = require('child_process');
 
 const LOG_MAX_LINES = 500;
@@ -38,7 +38,7 @@ async function runWithLiveLog(st, cmd, args, { env, cwd, redraw } = {}) {
       let settled = false;
       const done = (c) => { if (!settled) { settled = true; resolve(c); } };
       p.on('close', (c) => done(c === null ? -1 : c));
-      // не запустился (ENOENT …) — close может не прийти
+      // failed to start (ENOENT …) — close may never arrive
       p.on('error', (e) => { st.log.push(e.message); done(-1); });
     });
   } finally {

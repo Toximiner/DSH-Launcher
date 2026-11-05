@@ -1,14 +1,14 @@
 'use strict';
-// Настройки: итоговые параметры (переменные окружения важнее settings.json),
-// проверка значений полей окна «Настройки», что требует перезапуска.
+// Settings: the final parameters (environment variables take precedence over settings.json),
+// validation of the «Настройки» window field values, what requires a restart.
 const { tr } = require('./i18n');
 const { splitArgs } = require('./util');
 
 const DEFAULT_PORT = 3080;
 const DEFAULT_PROFILE = 'web';
 
-/* Итоговые параметры из окружения (важнее) и settings.json; src[ключ] —
-   откуда взято: 'env' | 'settings' | 'default'. */
+/* The final parameters from the environment (takes precedence) and settings.json; src[key] —
+   where it came from: 'env' | 'settings' | 'default'. */
 function effectiveConfig(env, settings, home) {
   const s = settings && typeof settings === 'object' ? settings : {};
   const src = {};
@@ -28,10 +28,10 @@ function effectiveConfig(env, settings, home) {
     if (typeof s.profile === 'string' && /^[\w.-]+$/.test(s.profile)) { profile = s.profile; from('profile', 'settings'); }
     else from('profile', 'default');
     args = ['--profile', profile, '--no-open'];
-    if (port !== DEFAULT_PORT) args.push('--port', String(port)); // dsh слушает тот же порт, что ищет лаунчер
+    if (port !== DEFAULT_PORT) args.push('--port', String(port)); // dsh listens on the same port the launcher looks for
   }
 
-  let dshBin = null; // null — искать автоматически
+  let dshBin = null; // null — look up automatically
   if (env.DSH_BIN) { dshBin = env.DSH_BIN; from('dshPath', 'env'); }
   else if (typeof s.dshPath === 'string' && s.dshPath) { dshBin = s.dshPath; from('dshPath', 'settings'); }
   else from('dshPath', 'default');
@@ -57,21 +57,21 @@ function effectiveConfig(env, settings, home) {
   else if (s.checkUpdates === false) { checkUpdates = false; from('checkUpdates', 'settings'); }
   else from('checkUpdates', 'default');
 
-  // проверка раз в 12 часов, пока лаунчер открыт — отдельная галочка;
-  // DSH_LAUNCHER_NO_UPDATE_CHECK запрещает любые проверки
+  // a check every 12 hours while the launcher is open — a separate checkbox;
+  // DSH_LAUNCHER_NO_UPDATE_CHECK forbids any checks
   let pollUpdates = true;
   if (src.checkUpdates === 'env') { pollUpdates = false; from('pollUpdates', 'env'); }
   else if (s.pollUpdates === false) { pollUpdates = false; from('pollUpdates', 'settings'); }
   else from('pollUpdates', 'default');
 
-  // песочница Chromium — только по галочке (run.sh читает тот же settings.json)
+  // the Chromium sandbox — only via the checkbox (run.sh reads the same settings.json)
   const sandbox = s.sandbox === true;
   from('sandbox', sandbox ? 'settings' : 'default');
 
   return { port, args, profile, dshBin, cwd, noGpu, ozone, checkUpdates, pollUpdates, sandbox, src };
 }
 
-/* Значение поля окна → { value } или { error } (сообщение для окна). */
+/* A window field value → { value } or { error } (a message for the window). */
 function settingValue(key, raw) {
   const v = String(raw === undefined || raw === null ? '' : raw).trim();
   const abs = (x) => x === '' || x.startsWith('/');
@@ -109,7 +109,7 @@ function settingValue(key, raw) {
   }
 }
 
-/* Какие из действующих параметров изменятся после перезапуска лаунчера. */
+/* Which of the effective parameters will change after a launcher restart. */
 function restartNeeded(running, next) {
   const changed = ['port', 'dshBin', 'cwd', 'noGpu', 'ozone', 'sandbox'].filter((k) => running[k] !== next[k]);
   if (JSON.stringify(running.args) !== JSON.stringify(next.args)) changed.push('args');

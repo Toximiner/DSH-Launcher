@@ -1,14 +1,15 @@
 'use strict';
-// Обновления — чистая логика: кэш списка релизов, интервал периодической
-// проверки, что показать (пункт меню, плашка) по найденным версиям, прокси.
+// Updates — pure logic: the release list cache, the interval of the
+// periodic check, what to show (a menu item, a toast) for the found
+// versions, and the proxy.
 const { compareDebianVer, tagToPackageVersion } = require('./versions');
 
-/* Как получить список релизов GitHub: 'revalidate' — спросить с
-   If-None-Match (есть метка ETag; ответ 304 «не изменилось» не расходует
-   лимит 60/ч — поэтому всегда, и новый релиз виден сразу), 'cache' —
-   взять запомненный без запроса (метки нет, а проверяли меньше maxAgeMs
-   назад; ручная проверка — force — так не делает), 'fetch' — обычный
-   запрос. */
+/* How to get the GitHub release list: 'revalidate' — ask with
+   If-None-Match (there is an ETag; a 304 "unchanged" response does not
+   spend the 60/h limit — therefore always, and a new release is visible
+   immediately), 'cache' — take the remembered one without a request
+   (no tag, and the last check was less than maxAgeMs ago; a manual
+   check — force — does not do that), 'fetch' — a regular request. */
 function releasesCacheMode(entry, now, maxAgeMs, force) {
   const ok = entry && typeof entry === 'object' && Array.isArray(entry.list);
   if (!ok) return 'fetch';
@@ -17,19 +18,19 @@ function releasesCacheMode(entry, now, maxAgeMs, force) {
   return 'fetch';
 }
 
-// Кэш проверяли меньше maxAgeMs назад (время из будущего — часы сдвинули — нет).
+// The cache was checked less than maxAgeMs ago (a time from the future — the clocks shifted — no).
 function releasesCacheFresh(entry, now, maxAgeMs) {
   return Boolean(entry) && Number.isFinite(entry.fetchedAt) && now - entry.fetchedAt >= 0 && now - entry.fetchedAt < maxAgeMs;
 }
 
-/* updatePollMs — интервал периодической проверки: 12 часов
-   (DSH_LAUNCHER_UPDATE_POLL_SEC — для тестов). announceUpdates — что
-   показать по найденным обновлениям: found — { launcher, dsh } (новые
-   версии или null), dismissed — update-prefs.json («не спрашивать больше»
-   по версиям), notified — о каких версиях уже уведомляли в этом сеансе.
-   → { menu: { kind: версия } — пункты «Обновить … до X…» в «Справке»,
-       notify: [kind] — системные уведомления (раз на версию; не для
-       отклонённой — пункт меню для неё всё же есть) }. */
+/* updatePollMs — the interval of the periodic check: 12 hours
+   (DSH_LAUNCHER_UPDATE_POLL_SEC — for tests). announceUpdates — what to
+   show for the found updates: found — { launcher, dsh } (new versions or
+   null), dismissed — update-prefs.json ("don't ask again" per version),
+   notified — which versions have already been notified about in this
+   session. → { menu: { kind: version } — "Update … to X…" items in
+   "Help", notify: [kind] — system notifications (once per version; not
+   for a dismissed one — there is still a menu item for it) }. */
 function updatePollMs(env) {
   const sec = Number(env.DSH_LAUNCHER_UPDATE_POLL_SEC);
   return Number.isFinite(sec) && sec >= 1 ? Math.round(sec * 1000) : 12 * 3600 * 1000;
@@ -47,9 +48,9 @@ function announceUpdates(found, dismissed, notified) {
   return { menu, notify };
 }
 
-/* Правило Chromium («PROXY h:p; DIRECT», «HTTPS h:p», «SOCKS5 h:p», «DIRECT»)
-   → URL прокси для Node или null (напрямую). Берём первый HTTP(S)-прокси;
-   SOCKS агент Node не умеет — тогда напрямую. */
+/* A Chromium rule ("PROXY h:p; DIRECT", "HTTPS h:p", "SOCKS5 h:p",
+   "DIRECT") → a proxy URL for Node, or null (direct). We take the first
+   HTTP(S) proxy; the Node agent cannot do SOCKS — then direct. */
 function proxyUrlFromRule(rule) {
   for (const part of String(rule || '').split(';')) {
     const m = part.trim().match(/^(PROXY|HTTPS)\s+(\S+)$/i);
@@ -58,12 +59,12 @@ function proxyUrlFromRule(rule) {
   return null;
 }
 
-/* ===== rollbackCandidates (чистые функции, тест test/updates.js) =====
-   parseRelease — релиз GitHub → { version, date, htmlUrl, assetUrl, assetSha256 }
-   (.deb и его sha256 из digest «sha256:<hex>», у старых релизов может не быть).
-   rollbackCandidates — на что можно вернуться: из разобранных релизов
-   (parseRelease; черновики и prerelease отсеяны раньше) — старше
-   установленного пакета, с .deb; новые первыми, не больше max. */
+/* ===== rollbackCandidates (pure functions, test test/updates.js) =====
+   parseRelease — a GitHub release → { version, date, htmlUrl, assetUrl, assetSha256 }
+   (the .deb and its sha256 from the "sha256:<hex>" digest; older releases may not have it).
+   rollbackCandidates — what you can roll back to: from the parsed releases
+   (parseRelease; drafts and prereleases were filtered out earlier) — older
+   than the installed package, with a .deb; newest first, no more than max. */
 function parseRelease(r) {
   const asset = (r.assets || []).find((a) => String(a.name).endsWith('.deb'));
   return {

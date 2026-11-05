@@ -1,44 +1,44 @@
 'use strict';
-// Общее состояние лаунчера — то, что читают и меняют разные части. Начальные
-// значения задаёт main.js (там же, где раньше были объявления let).
+// The launcher's shared state — what different parts read and modify. The
+// initial values are set by main.js (where the let declarations used to be).
 //
-// Операции с собственным процессом/таймером (установка dsh, установка
-// маркета, шаг обновления) имеют разные формы состояния — но при закрытии
-// всё одинаково: SIGTERM процессу и clearInterval. Модули регистрируют
-// функцию очистки через settleOperation при загрузке, before-quit вызывает
-// все через settleAllOperations — без знания списка модулей.
+// Operations with their own process/timer (dsh install, market install, an
+// update step) have different state shapes — but on shutdown everything is
+// the same: SIGTERM to the process and clearInterval. Modules register a
+// cleanup function via settleOperation at load time, and before-quit calls
+// all of them via settleAllOperations — without knowing the list of modules.
 const operationSettlers = [];
 
 module.exports = {
-  win: null,                 // главное окно
-  stopping: false,           // лаунчер закрывается
-  dshBin: null,              // программа dsh (DSH_BIN; найденная может смениться)
-  dshProc: null,             // процесс dsh, запущенный лаунчером
-  weStartedDsh: false,       // dsh запустил лаунчер (при закрытии — остановить)
-  dshFatal: false,           // dsh не запустился / упал — не перезапускать
-  adoptedDsh: false,         // dsh «усыновлён» после самовозрождения
-  adoptedOldPgid: null,      // группа исходного dsh до самовозрождения
-  authUrl: null,             // URL с токеном, напечатанный dsh
-  launching: false,          // идёт запуск dsh (вопросы об обновлениях и т. п.)
-  restarting: false,         // перезапуск в новую версию после обновления
-  relaunchRequested: false,  // «Перезапустить лаунчер» (настройки, «Обновить сейчас»)
-  dshInstalledVersion: null, // версия dsh, проверенная при запуске
-  currentPage: null,         // перерисовка текущей служебной страницы (смена языка)
-  portState: null,           // null | 'up' | 'down' — порт dsh (авто-восстановление)
-  dialogView: null,          // диалог — слой в главном окне (WebContentsView)
-  dialogRender: null,        // перерисовка содержимого диалога: (copied) => void
-  dialogCopyText: '',        // текст «Скопировать для отчёта»
-  tray: null,                // значок в трее (Tray) или null
-  lastReportPath: null,      // последний сохранённый отчёт («Показать в папке»)
-  settingsSection: 'general', // раздел окна «Настройки» (меню слева)
-  availableUpdates: {},      // найденные обновления: { launcher, dsh } → релиз (.version …)
-  updateChecks: { launcher: null, dsh: null }, // проверки обновлений при запуске (промисы)
-  launcherUpdatedOnDisk: false, // пакет лаунчера обновлён, а работает старый процесс
-  openContextMenu: null,     // открытое контекстное меню (закрыть по маршруту)
-  findView: null,            // панель поиска по странице (Ctrl+F)
-  spellcheckOn: true,        // проверка орфографии в полях ввода
-  restartingDsh: false,      // идёт «Перезапустить dsh»: остановка dsh — не сбой
-  dshCrashNotice: null,      // dsh перезапущен после сбоя — плашка, когда GUI загрузится
+  win: null,                 // the main window
+  stopping: false,           // the launcher is shutting down
+  dshBin: null,              // the dsh program (DSH_BIN; the found one may change)
+  dshProc: null,             // the dsh process started by the launcher
+  weStartedDsh: false,       // the launcher started dsh (stop it on shutdown)
+  dshFatal: false,           // dsh did not start / crashed — do not restart
+  adoptedDsh: false,         // dsh was "adopted" after self-resurrection
+  adoptedOldPgid: null,      // the original dsh's group before self-resurrection
+  authUrl: null,             // the URL with the token, printed by dsh
+  launching: false,          // dsh launch in progress (update questions, etc.)
+  restarting: false,         // restart to a new version after an update
+  relaunchRequested: false,  // «Перезапустить лаунчер» (Relaunch the launcher) (settings, «Обновить сейчас»/Update now)
+  dshInstalledVersion: null, // the dsh version checked at start
+  currentPage: null,         // redraw of the current service page (language switch)
+  portState: null,           // null | 'up' | 'down' — dsh's port (auto-recovery)
+  dialogView: null,          // the dialog — a layer in the main window (WebContentsView)
+  dialogRender: null,        // redraw of the dialog content: (copied) => void
+  dialogCopyText: '',        // the text of «Скопировать для отчёта» (Copy for the report)
+  tray: null,                // the tray icon (Tray) or null
+  lastReportPath: null,      // the last saved report («Показать в папке»/Show in folder)
+  settingsSection: 'general', // the section of the «Настройки» (Settings) window (left menu)
+  availableUpdates: {},      // found updates: { launcher, dsh } → release (.version …)
+  updateChecks: { launcher: null, dsh: null }, // update checks at start (promises)
+  launcherUpdatedOnDisk: false, // the launcher package is updated, but the old process is running
+  openContextMenu: null,     // an open context menu (close via a route)
+  findView: null,            // the page search panel (Ctrl+F)
+  spellcheckOn: true,        // spell check in text fields
+  restartingDsh: false,      // «Перезапустить dsh» (Restart dsh) in progress: stopping dsh is not a failure
+  dshCrashNotice: null,      // dsh was restarted after a crash — a banner once the GUI loads
   settleOperation(fn) { operationSettlers.push(fn); },
   settleAllOperations() { for (const fn of operationSettlers) fn(); },
 };

@@ -1,8 +1,8 @@
 'use strict';
 
-/* Генерирует icon.png (256×256) без внешних зависимостей: сырой PNG + zlib.
- * Тёмный скруглённый квадрат с буквой «D» в сине-фиолетовом градиенте,
- * сглаживание — 2×2 суперсэмплинг. */
+/* Generates icon.png (256×256) without external dependencies: raw PNG + zlib.
+ * A dark rounded square with the letter «D» in a blue-violet gradient,
+ * antialiasing — 2×2 supersampling. */
 
 const fs = require('fs');
 const path = require('path');
@@ -22,9 +22,9 @@ function inRoundRect(x, y, x0, y0, x1, y1, r) {
 }
 
 function inD(x, y) {
-  // вертикальная перекладина
+  // vertical stem
   if (x >= 82 && x <= 110 && y >= 64 && y <= 192) return true;
-  // «чаша»: полукольцо справа, центр (110, 128)
+  // "bowl": right half-ring, center (110, 128)
   const dx = x - 110, dy = y - 128;
   if (dx < 0) return false;
   const d2 = dx * dx + dy * dy;
@@ -55,7 +55,7 @@ for (let Y = 0; Y < BH; Y++) {
   }
 }
 
-// даунсэмплинг 2×2 (в среднем — по premultiplied-компонентам)
+// 2×2 downsampling (averaging over premultiplied components)
 const out = Buffer.alloc(W * H * 4);
 for (let y = 0; y < H; y++) {
   for (let x = 0; x < W; x++) {
@@ -80,7 +80,7 @@ for (let y = 0; y < H; y++) {
   }
 }
 
-/* ---------- минимальный PNG-энкодер ---------- */
+/* ---------- minimal PNG encoder ---------- */
 
 let CRC_TABLE;
 function crc32(buf) {

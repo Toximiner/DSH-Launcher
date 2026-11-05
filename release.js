@@ -1,20 +1,20 @@
 'use strict';
-// Подготовка релиза: npm run release 1.16.0
-//   - раздел `## [Unreleased]` в CHANGELOG.md и CHANGELOG.en.md становится
-//     `## [1.16.0] — <сегодня>` (оба раздела должны быть и быть непустыми),
-//     а на его месте создаётся новый пустой `## [Unreleased]` — под правки
-//     до следующего релиза;
-//   - версия в package.json, package-lock.json и deb/control (1.16.0-1);
-//   - коммит «Версия 1.16.0» и тег v1.16.0 (локально; отправка — вручную,
-//     команду скрипт печатает: тег запускает сборку и публикацию релиза).
-// Только правка файлов, без коммита и тега: npm run release -- 1.16.0 --no-commit
-// Другая дата: --date 2026-10-13.
+// Release preparation: npm run release 1.16.0
+//   - the `## [Unreleased]` section in CHANGELOG.md and CHANGELOG.en.md
+//     becomes `## [1.16.0] — <today>` (both sections must exist and be
+//     non-empty), and a new empty `## [Unreleased]` is created in its place
+//     for edits before the next release;
+//   - the version in package.json, package-lock.json and deb/control (1.16.0-1);
+//   - the «Версия 1.16.0» commit and the v1.16.0 tag (locally; push is manual —
+//     the script prints the command: the tag triggers the build and release publication).
+// File edits only, no commit and tag: npm run release -- 1.16.0 --no-commit
+// A different date: --date 2026-10-13.
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const { compareDebianVer } = require('./src/versions');
 
-/* ===== release (чистые функции, тест test/release.js) ===== */
+/* ===== release (pure functions, test test/release.js) ===== */
 function checkVersion(v, current) {
   if (!/^\d+\.\d+\.\d+$/.test(String(v || ''))) throw new Error(`версия «${v}» не в формате X.Y.Z (напр. 1.16.0)`);
   if (current && compareDebianVer(`${v}-1`, `${current}-1`) <= 0) {
@@ -22,12 +22,12 @@ function checkVersion(v, current) {
   }
 }
 
-/* `## [Unreleased]` → `## [version] — date`; раздел должен быть непустым, а
-   раздела этой версии ещё не должно быть. HTML-комментарии (строчные) —
-   служебные: пустотой не считаются И не переносятся в раздел версии —
-   иначе попадут в описание релиза (1.17.1: плейсхолдер «сюда дописать»
-   ушёл в GitHub Release). Выше выпущенной версии создаётся новый пустой
-   раздел `## [Unreleased]` — под правки до следующего релиза. */
+/* `## [Unreleased]` → `## [version] — date`; the section must be non-empty
+   and no section for this version must exist yet. HTML comments (single-line)
+   are service ones: they do not count as emptiness and are not carried over
+   into the version section — otherwise they end up in the release description
+   (1.17.1: the «write here» placeholder went into the GitHub Release). Above
+   the released version — a new empty `## [Unreleased]` for edits before the next. */
 function releaseChangelog(text, version, date) {
   const lines = text.split('\n');
   const at = lines.findIndex((l) => /^## \[Unreleased\]\s*$/i.test(l));
@@ -37,8 +37,8 @@ function releaseChangelog(text, version, date) {
   const body = lines.slice(at + 1, next < 0 ? lines.length : next);
   const kept = [];
   for (const l of body) {
-    if (l.trim().startsWith('<!--') && l.trim().endsWith('-->')) continue; // служебный комментарий — в версию не переносим
-    if (!l.trim() && kept.length && !kept[kept.length - 1].trim()) continue; // подряд пустые строки — одна
+    if (l.trim().startsWith('<!--') && l.trim().endsWith('-->')) continue; // service comment — not carried into the version
+    if (!l.trim() && kept.length && !kept[kept.length - 1].trim()) continue; // consecutive blank lines — one
     kept.push(l);
   }
   if (!kept.some((l) => l.trim() && !l.startsWith('### '))) throw new Error('раздел «## [Unreleased]» пуст');
@@ -54,8 +54,8 @@ function setControlVersion(text, version) {
   return text.replace(/^Version: .*$/m, `Version: ${version}-1`);
 }
 
-/* package.json и package-lock.json (корень и packages[""]) — как пишет npm:
-   отступ 2 и перевод строки в конце. */
+/* package.json and package-lock.json (root and packages[""]) — as npm writes:
+   indent 2 and a trailing newline. */
 function setJsonVersion(text, version, lock) {
   const j = JSON.parse(text);
   j.version = version;
@@ -69,7 +69,7 @@ function today(d = new Date()) {
 }
 /* ===== end release ===== */
 
-// root — каталог репозитория (тест test/release.js — временный репозиторий)
+// root — the repository directory (test test/release.js — a temporary repository)
 function main(argv, root = __dirname) {
   const args = argv.slice(2);
   const commit = !args.includes('--no-commit');
@@ -91,7 +91,7 @@ function main(argv, root = __dirname) {
     if (git('tag', '--list', `v${version}`)) throw new Error(`тег v${version} уже есть`);
   }
 
-  // всё считаем заранее: ошибка в любом файле — не меняем ни одного
+  // compute everything up front: an error in any file — we change none of them
   const out = {
     'CHANGELOG.md': releaseChangelog(read('CHANGELOG.md'), version, date),
     'CHANGELOG.en.md': releaseChangelog(read('CHANGELOG.en.md'), version, date),
@@ -107,10 +107,10 @@ function main(argv, root = __dirname) {
     return;
   }
   git('add', ...Object.keys(out));
-  git('commit', '-q', '-m', `Версия ${version}`);
-  // Тег НЕ создаётся: прямой пуш в main закрыт (правило «Changes must be
-  // made through a pull request»), тег накладывается на коммит, слитый в
-  // main, уже после мержа (см. шаги в шапке .github/workflows/build-deb.yml).
+  git('commit', '-q', '-m', `Version ${version}`);
+  // The tag is NOT created: direct push to main is closed (the «Changes must
+  // be made through a pull request» rule); the tag is applied after the merge,
+  // to the commit in main (steps — in the header of .github/workflows/build-deb.yml).
   console.log(`Коммит «Версия ${version}» — локально, тега нет (тег — после мержа). Выпустить:\n` +
     `  git push origin main:release/${version}\n` +
     `  gh pr create --base main --head release/${version}\n` +

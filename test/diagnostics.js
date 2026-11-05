@@ -1,39 +1,40 @@
 #!/usr/bin/env node
-// Юнит-тесты src/diagnostics.js: rollbackSuggested — предлагать ли откат к
-// предыдущей версии после аварийного запуска обновлённого лаунчера.
+// Unit tests of src/diagnostics.js: rollbackSuggested — whether to offer
+// a rollback to the previous version after a crash start of the updated
+// launcher.
 'use strict';
 const assert = require('assert');
 const { extract } = require('./_extract');
 
 const rollbackSuggested = extract('rollbackSuggested', {});
 
-const atIso = '2026-11-05T12:00:00.000Z'; // время обновления (update.at)
+const atIso = '2026-11-05T12:00:00.000Z'; // the update time (update.at)
 const T = Date.parse(atIso);
 const iso = (ms) => new Date(T + ms).toISOString();
 const MIN = 60000;
 const m = (version, startedAt) => ({ version, startedAt });
 
-// нет данных — не предлагаем
-assert.strictEqual(rollbackSuggested(null, null, T), false, 'нет ни метки, ни обновления');
-assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(5 * MIN)), null, T), false, 'нет записи об обновлении');
-assert.strictEqual(rollbackSuggested(null, { to: '2.0.0-1', at: atIso }, T), false, 'нет метки прошлого запуска');
+// no data — we don't offer
+assert.strictEqual(rollbackSuggested(null, null, T), false, 'neither a mark nor an update');
+assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(5 * MIN)), null, T), false, 'no update record');
+assert.strictEqual(rollbackSuggested(null, { to: '2.0.0-1', at: atIso }, T), false, 'no mark of the previous launch');
 
-// другое приложение/версия — не предлагаем
-assert.strictEqual(rollbackSuggested(m('1.1.0-1', iso(5 * MIN)), { to: '2.0.0-1', at: atIso }, T + 10 * MIN), false, 'версия запуска != обновлённая');
-assert.strictEqual(rollbackSuggested({ version: 2, startedAt: iso(5 * MIN) }, { to: '2.0.0-1', at: atIso }, T + 10 * MIN), false, 'числовая версия в JSON — не совпадает');
+// another app/version — we don't offer
+assert.strictEqual(rollbackSuggested(m('1.1.0-1', iso(5 * MIN)), { to: '2.0.0-1', at: atIso }, T + 10 * MIN), false, 'launch version != updated version');
+assert.strictEqual(rollbackSuggested({ version: 2, startedAt: iso(5 * MIN) }, { to: '2.0.0-1', at: atIso }, T + 10 * MIN), false, 'numeric version in JSON — does not match');
 
-// битые/отсутствующие даты — не предлагаем
-assert.strictEqual(rollbackSuggested(m('2.0.0-1', 'битая дата'), { to: '2.0.0-1', at: atIso }, T), false, 'битая дата запуска');
-assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(5 * MIN)), { to: '2.0.0-1', at: 'битая' }, T), false, 'битая дата обновления');
-assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(5 * MIN)), { to: '2.0.0-1' }, T), false, 'нет даты обновления');
+// broken/missing dates — we don't offer
+assert.strictEqual(rollbackSuggested(m('2.0.0-1', 'битая дата'), { to: '2.0.0-1', at: atIso }, T), false, 'broken launch date');
+assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(5 * MIN)), { to: '2.0.0-1', at: 'битая' }, T), false, 'broken update date');
+assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(5 * MIN)), { to: '2.0.0-1' }, T), false, 'no update date');
 
-// окно 30 минут: срабатывает, когда проверка (now) в пределах окна после обновления
-// И аварийный запуск начался не раньше обновления
-assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(-60000)), { to: '2.0.0-1', at: atIso }, T), false, 'аварийный запуск начался до обновления');
-assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(0)), { to: '2.0.0-1', at: atIso }, T - 1000), false, 'проверка раньше обновления — вне окна');
-assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(5 * MIN)), { to: '2.0.0-1', at: atIso }, T + 10 * MIN), true, 'падение в 10 минут после обновления');
-assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(29 * MIN)), { to: '2.0.0-1', at: atIso }, T + 29 * MIN), true, 'на границе окна (29 минут) — предлагаем');
-assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(30 * MIN)), { to: '2.0.0-1', at: atIso }, T + 31 * MIN), false, '31 минута после обновления — вне окна');
-assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(MIN)), { to: '2.0.0-1', at: atIso }, T + 10 * 60 * MIN), false, '10 часов после обновления — вне окна');
+// the 30-minute window: it fires when the check (now) is within the window
+// after the update and the crash start began no earlier than the update
+assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(-60000)), { to: '2.0.0-1', at: atIso }, T), false, 'the crash start began before the update');
+assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(0)), { to: '2.0.0-1', at: atIso }, T - 1000), false, 'check before the update — outside the window');
+assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(5 * MIN)), { to: '2.0.0-1', at: atIso }, T + 10 * MIN), true, 'crash 10 minutes after the update');
+assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(29 * MIN)), { to: '2.0.0-1', at: atIso }, T + 29 * MIN), true, 'at the window edge (29 minutes) — we offer');
+assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(30 * MIN)), { to: '2.0.0-1', at: atIso }, T + 31 * MIN), false, '31 minutes after the update — outside the window');
+assert.strictEqual(rollbackSuggested(m('2.0.0-1', iso(MIN)), { to: '2.0.0-1', at: atIso }, T + 10 * 60 * MIN), false, '10 hours after the update — outside the window');
 
 console.log('OK: diagnostics — rollbackSuggested');

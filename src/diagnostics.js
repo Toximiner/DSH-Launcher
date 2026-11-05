@@ -1,5 +1,5 @@
 'use strict';
-// Диагностика: метка запуска (сообщение после сбоя) и «Сохранить отчёт…».
+// Diagnostics: the run marker (the message after a crash) and «Сохранить отчёт…».
 const { app, dialog } = require('electron');
 const { execFile } = require('child_process');
 const util = require('util');
@@ -21,25 +21,25 @@ const menus = require('./menus');
 const updatesLive = require('./updates-live');
 const updates = require('./updates');
 
-/* ---------------- прошлый запуск: завершился ли штатно ---------------- */
+/* ---------------- previous run: did it exit gracefully ---------------- */
 
-// При запуске — метка running.json (pid, время, версия), при штатном выходе
-// (will-quit) — удаляется. Осталась, а процесса нет — прошлый запуск
-// завершился аварийно (падение, kill -9, выключение питания): плашка с
-// «Журнал…» и «Сохранить отчёт…».
+// On start — the running.json marker (pid, time, version), on a graceful
+// exit (will-quit) — removed. It is left and the process is gone — the
+// previous run terminated abnormally (crash, kill -9, power loss): a
+// toast with «Журнал…» and «Сохранить отчёт…».
 const runMarkerFile = () => path.join(app.getPath('userData'), 'running.json');
 let previousCrash = null;
 
-// Прежний экземпляр ещё работает: процесс есть, не «зомби» (завершился, но
-// родитель не забрал код выхода) и это лаунчер — pid мог достаться другой
-// программе.
+// A previous instance is still running: the process exists, is not a
+// "zombie" (finished, but the parent did not collect the exit code) and it
+// is the launcher — the pid could have been reused by another program.
 function launcherPidAlive(pid) {
   try {
     const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
     const st = stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3);
     if (st === 'Z' || st === 'X') return false;
     return fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes(process.execPath);
-  } catch { return false; } // процесса нет
+  } catch { return false; } // the process is gone
 }
 
 function checkPreviousRun() {
@@ -49,7 +49,7 @@ function checkPreviousRun() {
       previousCrash = m;
       console.log(`[launcher] прошлый запуск (pid ${m.pid}, ${m.version || '?'}, начат ${m.startedAt || '?'}) завершился аварийно`);
     }
-  } catch { /* метки нет — прошлый завершился штатно (или первый запуск) */ }
+  } catch { /* no marker — the previous run exited gracefully (or first run) */ }
   try {
     fs.mkdirSync(path.dirname(runMarkerFile()), { recursive: true });
     let version = null;
@@ -62,12 +62,12 @@ function clearRunMarker() {
   try { fs.unlinkSync(runMarkerFile()); } catch { /* noop */ }
 }
 
-/* ===== rollbackSuggested (чистая функция, тест test/diagnostics.js) =====
-   Предлагать ли откат к предыдущей версии: прошлый аварийный запуск —
-   обновлённая версия (update.to) и стартовала в пределах ROLLBACK_WINDOW_MS
-   после обновления (update.at). m — метка running.json (version, startedAt).
-   Всё, чего не хватает (файлов нет, битые даты) — «не предлагаем». */
-const ROLLBACK_WINDOW_MS = 30 * 60 * 1000; // окно «сбой связан с обновлением»
+/* ===== rollbackSuggested (pure function, test test/diagnostics.js) =====
+   Whether to suggest a rollback to the previous version: the previous
+   abnormal run — the updated version (update.to), started within
+   ROLLBACK_WINDOW_MS after the update (update.at). m — the running.json
+   marker (version, startedAt). Anything missing (no files, broken dates) — "do not suggest". */
+const ROLLBACK_WINDOW_MS = 30 * 60 * 1000; // the «crash related to the update» window
 function rollbackSuggested(m, update, now) {
   if (!m || !update) return false;
   if (String(m.version || '') !== String(update.to || '')) return false;
@@ -82,7 +82,7 @@ function rollbackSuggested(m, update, now) {
 function maybeShowCrashNotice() {
   if (!previousCrash) return;
   const m = previousCrash;
-  previousCrash = null; // один раз
+  previousCrash = null; // only once
   console.log('[launcher] уведомление: прошлый запуск завершился аварийно');
   let when = '';
   try { when = new Date(m.startedAt).toLocaleString(i18n.getLang() === 'ru' ? 'ru-RU' : 'en-US'); } catch { /* noop */ }
@@ -100,12 +100,12 @@ function maybeShowCrashNotice() {
   }));
 }
 
-/* ---------------- отчёт для поддержки ---------------- */
+/* ---------------- report for support ---------------- */
 
-// «Справка → Сохранить отчёт…»: архив .tar.gz — сведения о системе и
-// версиях, журнал лаунчера, хвост журнала dsh, настройки; токены и ключи
-// скрыты (redactLog). DSH_LAUNCHER_REPORT_PATH — куда сохранить без диалога
-// (тесты).
+// «Справка → Сохранить отчёт…»: a .tar.gz archive — system and version info, the
+// launcher log, the tail of the dsh log, the settings; tokens and keys are
+// hidden (redactLog). DSH_LAUNCHER_REPORT_PATH — where to save without a
+// dialog (tests).
 
 
 async function reportFacts() {
@@ -135,7 +135,7 @@ async function reportFacts() {
   ];
 }
 
-// Дампы падений Electron (*.dmp) в userData/Crashpad (crashReporter в main.js).
+// Electron crash dumps (*.dmp) in userData/Crashpad (crashReporter in main.js).
 function listCrashDumps() {
   const out = [];
   const walk = (d, depth) => {
@@ -145,7 +145,7 @@ function listCrashDumps() {
       const p = path.join(d, it.name);
       if (it.isDirectory() && depth < 3) walk(p, depth + 1);
       else if (it.isFile() && it.name.endsWith('.dmp')) {
-        try { const st = fs.statSync(p); out.push({ path: p, mtimeMs: st.mtimeMs, size: st.size }); } catch { /* исчез */ }
+        try { const st = fs.statSync(p); out.push({ path: p, mtimeMs: st.mtimeMs, size: st.size }); } catch { /* vanished */ }
       }
     }
   };
@@ -158,7 +158,7 @@ function listCrashDumps() {
 async function saveReport() {
   let dest = process.env.DSH_LAUNCHER_REPORT_PATH || null;
   if (!dest) {
-    const parent = state.win; // диалог — слой главного окна
+    const parent = state.win; // the dialog — a layer of the main window
     let dir = os.homedir();
     try { dir = app.getPath('downloads'); } catch { /* noop */ }
     const r = await dialog.showSaveDialog(parent, {
@@ -177,13 +177,13 @@ async function saveReport() {
     const put = (name, text) => fs.writeFileSync(path.join(dir, name), redactLog(text));
     put('info.txt', reportInfoText(await reportFacts()));
     for (const f of [LAUNCHER_LOG_FILE + '.1', LAUNCHER_LOG_FILE]) {
-      try { put(path.basename(f), fs.readFileSync(f, 'utf8')); } catch { /* нет файла */ }
+      try { put(path.basename(f), fs.readFileSync(f, 'utf8')); } catch { /* no file */ }
     }
     const dshTail = dshLog.logTail(LOG_FILE, 5000, 1024 * 1024);
     if (dshTail !== null) put('dsh.log.tail', dshTail + '\n');
     put('settings.json', JSON.stringify(loadSettings(), null, 2) + '\n');
     try { put('gpu.json', JSON.stringify(app.getGPUFeatureStatus(), null, 2) + '\n'); } catch { /* noop */ }
-    // дампы падений (бинарные, как есть): последние за 30 дней
+    // crash dumps (binary, as-is): the last 30 days
     const dumps = pickCrashDumps(listCrashDumps(), Date.now());
     if (dumps.length) {
       fs.mkdirSync(path.join(dir, 'crash-dumps'));
@@ -220,4 +220,4 @@ function showReportDialog(error) {
        </div>`));
 }
 
-Object.assign(module.exports, { checkPreviousRun, clearRunMarker, maybeShowCrashNotice, saveReport, rollbackSuggested }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { checkPreviousRun, clearRunMarker, maybeShowCrashNotice, saveReport, rollbackSuggested }); // we extend, not replace: the modules include each other in cycles

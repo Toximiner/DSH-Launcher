@@ -1,5 +1,5 @@
 'use strict';
-// Обновления при запуске: проверка, вопрос, скачивание и установка лаунчера и dsh.
+// Updates on launch: check, ask, download and install of the launcher and dsh.
 const { app, clipboard } = require('electron');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -19,60 +19,65 @@ const { httpGet } = require('./updates-http');
 const { DSH_NPM_PKG, UPDATE_GITHUB_REPO, fetchLauncherLatest, fetchDshLatest } = require('./updates-github');
 const pages = require('./pages');
 const settingsWindow = require('./settings-window');
-const { blankResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
+const { blankResponse } = require('./respond'); // pure module — direct require, no registry
 
 const MB = 1024 * 1024;
-const DOWNLOAD_PROGRESS_MS = REDRAW_MS; // тик прогресса скачивания — как тик установки
-const RESTART_AFTER_UPDATE_MS = 1500; // «Обновление установлено» → авто-перезапуск
-const RESTART_SPAWN_GRACE_MS = 200; // ожидание spawn 'error' перед закрытием старого
+const DOWNLOAD_PROGRESS_MS = REDRAW_MS; // the download progress tick — like the install tick
+const RESTART_AFTER_UPDATE_MS = 1500; // «Обновление установлено» → auto-restart
+const RESTART_SPAWN_GRACE_MS = 200; // wait for the spawn 'error' event before closing the old instance
 
-/* ---------------- проверка обновлений (лаунчер и dsh) ----------------
- * При старте (в onReady, параллельно со всем остальным) проверяем:
- *  - последний релиз dsh-launcher (GitHub Releases Toximiner/DSH-Launcher);
- *  - последнюю версию npm-пакета @deepseek-ai/dsh.
- * Запросы уходят сразу при старте, параллельно остальному; перед запуском
- * dsh лаунчер ждёт их ответа не дольше ~8 с (без сети запрос падает сразу).
- * Сетевая ошибка или таймаут — просто без вопроса (в логе — строка).
+/* ---------------- update check (launcher and dsh) ----------------
+ * On start (in onReady, in parallel with everything else) we check:
+ *  - the latest dsh-launcher release (GitHub Releases Toximiner/DSH-Launcher);
+ *  - the latest version of the @deepseek-ai/dsh npm package.
+ * The requests go out immediately at startup, in parallel with the rest;
+ * before starting dsh the launcher waits for their answer at most ~8 s
+ * (with no network the request fails at once). A network error or a
+ * timeout — just no question (a line in the log).
  *
- * На пути само-запуска (перед стартом dsh) при наличии новой версии окно
- * спрашивает (тот же паттерн, что вопрос про маркет):
- *  - лаунчер: скачивает .deb из релиза в userData/updates/ (sha256 считается
- *    на лету и сверяется с digest ассета из GitHub API) и ставит его от root
- *    через pkexec — polkit спросит пароль системным диалогом. Под root пакет
- *    сначала копируется в свой каталог и сверяется с тем же sha256 — подмена
- *    файла в userData между скачиванием и установкой не пройдёт. Успех →
- *    страница «Обновление установлено» и авто-перезапуск через ~1.5 с: старый
- *    экземпляр отпускает single-instance лок, запускает новый и закрывается.
- *    Нет pkexec / отменили ввод пароля / ошибка → страница с командой для
- *    терминала (`sudo apt install -y <deb>`) и «Проверить ещё раз»;
- *  - dsh: если глобальный npm-prefix доступен без sudo —
- *    `npm install -g @deepseek-ai/dsh@<версия>` с живым логом; если prefix
- *    принадлежит root, а npm системный — та же команда через pkexec (polkit
- *    спрашивает пароль системным диалогом, как при обновлении лаунчера);
- *    иначе (npm из nvm, ~/.npm-global) — страница с командой для терминала
- *    и «Проверить ещё раз». После успеха dsh стартует сразу с новой версией.
+ * On the self-launch path (before starting dsh) with a new version
+ * available the window asks (the same pattern as the market question):
+ *  - launcher: downloads the .deb from the release into
+ *    userData/updates/ (the sha256 is computed on the fly and compared
+ *    with the GitHub API asset digest) and installs it as root via pkexec
+ *    — polkit will ask for the password in a system dialog. Under root the
+ *    package is first copied to its own directory and checked against the
+ *    same sha256 — a file swap in userData between the download and the
+ *    install won't pass. Success → the «Обновление установлено» page and
+ *    an auto-restart after ~1.5 s: the old instance releases the
+ *    single-instance lock, starts the new one and closes. No pkexec / the
+ *    password entry was cancelled / an error → a page with a command for
+ *    the terminal (`sudo apt install -y <deb>`) and «Проверить ещё раз»;
+ *  - dsh: if the global npm prefix is available without sudo —
+ *    `npm install -g @deepseek-ai/dsh@<version>` with a live log; if the
+ *    prefix belongs to root and npm is system — the same command via
+ *    pkexec (polkit asks for the password in a system dialog, as with a
+ *    launcher update); otherwise (npm from nvm, ~/.npm-global) — a page
+ *    with a command for the terminal and «Проверить ещё раз». After
+ *    success dsh starts immediately with the new version.
  *
- * В режиме подключения (dsh уже работает из-вне) не спрашиваем: чужой dsh
- * перезапускать нельзя, а обновление самого лаунчера предложим при
- * следующем само-запуске. «Не спрашивать больше» запоминается на версию
- * (userData/update-prefs.json) — новый релиз спросит снова.
+ * In attach mode (dsh already runs from outside) we don't ask: someone
+ * else's dsh can't be restarted, and the launcher's own update will be
+ * offered on the next self-launch. «Не спрашивать больше» is remembered
+ * per version (userData/update-prefs.json) — a new release asks again.
  *
- * Переменные окружения:
- *  DSH_LAUNCHER_NO_UPDATE_CHECK=1 — проверки отключены;
+ * Environment variables:
+ *  DSH_LAUNCHER_NO_UPDATE_CHECK=1 — checks disabled;
  *  DSH_LAUNCHER_FAKE_LAUNCHER_LATEST / DSH_LAUNCHER_FAKE_DSH_LATEST —
- *    «будущая» версия для разработки и тестов (у лаунчера .deb всё равно
- *    берётся из настоящего latest-релиза);
- *  DSH_LAUNCHER_FAKE_INSTALLED — «установленная» версия лаунчера (тесты);
- *  DSH_LAUNCHER_GITHUB_API=http://127.0.0.1:<порт> — подставной GitHub API
- *    (Docker-тесты, test/docker/fakes/github.py): список релизов и .deb.
+ *    a «future» version for development and tests (the launcher .deb still
+ *    comes from the real latest release);
+ *  DSH_LAUNCHER_FAKE_INSTALLED — the «installed» launcher version (tests);
+ *  DSH_LAUNCHER_GITHUB_API=http://127.0.0.1:<port> — a stand-in GitHub API
+ *    (Docker tests, test/docker/fakes/github.py): the release list and .deb.
  */
-const UPDATE_CHECK_TIMEOUT = 8000; // сколько ждать проверки, прежде чем не спрашивать
-const NO_UPDATE_CHECK = !CONFIG.checkUpdates; // DSH_LAUNCHER_NO_UPDATE_CHECK или «Настройки»
+const UPDATE_CHECK_TIMEOUT = 8000; // how long to wait for the check before not asking
+const NO_UPDATE_CHECK = !CONFIG.checkUpdates; // DSH_LAUNCHER_NO_UPDATE_CHECK or «Настройки»
 
-// Версия пакета лаунчера — из базы dpkg, без запуска dpkg-query: запуск
-// дочернего процесса во время загрузки окна-диалога ронял Electron 44
-// («О программе»: SIGSEGV / «terminate called without an active exception»).
-// null — не установлен через .deb (запуск из исходников) → не проверяем.
+// The launcher package version — from the dpkg database, without running
+// dpkg-query: spawning a child process while the dialog window loads
+// crashed Electron 44 («О программе»: SIGSEGV / «terminate called
+// without an active exception»). null — not installed via .deb (run from
+// sources) → we don't check.
 async function launcherInstalledVersion() {
   const fake = process.env.DSH_LAUNCHER_FAKE_INSTALLED;
   if (fake) return String(fake);
@@ -83,7 +88,7 @@ async function launcherInstalledVersion() {
   }
 }
 
-// Блок «Что нового» — версии от новой к старой; пусто — ''.
+// The «Что нового» block — versions from newest to oldest; empty — ''.
 function notesBlockHtml(items) {
   const parts = (items || [])
     .map((r) => ({ v: r.version, html: mdToHtml(releaseNotesLang(r.body, i18n.getLang())) }))
@@ -93,7 +98,7 @@ function notesBlockHtml(items) {
     <div class="notes">${parts.map((r) => `<div class="ver"><code>${esc(r.v)}</code></div>${r.html}`).join('')}</div>`;
 }
 
-// При старте — оба запроса в параллель (здесь не ждём их завершения).
+// On start — both requests in parallel (we don't wait for them here).
 function startUpdateChecks() {
   if (GITHUB_TOKEN) console.log('[launcher] запросы к GitHub API — с токеном (DSH_LAUNCHER_GITHUB_TOKEN)');
   if (UPDATE_NOW) console.log(`[launcher] обновление ${UPDATE_NOW} — по просьбе пользователя, без вопроса`);
@@ -114,22 +119,22 @@ function startUpdateChecks() {
 }
 
 let updateState = {
-  kind: null,          // 'launcher' | 'dsh' — какой вопрос сейчас на странице
+  kind: null,          // 'launcher' | 'dsh' — which question is on the page now
   mode: 'ask',         // 'ask' | 'running' | 'manual' | 'success'
-  resolve: null,       // resolve текущего вопроса
-  running: false,      // идёт процесс (скачивание / установка)
+  resolve: null,       // the resolver of the current question
+  running: false,      // a process is running (download / install)
   log: [], timer: null, proc: null, cmdLine: null,
-  latest: null,        // новая версия (текст вопроса)
-  installed: null,     // текущая версия
-  htmlUrl: null,       // страница релиза (у dsh — страница пакета npm)
-  notes: [],           // «Что нового»: релизы между установленной и новой версией (лаунчер)
-  debPath: null,       // скачанный .deb
-  manualCmd: null,     // команда для терминала (режим manual)
+  latest: null,        // the new version (the question text)
+  installed: null,     // the current version
+  htmlUrl: null,       // the release page (for dsh — the npm package page)
+  notes: [],           // «Что нового»: releases between the installed and the new version (launcher)
+  debPath: null,       // the downloaded .deb
+  manualCmd: null,     // the command for the terminal (manual mode)
   restartTimer: null,
 };
 
-// Закрытие лаунчера: процесс шага обновления, таймер перерисовки и таймер
-// авто-перезапуска (before-quit → state.settleAllOperations, main.js).
+// Launcher shutdown: the update-step process, the redraw timer and the
+// auto-restart timer (before-quit → state.settleAllOperations, main.js).
 function settleUpdateState() {
   if (updateState.proc) { try { updateState.proc.kill('SIGTERM'); } catch { /* noop */ } }
   clearInterval(updateState.timer);
@@ -147,7 +152,7 @@ function updatePrefs() {
   return readPref(UPDATE_PREFS) || {};
 }
 
-// «Не спрашивать больше» — на версию: отказ от старой не скрывает новую.
+// «Не спрашивать больше» is per version: dismissing the old one doesn't hide the new one.
 function updateDismissed(kind, version) {
   return updatePrefs()[kind] === version;
 }
@@ -235,9 +240,9 @@ function showUpdatePage(note, noteIsError = false) {
   pages.showStatus(title, body, noteIsError);
 }
 
-// Показывает вопрос (режим ask/manual) и ждёт выбора:
-// 'install' | 'later' | 'never' | 'recheck'. 'copy' и 'restart' вопрос не
-// разрешают (перерисовывают страницу / закрывают приложение).
+// Shows the question (ask/manual mode) and waits for the choice:
+// 'install' | 'later' | 'never' | 'recheck'. 'copy' and 'restart' don't
+// resolve the question (they redraw the page / close the app).
 function askUpdate(note, noteIsError) {
   return new Promise((resolve) => {
     updateState.resolve = resolve;
@@ -265,9 +270,9 @@ function onUpdateChoice(choice) {
   return blankResponse();
 }
 
-// Шаг установки с живым логом на странице (живой лог — pages.liveLogTick:
-// строки дописываются без перезагрузки страницы, скролл остаётся за
-// пользователем).
+// An install step with a live log on the page (the live log —
+// pages.liveLogTick: lines are appended without reloading the page, the
+// scroll stays with the user).
 function runUpdateStep(cmd, args, env) {
   updateState.mode = 'running';
   updateState.cmdLine = [cmd, ...args].join(' ');
@@ -275,15 +280,17 @@ function runUpdateStep(cmd, args, env) {
   showUpdatePage();
   return runWithLiveLog(updateState, cmd, args, {
     env,
-    // mode === 'running' — иначе уже показана другая страница (ошибка/успех),
-    // и доп. перерисовка затёрла бы её note (тик мог успеть разрешиться позже).
+    // mode === 'running' — otherwise another page is already shown
+    // (error/success), and an extra redraw would overwrite its note (the
+    // tick may have resolved later).
     redraw: pages.liveRedraw(updateState, () => updateState.mode === 'running', showUpdatePage),
   });
 }
 
-// Скачивание .deb из релиза в userData/updates/. Прогресс — в логе на
-// странице (те же тики, что и установки). sha256 считается по байтам из
-// сети (а не по файлу на диске) и, если GitHub его знает, сверяется с digest.
+// Downloading the .deb from the release into userData/updates/. The
+// progress — in the log on the page (the same ticks as install). The
+// sha256 is computed over the bytes from the network (not over the file
+// on disk) and, if GitHub knows it, is compared with the digest.
 async function downloadDeb(url, expectedSha256) {
   updateState.running = true;
   updateState.mode = 'running';
@@ -295,11 +302,11 @@ async function downloadDeb(url, expectedSha256) {
   const dir = path.join(app.getPath('userData'), 'updates');
   try {
     fs.mkdirSync(dir, { recursive: true });
-    // Пакеты прошлых попыток больше не нужны — не копим их.
+    // Packages from earlier attempts are no longer needed — we don't accumulate them.
     for (const f of fs.readdirSync(dir)) {
       if (f.endsWith('.deb')) try { fs.unlinkSync(path.join(dir, f)); } catch { /* noop */ }
     }
-    const res = await httpGet(url, { headers: { 'User-Agent': 'dsh-launcher' } }); // не electronNet — см. proxyUrlFromRule
+    const res = await httpGet(url, { headers: { 'User-Agent': 'dsh-launcher' } }); // not electronNet — see proxyUrlFromRule
     if (res.statusCode !== 200) { res.resume(); throw new Error(`download: HTTP ${res.statusCode}`); }
     const total = Number(res.headers['content-length'] || 0);
     const name = url.split('/').pop() || 'dsh-launcher.deb';
@@ -350,9 +357,9 @@ async function downloadDeb(url, expectedSha256) {
   }
 }
 
-// Перезапуск после обновления лаунчера: отпускаем single-instance лок, чтобы
-// новый экземпляр сразу его взял, запускаем новый отсоединённым (он
-// переживёт наш выход) и закрываемся штатно — через before-quit.
+// The restart after a launcher update: we release the single-instance
+// lock so the new instance takes it at once, spawn the new one detached
+// (it will survive our exit) and close gracefully — via before-quit.
 function restartLauncher() {
   if (state.restarting || state.stopping) return;
   state.restarting = true;
@@ -361,8 +368,8 @@ function restartLauncher() {
   let started = false;
   const fail = (e) => {
     state.restarting = false;
-    state.launcherUpdatedOnDisk = false; // не перезапускаться заново на каждом падении процесса
-    app.requestSingleInstanceLock(); // остаёмся единственным экземпляром
+    state.launcherUpdatedOnDisk = false; // don't restart again on every process crash
+    app.requestSingleInstanceLock(); // we stay the only instance
     if (state.stopping) return;
     console.error('[launcher] авто-перезапуск не удался:', e.message);
     showUpdatePage(
@@ -371,15 +378,15 @@ function restartLauncher() {
       true
     );
   };
-  // запуск — через bash (spawnLauncherAfterExit): нет программы — узнаём здесь,
-  // а не по 'error' (bash-то есть)
+  // the spawn — through bash (spawnLauncherAfterExit): if the program is
+  // missing we learn it here, not via 'error' (bash is there)
   try { fs.accessSync(exe, fs.constants.X_OK); } catch (e) { fail(e); return; }
   const p = settingsWindow.spawnLauncherAfterExit(exe, [], 'ignore');
   p.on('spawn', () => { started = true; });
   p.on('error', fail);
   p.unref();
-  // Даём событию 'error' chance (нет exe — сработает сразу): если процесс не
-  // стартовал, приложение не закрываем — показана ошибка.
+  // We give the 'error' event a chance (missing exe — it fires at once):
+  // if the process didn't start, we don't close the app — the error is shown.
   setTimeout(() => {
     if (!started) return;
     console.log(`[launcher] запущена новая версия (${exe}), закрываю старую`);
@@ -387,9 +394,10 @@ function restartLauncher() {
   }, RESTART_SPAWN_GRACE_MS);
 }
 
-// Когда и куда лаунчер обновили (last-update.json): следующий запуск, если
-// обновлённая версия падает, по нему понимает «сбой связан с обновлением»
-// и предлагает откат (diagnostics.rollbackSuggested).
+// When and to where the launcher was updated (last-update.json): the next
+// start, if the updated version crashes, uses this to understand "the
+// failure is related to the update" and offers a rollback
+// (diagnostics.rollbackSuggested).
 const readLastUpdate = () => {
   const u = readPref('last-update.json');
   return u && typeof u === 'object' ? u : null;
@@ -397,10 +405,11 @@ const readLastUpdate = () => {
 const writeLastUpdate = () =>
   writePref('last-update.json', { from: updateState.installed, to: tagToPackageVersion(updateState.latest), at: new Date().toISOString() });
 
-// Лаунчер обновлён на диске, а работает ещё старый: apt заменил файлы
-// /opt/dsh-launcher под нами. Уже открытые файлы живут (старые inode), но
-// новые процессы Chromium (GPU, утилиты) запустились бы из нового бинарника —
-// поэтому перезапускаемся быстро, а при падении любого процесса — сразу.
+// The launcher is updated on disk but the old one is still running: apt
+// replaced the /opt/dsh-launcher files under us. The already-open files
+// live on (old inodes), but new Chromium processes (GPU, utilities) would
+// start from the new binary — so we restart quickly, and on any process
+// crash — at once.
 function showUpdateSuccess() {
   state.launcherUpdatedOnDisk = true;
   writeLastUpdate();
@@ -410,27 +419,28 @@ function showUpdateSuccess() {
   }
   updateState.mode = 'success';
   showUpdatePage();
-  // ~1.5 с, чтобы страница успела показаться; если окно закроют раньше —
-  // before-quit очистит таймер.
+  // ~1.5 s so the page has time to appear; if the window is closed
+  // earlier — before-quit clears the timer.
   updateState.restartTimer = setTimeout(() => restartLauncher(), RESTART_AFTER_UPDATE_MS);
 }
 
-// Установка .deb от root (через pkexec). pkexec чистит окружение, поэтому
-// DEBIAN_FRONTEND задаётся внутри. Пакет копируется в каталог root и
-// сверяется с sha256, посчитанным при скачивании: файл в userData доступен
-// пользователю на запись, и без копии его можно было бы подменить между
-// проверкой и установкой. $1 — путь к .deb, $2 — sha256.
+// Installing the .deb as root (via pkexec). pkexec clears the
+// environment, so DEBIAN_FRONTEND is set inside. The package is copied
+// into root's directory and checked against the sha256 computed at
+// download time: the file in userData is writable by the user, and without
+// the copy it could be swapped between the check and the install.
+// $1 — the .deb path, $2 — the sha256.
 const ROOT_INSTALL_SH = [
   'set -e',
   'd=$(mktemp -d)',
   'trap \'rm -rf "$d"\' EXIT',
   'cp -- "$1" "$d/update.deb"',
   'echo "$2  $d/update.deb" | sha256sum -c --quiet -',
-  // --allow-downgrades: «Вернуть предыдущую версию…» ставит версию старше установленной
+  // --allow-downgrades: «Вернуть предыдущую версию…» installs a version older than the installed one
   'DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades "$d/update.deb"',
 ].join('; ');
 
-// Общее начало страницы обновления — одинаковый набор полей у обоих.
+// The common beginning of the update page — the same set of fields for both.
 function beginUpdate({ kind, version, installed, notes, htmlUrl, logLine }) {
   console.log(logLine);
   updateState.kind = kind;
@@ -443,24 +453,25 @@ function beginUpdate({ kind, version, installed, notes, htmlUrl, logLine }) {
   updateState.manualCmd = null;
 }
 
-// «Поставить в терминале»: команда для копирования и заметка-ошибка.
+// "Install in the terminal": the command to copy and an error note.
 const manual = (manualCmd, note) => {
   updateState.mode = 'manual';
   if (manualCmd) updateState.manualCmd = manualCmd;
   return { note, noteIsError: true };
 };
-// Хендлеру выбора («recheck»/«install») так говорят «стоп, с результатом».
+// How the choice handler («recheck»/«install») is told "stop, with a result".
 const done = (value) => ({ return: value });
 
-// Цикл обновления (общий для лаунчера и dsh): вопрос; «никогда» — не
-// спрашивать про эту версию, «позже» — выход; «проверить ещё раз» /
-// «установить» — installStep(choice). { note, noteIsError } — снова вопрос
-// с заметкой; done(...) — выход (значение — результат функции: true —
-// лаунчер обновлён и сейчас перезапустится, dsh поднимет новый экземпляр).
+// The update loop (common for the launcher and dsh): the question;
+// "never" — don't ask about this version, "later" — exit; "check again" /
+// "install" — installStep(choice). { note, noteIsError } — ask again with
+// a note; done(...) — exit (the value is the function's result: true —
+// the launcher is updated and will restart now, the new instance will
+// raise dsh).
 async function offerUpdateFlow({ kind, version, laterLog, installStep }) {
   let note = null;
   let noteIsError = false;
-  let auto = UPDATE_NOW === kind; // «Обновить сейчас» — первый раз без вопроса
+  let auto = UPDATE_NOW === kind; // «Обновить сейчас» — the first time without a question
   for (;;) {
     const choice = auto ? 'install' : await askUpdate(note, noteIsError);
     auto = false;
@@ -474,20 +485,20 @@ async function offerUpdateFlow({ kind, version, laterLog, installStep }) {
   }
 }
 
-// true — лаунчер обновлён и сейчас перезапустится: dsh этим экземпляром не
-// запускаем (его поднимет новый).
+// true — the launcher is updated and will restart now: dsh is not started
+// by this instance (the new one will raise it).
 async function offerLauncherUpdate() {
-  if (UPDATE_NOW === 'dsh') return; // просили обновить dsh — о лаунчере спросим в другой раз
+  if (UPDATE_NOW === 'dsh') return; // asked to update dsh — about the launcher we'll ask another time
   const newest = await state.updateChecks.launcher;
-  if (!newest || !newest.version) return; // нет сети / отключено / таймаут
+  if (!newest || !newest.version) return; // no network / disabled / timeout
   const installed = await launcherInstalledVersion();
-  if (!installed) return; // не установлен через .deb (запуск из исходников)
-  // «Вернуть предыдущую версию…»: ставим выбранную (старше установленной)
+  if (!installed) return; // not installed via .deb (run from sources)
+  // «Вернуть предыдущую версию…»: we install the chosen one (older than the installed one)
   const target = INSTALL_VERSION ? (newest.all || []).find((r) => r.version === INSTALL_VERSION) : null;
   if (INSTALL_VERSION && !target) { console.error(`[launcher] версии ${INSTALL_VERSION} нет среди релизов — откат отменён`); return; }
   const latest = target ? { ...newest, ...target } : newest;
   const latestPkg = tagToPackageVersion(latest.version);
-  if (!target && compareDebianVer(latestPkg, installed) <= 0) return; // новой версии нет
+  if (!target && compareDebianVer(latestPkg, installed) <= 0) return; // no new version
   updateState.rollback = Boolean(target);
   if (target) console.log(`[launcher] откат: ставлю ${target.version} (установлена ${installed})`);
   if (UPDATE_NOW !== 'launcher' && updateDismissed('launcher', latest.version)) {
@@ -508,7 +519,7 @@ async function offerLauncherUpdate() {
     laterLog: '[launcher] обновление лаунчера отложено (не сейчас)',
     installStep: async (choice) => {
       if (choice === 'recheck') {
-        // Пользователь поставил .deb сам, в терминале.
+        // The user installed the .deb themselves, in the terminal.
         const now = await launcherInstalledVersion();
         if (now && compareDebianVer(latestPkg, now) <= 0) {
           updateState.installed = now;
@@ -543,13 +554,13 @@ async function offerLauncherUpdate() {
       if (state.stopping) return done(undefined);
       if (code === 0) {
         console.log(`[launcher] dsh-launcher ${latest.version} установлен`);
-        // после отката не предлагать сразу вернуть самую новую
+        // after a rollback don't offer at once to return to the newest
         if (target && newest.version !== target.version) updateDismiss('launcher', newest.version);
         showUpdateSuccess();
         return done(true);
       }
-      // Отказ от ввода пароля polkit — тоже ненулевой код: команда для
-      // терминала ссылается на уже скачанный пакет.
+      // A polkit password entry refusal is also a non-zero code: the
+      // terminal command refers to the already-downloaded package.
       console.error(`[launcher] pkexec apt-get завершился с кодом ${code} — даю команду вручную`);
       return manual(`sudo apt install -y ${dl.path}`,
         tr(`Установка не удалась (код ${code}). Если вы отменили ввод пароля — попробуйте ещё раз.`,
@@ -579,12 +590,13 @@ async function offerDshUpdate() {
     notes: (latest.releases || []).length
       ? notesBetween(latest.releases, state.dshInstalledVersion, latest.version, 'semver')
           .map((r) => ({ version: r.version, body: dshNotesPart(r.body) }))
-      : [], // описания релизов dsh — из GitHub (fetchDshLatest); их нет — блок не покажем
+      : [], // the dsh release descriptions — from GitHub (fetchDshLatest); none — we don't show the block
     logLine: `[launcher] новый ${DSH_NPM_PKG}: ${latest.version} (установлен ${state.dshInstalledVersion})`,
   });
   const cmdAuto = `npm install -g ${DSH_NPM_PKG}@${latest.version}`;
-  // prefix доступен без sudo (canAuto) — sudo с nvm только навредит;
-  // системный prefix — команда с sudo (авто-установка там идёт через pkexec).
+  // the prefix is available without sudo (canAuto) — sudo with nvm would
+  // only hurt; a system prefix — the command with sudo (auto-install there
+  // goes through pkexec).
   const manualCmd = (npmInfo) => (npmInfo && npmInfo.canAuto ? cmdAuto : `sudo ${cmdAuto}`);
   return offerUpdateFlow({
     kind: 'dsh',
@@ -598,8 +610,8 @@ async function offerDshUpdate() {
           console.log(`[launcher] dsh обновлён до ${r.version} (в терминале)`);
           return done(undefined);
         }
-        // Команда — по тем же правилам, что и установка: системный prefix
-        // требует sudo, пользовательский (nvm) — нет.
+        // The command — by the same rules as the install: a system prefix
+        // needs sudo, a user one (nvm) — no.
         const info = await npmInstallInfo();
         return manual(info.hasNpm && !info.canAuto ? `sudo ${cmdAuto}` : cmdAuto,
           tr(`Всё ещё версия ${r.ok ? r.version : 'неизвестно'}. Поставьте новую и нажмите «Проверить ещё раз».`,
@@ -609,8 +621,9 @@ async function offerDshUpdate() {
       const npmInfo = await npmInstallInfo();
       if (state.stopping) return done(undefined);
       if (!npmInfo.hasNpm || (!npmInfo.canAuto && npmInfo.rootMode !== 'pkexec')) {
-        // Глобальный prefix недоступен без sudo (или npm нет) — команда для
-        // терминала. Если prefix системный (root), но pkexec нет — тоже сюда.
+        // The global prefix is not available without sudo (or there's no
+        // npm) — a command for the terminal. If the prefix is system
+        // (root) but there's no pkexec — also here.
         let note;
         if (npmInfo.nodeOld) {
           note = tr(`Node.js ${npmInfo.nodeVersion} слишком стар для dsh (нужен ${MIN_NODE_MAJOR}+). Сначала обновите Node.js, затем поставьте dsh командой выше.`,
@@ -626,10 +639,10 @@ async function offerDshUpdate() {
       }
       const code = npmInfo.canAuto
         ? await runUpdateStep(npmInfo.npm, ['install', '-g', `${DSH_NPM_PKG}@${latest.version}`], envWithBinDir(npmInfo.npm))
-        // Системный prefix: npm под pkexec — polkit спросит пароль системным
-        // диалогом, как при обновлении лаунчера. Свой пользовательский prefix
-        // (nvm, ~/.npm-global) так не трогаем — там root оставил бы файлы,
-        // которые пользователь потом не обновит (rootInstallMode).
+        // A system prefix: npm under pkexec — polkit asks for the password
+        // in a system dialog, as with a launcher update. We don't touch
+        // our own user prefix (nvm, ~/.npm-global) that way — there root
+        // would leave files the user can't update later (rootInstallMode).
         : await runUpdateStep(npmInfo.pkexec, pkexecNpmArgs(npmInfo.npm, ['install', '-g', `${DSH_NPM_PKG}@${latest.version}`]));
       if (state.stopping) return done(undefined);
       if (code === 0) {
@@ -639,8 +652,9 @@ async function offerDshUpdate() {
           console.log(`[launcher] ${DSH_NPM_PKG} обновлён → ${r.version}; dsh стартует с новой версией`);
           return done(undefined);
         }
-        // npm отработал, но запускаемый dsh — прежний: npm ставит в другой
-        // prefix (например, dsh из nvm, а npm — системный).
+        // npm worked, but the dsh being started is the old one: npm
+        // installs into another prefix (e.g., dsh from nvm, and npm is
+        // system).
         console.error(`[launcher] npm install прошёл, но ${state.dshBin} — ${r.ok ? r.version : 'не запускается'} (prefix npm: ${npmInfo.prefix})`);
         return manual(manualCmd(npmInfo),
           tr(`npm поставил пакет в ${npmInfo.prefix || 'свой prefix'}, но лаунчер запускает ${state.dshBin} (версия ${r.ok ? r.version : 'неизвестна'}). Обновите dsh тем npm, которым он был установлен, и нажмите «Проверить ещё раз».`,
@@ -656,4 +670,4 @@ async function offerDshUpdate() {
   });
 }
 
-Object.assign(module.exports, { DSH_NPM_PKG, UPDATE_GITHUB_REPO, UPDATE_CHECK_TIMEOUT, NO_UPDATE_CHECK, launcherInstalledVersion, fetchLauncherLatest, notesBlockHtml, fetchDshLatest, startUpdateChecks, updateState, updatePrefFile, updatePrefs, onUpdateChoice, restartLauncher, offerLauncherUpdate, offerDshUpdate, readLastUpdate }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { DSH_NPM_PKG, UPDATE_GITHUB_REPO, UPDATE_CHECK_TIMEOUT, NO_UPDATE_CHECK, launcherInstalledVersion, fetchLauncherLatest, notesBlockHtml, fetchDshLatest, startUpdateChecks, updateState, updatePrefFile, updatePrefs, onUpdateChoice, restartLauncher, offerLauncherUpdate, offerDshUpdate, readLastUpdate }); // extend, don't replace: the modules require each other in a circle

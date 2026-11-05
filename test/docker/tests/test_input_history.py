@@ -1,11 +1,11 @@
-"""История введённого (↑/↓ в поле dsh): после отправки сообщение можно поднять
-стрелками (свежие — сверху, повторы подряд не дублируются), Esc возвращает
-недописанный черновик, история переживает перезагрузку страницы dsh (хранится
-в main-процессе лаунчера и на диске — input-history.json).
+"""Input history (↑/↓ in the dsh field): after sending, the message can be recalled
+with the arrows (newest first, consecutive repeats are not duplicated), Esc restores
+the unfinished draft, the history survives a reload of the dsh page (stored in the
+launcher's main process and on disk — input-history.json).
 
-Клавиши шлём реальными X-событиями (xdotool + windowfocus, как в test_keyboard):
-CDP-доставка (Input.dispatchKeyEvent) в прогоне №2 непредсказуемо не доходила до
-страницы — на двух дистрибутивах первый Enter не сработал."""
+Keys are sent as real X events (xdotool + windowfocus, as in test_keyboard):
+CDP delivery (Input.dispatchKeyEvent) in run №2 unpredictably did not reach the
+page — on two distros the first Enter did not work."""
 import json
 import os
 import subprocess
@@ -22,11 +22,11 @@ def x(*args):
 
 
 def focus_window():
-    """Активировать окно лаунчера: без фокуса X-клавиши уходят «в никуда»."""
+    """Activate the launcher window: without focus X keys go «nowhere»."""
     wins = x('xdotool', 'search', '--onlyvisible', '--name', 'DeepSeek Harness|fake dsh gui').split()
-    # печатаем все совпадения: в отчёте упавшего теста видно, сколько окон
-    # и какое окно осталось с фокусом (диагностика прогона №4)
-    print('X-окна:', [(w, x('xdotool', 'getwindowname', w).strip()) for w in wins], flush=True)
+    # print all matches: in a failing test's report it is visible how many
+    # windows there were and which one kept focus (run №4 diagnostics)
+    print('X windows:', [(w, x('xdotool', 'getwindowname', w).strip()) for w in wins], flush=True)
     x('xdotool', 'windowfocus', '--sync', wins[0])
 
 
@@ -35,18 +35,18 @@ def key(name):
 
 
 def ensure_key_counter(gui):
-    """Счётчик keydown на странице: подтверждение, что X-клавиша дошла."""
+    """A keydown counter on the page: proof that the X key arrived."""
     gui.eval('window.__keys_n = window.__keys_n || 0;'
              ' if (!window.__kch) { window.__kch = 1;'
              ' document.addEventListener("keydown", () => { window.__keys_n++; }, true); } 1')
 
 
 def press_key(gui, name):
-    """X-клавиша с подтверждением доставки.
+    """An X key with delivery confirmation.
 
-    При неактивированном окне клавиши теряются (прогоны №4–5: и CDP, и xdotool).
-    Повтор шлём, только если страница не увидела события — у потерянной клавиши
-    побочных эффектов нет.
+    With an unfocused window keys are lost (runs №4–5: both CDP and xdotool).
+    We resend only if the page did not see the event — a lost key has no
+    side effects.
     """
     ensure_key_counter(gui)
     for _ in range(5):
@@ -58,7 +58,7 @@ def press_key(gui, name):
         if wait_for(lambda: gui.eval('window.__keys_n') != n, 2, 0.05):
             return
         focus_window()
-    raise AssertionError(f'клавиша {name} не дошла до страницы')
+    raise AssertionError(f'key {name} did not reach the page')
 
 
 def field(gui):
@@ -67,23 +67,23 @@ def field(gui):
 
 def type_text(gui, t):
     gui.eval(f'window.__type({json.dumps(t)}); 1')
-    assert wait_for(lambda: field(gui) == t, 5, 0.1), f'текст набран: {field(gui)!r}'
+    assert wait_for(lambda: field(gui) == t, 5, 0.1), f'text typed: {field(gui)!r}'
 
 
 def focus_composer(gui):
-    """Фокус в поле ввода (после перезагрузки страницы он теряется)."""
+    """Focus in the input field (lost after a page reload)."""
     ok = gui.eval("(() => { const c = document.querySelector('[data-composer-input=\"true\"]');"
                   " if (!c) return false; c.focus(); return document.activeElement === c; })()")
-    assert ok, 'композер получил фокус'
+    assert ok, 'composer got focus'
 
 
 def caret_start(gui):
-    """Каретка в начале поля (вход в режим истории при непустом черновике)."""
+    """The caret at the start of the field (entering history mode with a non-empty draft)."""
     ok = gui.eval("(() => { const c = document.querySelector('[data-composer-input=\"true\"]');"
                   " c.focus(); const r = document.createRange();"
                   " r.setStart(c.firstChild || c, 0); r.collapse(true);"
                   " const s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()")
-    assert ok, 'каретка в начале'
+    assert ok, 'caret at the start'
 
 
 def history_file():
@@ -96,59 +96,59 @@ def test_input_history(start, gui):
     gui.wait()
     focus_window()
 
-    # Enter «отправляет» (поле очищается, как в dsh), текст попадает в историю
+    # Enter «sends» (the field is cleared, as in dsh), the text goes into the history
     type_text(gui, 'первое сообщение')
     press_key(gui, 'Return')
-    assert wait_for(lambda: field(gui) == '', 5, 0.1), f'после Enter поле пустое: {field(gui)!r}'
-    assert wait_for(lambda: history_file() == ['первое сообщение'], 10, 0.2), f'история записана: {history_file()!r}'
+    assert wait_for(lambda: field(gui) == '', 5, 0.1), f'after Enter the field is empty: {field(gui)!r}'
+    assert wait_for(lambda: history_file() == ['первое сообщение'], 10, 0.2), f'history written: {history_file()!r}'
 
     type_text(gui, 'второе сообщение')
     press_key(gui, 'Return')
     assert wait_for(lambda: history_file() == ['второе сообщение', 'первое сообщение'], 10, 0.2), \
-        f'свежие сверху: {history_file()!r}'
+        f'newest on top: {history_file()!r}'
 
-    # повтор подряд не дублируется
+    # a consecutive repeat is not duplicated
     type_text(gui, 'второе сообщение')
     press_key(gui, 'Return')
     assert wait_for(lambda: history_file() == ['второе сообщение', 'первое сообщение'], 10, 0.2), \
-        f'повтор не дублируется: {history_file()!r}'
+        f'repeat not duplicated: {history_file()!r}'
 
-    # ↑ — свежее, ↑↑ — старше, дальше некуда; ↓ — назад, ↓ ниже нового — пустое
+    # ↑ — newest, ↑↑ — older, no further to go; ↓ — back, ↓ below the newest — empty
     press_key(gui, 'Up')
-    assert wait_for(lambda: field(gui) == 'второе сообщение', 5, 0.1), f'↑ даёт последнее: {field(gui)!r}'
+    assert wait_for(lambda: field(gui) == 'второе сообщение', 5, 0.1), f'↑ gives the last one: {field(gui)!r}'
     press_key(gui, 'Up')
-    assert wait_for(lambda: field(gui) == 'первое сообщение', 5, 0.1), f'↑↑ даёт предыдущее: {field(gui)!r}'
+    assert wait_for(lambda: field(gui) == 'первое сообщение', 5, 0.1), f'↑↑ gives the previous one: {field(gui)!r}'
     press_key(gui, 'Up')
-    assert wait_for(lambda: field(gui) == 'первое сообщение', 5, 0.1), 'дальше истории нет'
+    assert wait_for(lambda: field(gui) == 'первое сообщение', 5, 0.1), 'no older history'
     press_key(gui, 'Down')
-    assert wait_for(lambda: field(gui) == 'второе сообщение', 5, 0.1), f'↓ возвращает к свежему: {field(gui)!r}'
+    assert wait_for(lambda: field(gui) == 'второе сообщение', 5, 0.1), f'↓ returns to the newer one: {field(gui)!r}'
     press_key(gui, 'Down')
-    assert wait_for(lambda: field(gui) == '', 5, 0.1), f'↓ ниже нового — пустое поле: {field(gui)!r}'
+    assert wait_for(lambda: field(gui) == '', 5, 0.1), f'↓ below the newest — empty field: {field(gui)!r}'
 
-    # Esc: недописанный черновик возвращается, в историю не попадает
+    # Esc: the unfinished draft is restored, it does not enter the history
     type_text(gui, 'черновик')
     caret_start(gui)
     press_key(gui, 'Up')
-    assert wait_for(lambda: field(gui) == 'второе сообщение', 5, 0.1), f'↑ из черновика: {field(gui)!r}'
+    assert wait_for(lambda: field(gui) == 'второе сообщение', 5, 0.1), f'↑ from the draft: {field(gui)!r}'
     press_key(gui, 'Escape')
-    assert wait_for(lambda: field(gui) == 'черновик', 5, 0.1), f'Esc вернул черновик: {field(gui)!r}'
-    assert history_file() == ['второе сообщение', 'первое сообщение'], f'черновик не записан: {history_file()!r}'
+    assert wait_for(lambda: field(gui) == 'черновик', 5, 0.1), f'Esc restored the draft: {field(gui)!r}'
+    assert history_file() == ['второе сообщение', 'первое сообщение'], f'draft not written: {history_file()!r}'
 
-    # перезагрузка страницы dsh: история поднимается снова (впрыск при загрузке).
-    # __mark со старой страницы пропадает только у нового документа: иначе
-    # wait() мог поймать ещё не начавшуюся перезагрузку (флэк на debian-13).
+    # reload of the dsh page: the history is recalled again (injection at load).
+    # __mark from the old page disappears only in the new document: otherwise
+    # wait() could catch a reload that has not started yet (flaky on debian-13).
     gui.mark()
     gui.eval('location.reload(); 1')
     assert wait_for(lambda: gui.eval("document.readyState === 'complete' && window.__mark === undefined") is True, 15, 0.2), \
-        'страница перезагрузилась'
-    assert wait_for(lambda: gui.eval('!!window.__dshInputHistory'), 10, 0.2), 'скрипт истории впрыснут'
+        'page reloaded'
+    assert wait_for(lambda: gui.eval('!!window.__dshInputHistory'), 10, 0.2), 'history script injected'
     assert wait_for(lambda: gui.eval("!!document.querySelector('[data-composer-input=\"true\"]')") is True, 10, 0.2), \
-        'композер на перезагруженной странице'
+        'composer on the reloaded page'
     focus_window()
     focus_composer(gui)
-    # диагностика (прогон №4: ↑ после перезагрузки не сработал): слушаем
-    # keydown/beforeinput и снимаем состояние впрыска — по отчёту видно,
-    # дошла ли клавиша до страницы и увидел ли её обработчик истории
+    # diagnostics (run №4: ↑ after a reload did not work): listen for keydown/beforeinput
+    # and snapshot the injection state — from the report it is visible whether the key
+    # reached the page and whether the history handler saw it
     gui.eval("window.__diag = [];"
              " document.addEventListener('keydown', (e) => { window.__diag.push('keydown ' + e.key"
              " + ' target=' + (e.target.id || e.target.tagName)"
@@ -164,6 +164,6 @@ def test_input_history(start, gui):
     if not wait_for(lambda: field(gui) == 'второе сообщение', 8, 0.1):
         diag = gui.eval('JSON.stringify({ diag: window.__diag, state0: window.__state0,'
                         ' field: window.__field(), items: (window.__dshInputHistory || {}).items })')
-        raise AssertionError(f'после перезагрузки ↑ работает: {field(gui)!r}; диагностика: {diag}')
+        raise AssertionError(f'after reload ↑ works: {field(gui)!r}; diagnostics: {diag}')
 
     launcher.term()

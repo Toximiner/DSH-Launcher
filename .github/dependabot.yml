@@ -1,7 +1,7 @@
-# Dependabot: раз в неделю — PR с новыми версиями зависимостей (в первую
-# очередь Electron: в патч-версиях — исправления безопасности Chromium) и
-# действий GitHub. PR проверяет build-deb (юнит-тесты, ESLint, сборка);
-# Docker-сценарии запускаются вручную (Actions → docker-tests).
+# Dependabot: once a week — a PR with new dependency versions (Electron
+# first: its patch releases carry Chromium security fixes) and of GitHub
+# Actions. The PR is checked by build-deb (unit tests, ESLint, build); the
+# Docker scenarios run manually (Actions → docker-tests).
 version: 2
 updates:
   - package-ecosystem: npm

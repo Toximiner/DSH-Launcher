@@ -1,36 +1,37 @@
 #!/usr/bin/python3
-"""Фейковый dsh: слушает порт, печатает URL с токеном, держит потомка
-(sleep 7777) в своей группе процессов. Поведение — через переменные окружения:
-  FAKE_DSH_VERSION         — что печатать на --version (0.2.0-rc.2)
-  FAKE_IGNORE_TERM=1       — игнорировать SIGTERM (лаунчер должен добить SIGKILL)
-  FAKE_SELF_RESTART_AFTER  — через N с перезапуститься самому (как dsh после
-                             обновления плагина); FAKE_REBORN_DETACHED=1 — новый
-                             процесс в своей группе (иначе — в той же)
-  FAKE_SPAM_LINES          — после адреса напечатать столько строк (журнал растёт)
-  FAKE_CRASH_AFTER         — через N с упасть (выход с кодом 3); FAKE_CRASH_ONCE=<файл>
-                             — только в первый раз (файл-метка), дальше работать
-  FAKE_REQUIRE_TOKEN=1     — GUI только с ?token=<FAKE_TOKEN, abc> (тогда куки
-                             и редирект на адрес без токена) или с куки этого
-                             токена; иначе 401
-  FAKE_DSH_GUI=1           — вместо страницы-заглушки отдавать «GUI» с полем
-                             ввода, как у dsh: div data-composer-input="true"
-                             (заглушка редактора Lexical: синтетический
-                             beforeinput insertText вставляет текст, Enter —
-                             «отправка» в #sent); хелперы страницы:
-                             __type(t) — набрать текст, __field() — текст поля
-  FAKE_REBORN_TOKEN, FAKE_REBORN_OUT=<файл> — у перезапустившегося процесса
-                             свой токен (старое куки не годится) и вывод в файл
-                             (как перезапуск кнопкой маркета)
-   FAKE_REBORN_HOLD_HTTP=<файл> — у перезапустившегося процесса HTTP-ответы
-                              держатся (сокет открыт, сервер не отвечает),
-                              пока не появится файл («dsh долго бует»);
-                              FAKE_HOLD_HTTP=<файл> — то же, но для любого процесса
-  FAKE_LISTEN_FILE=<файл>  — открыть порт, только когда появится файл (dsh
-                             запустился, но долго не поднимает сервис)
-  plugin --profile P add X — «установить плагин»: X в dependencies
-                             $DSH_HOME/profiles/P/package.json (по умолчанию
-                             ~/.dsh); FAKE_PLUGIN_FAIL=1 — ошибка, код 1
-Журнал событий — /tmp/fakedsh.log.
+"""Fake dsh: listens on a port, prints the URL with the token, and keeps a
+child process (sleep 7777) in its own process group. Behavior — via environment
+variables:
+  FAKE_DSH_VERSION         — what to print on --version (0.2.0-rc.2)
+  FAKE_IGNORE_TERM=1       — ignore SIGTERM (the launcher must finish it with SIGKILL)
+  FAKE_SELF_RESTART_AFTER  — restart itself after N seconds (like dsh after a
+                             plugin update); FAKE_REBORN_DETACHED=1 — the new
+                             process in its own group (otherwise — the same one)
+  FAKE_SPAM_LINES          — print that many lines after the address (the log grows)
+  FAKE_CRASH_AFTER         — crash after N seconds (exit code 3); FAKE_CRASH_ONCE=<file>
+                             — only the first time (marker file), keep running after that
+  FAKE_REQUIRE_TOKEN=1     — GUI only with ?token=<FAKE_TOKEN, abc> (then a cookie
+                             and a redirect to the address without the token) or
+                             with this token's cookie; otherwise 401
+  FAKE_DSH_GUI=1           — instead of the stub page serve a "GUI" with an input
+                             field, like dsh: div data-composer-input="true"
+                             (a Lexical editor stub: a synthetic
+                             beforeinput insertText inserts text, Enter —
+                             "sends" it to #sent); page helpers:
+                             __type(t) — type text, __field() — the field's text
+  FAKE_REBORN_TOKEN, FAKE_REBORN_OUT=<file> — the restarted process has its
+                             own token (the old cookie no longer works) and output
+                             to a file (like a restart via the market button)
+    FAKE_REBORN_HOLD_HTTP=<file> — the restarted process holds HTTP responses
+                               (socket open, server unresponsive) until the
+                               file appears ("dsh is slow to boot");
+                               FAKE_HOLD_HTTP=<file> — the same, but for any process
+  FAKE_LISTEN_FILE=<file>  — open the port only when the file appears (dsh
+                             started, but is slow to bring up its service)
+  plugin --profile P add X — "install plugin": add X to dependencies of
+                             $DSH_HOME/profiles/P/package.json (default
+                             ~/.dsh); FAKE_PLUGIN_FAIL=1 — error, code 1
+Event log — /tmp/fakedsh.log.
 """
 import json
 import http.server
@@ -85,13 +86,13 @@ def on_term(_sig, _frame):
 
 signal.signal(signal.SIGTERM, on_term)
 
-# Страница «GUI dsh» для сценариев ввода (FAKE_DSH_GUI=1): композер с тем же
-# маркером, что у настоящего dsh, и заглушка редактора — синтетический
-# beforeinput insertText вставляет текст (как Lexical), Enter без модификаторов
-# «отправляет»: текст уходит в #sent, поле очищается.
+# The "dsh GUI" page for input scenarios (FAKE_DSH_GUI=1): a composer with the
+# same marker as the real dsh, and an editor stub — a synthetic beforeinput
+# insertText inserts text (like Lexical), unmodified Enter "sends": the text
+# goes to #sent, the field is cleared.
 GUI_PAGE = """<!doctype html>
-<!-- <title> не задаём: Electron берёт заголовок окна из документа,
-     а xdotool-фокус (test_input_history) ищет окно 'DeepSeek Harness' -->
+<!-- we do not set a <title>: Electron takes the window title from the document,
+     and the xdotool focus (test_input_history) looks for the window 'DeepSeek Harness' -->
 <html><head><meta charset="utf-8"></head>
 <body>
 <div id="c" contenteditable="true" role="textbox" aria-multiline="true" data-composer-input="true"></div>
@@ -134,10 +135,10 @@ window.__field = () => c.innerText;
 
 class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
-        # «dsh долго бует»: порт открыт (TCP-сокет принимает), но HTTP-сервер
-        # не отвечает, пока не появится файл. Для reborn — FAKE_REBORN_HOLD_HTTP
-        # (в main не действует, иначе первый GUI не поднимется), иначе —
-        # FAKE_HOLD_HTTP.
+        # "dsh is slow to boot": the port is open (the TCP socket accepts), but
+        # the HTTP server does not respond until the file appears. For reborn —
+        # FAKE_REBORN_HOLD_HTTP (it does not apply to main, otherwise the first
+        # GUI would not come up); otherwise — FAKE_HOLD_HTTP.
         hold = (os.environ.get('FAKE_REBORN_HOLD_HTTP') if ROLE == 'reborn'
                 else os.environ.get('FAKE_HOLD_HTTP'))
         if hold and not os.path.exists(hold):
@@ -181,7 +182,7 @@ if listen_file:
     log('waiting for ' + listen_file)
     while not os.path.exists(listen_file):
         time.sleep(0.2)
-while True:  # порт ещё занят старым процессом (после самоперезапуска) — ждём
+while True:  # the port is still held by the old process (after self-restart) — wait
     try:
         srv = http.server.ThreadingHTTPServer(('127.0.0.1', port), Handler)
         break
@@ -217,7 +218,7 @@ if ROLE == 'main' and after:
                          stderr=subprocess.DEVNULL,
                          start_new_session=os.environ.get('FAKE_REBORN_DETACHED') == '1')
         srv.server_close()
-        os._exit(0)  # sleep 7777 остаётся в старой группе
+        os._exit(0)  # sleep 7777 stays in the old group
     threading.Timer(after, restart).start()
 
 srv.serve_forever()

@@ -1,5 +1,5 @@
 'use strict';
-// Меню окна и контекстное меню; версии для «О программе».
+// The window menu and the context menu; versions for "About".
 const { Menu, clipboard } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -20,30 +20,30 @@ const updatesLive = require('./updates-live');
 const updates = require('./updates');
 const view = require('./view');
 
-/* ---------------- меню окна: «О программе», «Проверить обновления» ---------------- */
+/* ---------------- window menu: "About", "Check for updates" ---------------- */
 
-// Строка меню сверху окна всегда видна (autoHideMenuBar: false):
-//   «Файл»    — Перезапустить dsh…, Выйти (штатно, останавливает dsh);
-//   «Правка»  — Вырезать / Копировать / Вставить / Выделить всё;
-//   «Вид»     — перезагрузка, масштаб, поиск, орфография, полный экран;
-//   «Справка» — Проверить обновления… (окно-диалог: сверяет GitHub и npm,
-//               без авто-установки), Открыть папку логов, О программе
-//               (окно-диалог: версии, пути, GPU; блок копируется для отчёта).
-// Подписи следуют за языком окна — при переключении RU|EN меню собирается
-// заново (onLangSwitch → buildAppMenu).
+// The menu bar at the top of the window is always visible (autoHideMenuBar: false):
+//   "File"    — Restart dsh…, Quit (normal, stops dsh);
+//   "Edit"    — Cut / Copy / Paste / Select all;
+//   "View"    — reload, zoom, search, spell check, full screen;
+//   "Help"    — Check for updates… (dialog window: compares GitHub and npm,
+//               no auto-install), Open logs folder, About
+//               (dialog window: versions, paths, GPU; the block is copied for the report).
+// The labels follow the window's language — on an RU|EN switch the menu is
+// rebuilt (onLangSwitch → buildAppMenu).
 
-/* ===== appMenuTemplate (чистая функция, тест test/menu.js) =====
-   Сочетания клавиш в меню — только подсказки (registerAccelerator: false):
-   Ctrl+X/C/V/A Chromium обрабатывает сам, остальные — keyAction в
-   before-input-event; перехват меню перебивал бы горячие клавиши GUI dsh.
-   «Правка» — те же действия, что в контекстном меню, стандартными ролями
-   (действуют на окно в фокусе — главное или диалог). */
+/* ===== appMenuTemplate (pure function, test test/menu.js) =====
+   The key combinations in the menu are only hints (registerAccelerator: false):
+   Ctrl+X/C/V/A Chromium handles itself, the rest — keyAction in
+   before-input-event; a menu intercept would override the dsh GUI hotkeys.
+   "Edit" — the same actions as in the context menu, with the standard roles
+   (they act on the window in focus — the main one or a dialog). */
 function appMenuTemplate() {
   const hint = (key) => ({ accelerator: key, registerAccelerator: false });
   const edit = (role, ru, en, key) => ({ role, label: tr(ru, en), ...hint('CmdOrCtrl+' + key) });
   const viewItem = (act, ru, en, key) => ({ label: tr(ru, en), click: () => view.viewActions[act](), ...hint(key) });
-  // найдено обновление (периодическая проверка или «Проверить обновления…») —
-  // пункт «Обновить … до X…» в «Справке»
+  // an update is found (the periodic check or "Check for updates…") —
+  // an "Update … to X…" item in "Help"
   const upd = (kind, name) => (state.availableUpdates[kind] ? [{
     label: tr(`Обновить ${name} до ${state.availableUpdates[kind].version}…`, `Update ${name} to ${state.availableUpdates[kind].version}…`),
     click: () => updatesLive.showUpdateNowDialog(kind),
@@ -106,19 +106,19 @@ function appMenuTemplate() {
 
 function buildAppMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(appMenuTemplate()));
-  // На Linux setApplicationMenu ставит меню всем окнам — у окна-диалога его быть не должно.
+  // On Linux setApplicationMenu sets the menu for all windows — the dialog window must not have one.
   if (state.tray) state.tray.setContextMenu(tray.trayMenu());
 }
 
 
 
-// Открытое контекстное меню — закрыть его по маршруту /menu/close-context/
-// (Docker-сценарии: события CDP идут в страницу мимо нативного меню, и само
-// оно в контейнере не закрывается).
+// An open context menu — close it via the route /menu/close-context/
+// (Docker scenarios: the CDP events go to the page past the native menu, and the
+// menu itself does not close in the container).
 
 
-/* ===== showContextMenu (тест test/menu.js, с подставными win/Menu/clipboard) ===== */
-// wc — чьё содержимое (главное окно или слой диалога); меню — над окном w.
+/* ===== showContextMenu (test test/menu.js, with stand-in win/Menu/clipboard) ===== */
+// wc — whose contents (the main window or the dialog layer); the menu — over the window w.
 function showContextMenu(params, w = state.win, wc = w && w.webContents) {
   if (!w || w.isDestroyed() || !wc || wc.isDestroyed()) return;
   const run = {
@@ -132,8 +132,8 @@ function showContextMenu(params, w = state.win, wc = w && w.webContents) {
     none: () => {},
   };
   const items = contextMenuItems(params);
-  // В лог — что показали (Docker-сценарий context_menu проверяет по нему:
-  // кликнуть по нативному меню driver не может).
+  // To the log — what was shown (the context_menu Docker scenario checks by it:
+  // the driver cannot click the native menu).
   console.log('[launcher] контекстное меню: ' +
     items.map((i) => (i.type ? '|' : i.label + (i.enabled ? '' : ' (off)'))).join(', '));
   const template = items.map((i) =>
@@ -148,21 +148,21 @@ function showContextMenu(params, w = state.win, wc = w && w.webContents) {
 }
 /* ===== end showContextMenu ===== */
 
-/* ===== launcherVersionRaw (тест test/menu.js) ===== */
-// Версия лаунчера: пакетная установка — dpkg; сборка из исходников —
-// package.json корня репозитория (теперь синхронизирован с релизом, 1.2.0+).
+/* ===== launcherVersionRaw (test test/menu.js) ===== */
+// The launcher's version: a package install — dpkg; a build from source —
+// the package.json at the repository root (now synchronized with the release, 1.2.0+).
 async function launcherVersionRaw() {
   if (IS_PKG_INSTALL) return updates.launcherInstalledVersion();
   try { return require('../package.json').version; } catch { return null; }
 }
 /* ===== end launcherVersionRaw ===== */
 
-// Версия dsh: если DSH_BIN исполняется — спрашиваем её (--version), иначе —
-// версия, найденная installCheck при старте.
-// Версия dsh для окон («О программе», «Проверить обновления…») — без запуска
-// dsh --version (см. launcherInstalledVersion): из package.json пакета
-// @deepseek-ai/dsh, к которому ведёт программа dsh (ссылка → …/bin.js), иначе
-// — проверенная при старте; и только если её нет — запуск dsh --version.
+// The dsh version: if DSH_BIN runs — we ask for it (--version), otherwise —
+// the version found by installCheck at start.
+// The dsh version for the windows ("About", "Check for updates…") — without running
+// dsh --version (see launcherInstalledVersion): from the package.json of the
+// @deepseek-ai/dsh package that the dsh program points to (a link → …/bin.js), otherwise
+// — the one checked at start; and only if it is missing — run dsh --version.
 function dshPackageVersion(bin) {
   try {
     for (let d = path.dirname(fs.realpathSync(bin)); d !== path.dirname(d); d = path.dirname(d)) {
@@ -170,7 +170,7 @@ function dshPackageVersion(bin) {
       try { j = JSON.parse(fs.readFileSync(path.join(d, 'package.json'), 'utf8')); } catch { continue; }
       if (j && j.name === updates.DSH_NPM_PKG && j.version) return String(j.version);
     }
-  } catch { /* программы нет */ }
+  } catch { /* the program is missing */ }
   return null;
 }
 
@@ -184,4 +184,4 @@ async function dshVersionRaw() {
   return null;
 }
 
-Object.assign(module.exports, { buildAppMenu, showContextMenu, launcherVersionRaw, dshVersionRaw }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { buildAppMenu, showContextMenu, launcherVersionRaw, dshVersionRaw }); // we extend, not replace: the modules require each other cyclically

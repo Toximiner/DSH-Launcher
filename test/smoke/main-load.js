@@ -1,10 +1,10 @@
 'use strict';
-// Смоук: main.js грузится целиком с подменой electron, и все имена реестра
-// launcher (Object.defineProperties в main.js) разрешаются. Ловит потерянный
-// импорт, сбитый реестр и топовые ошибки модулей, которые юнит-тесты (чистые
-// функции) не видят. Живое окно не поднимается: whenReady стаба не разрешается.
-// Отдельная папка test/smoke/: не попадает в глоб npm run coverage (test/*.js),
-// иначе граф main.js размыл бы отчёт о покрытии.
+// Smoke: main.js loads in full with electron stubbed out, and every name in the
+// launcher registry (Object.defineProperties in main.js) resolves. Catches a lost
+// import, a broken registry, and top-level module errors that the unit tests
+// (pure functions) don't see. No live window is raised: the stub's whenReady never resolves.
+// A separate test/smoke/ folder: not picked up by the global npm run coverage (test/*.js),
+// otherwise main.js's graph would dilute the coverage report.
 const { test } = require('node:test');
 const assert = require('assert');
 const Module = require('module');
@@ -13,17 +13,17 @@ const os = require('os');
 const path = require('path');
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-launcher-smoke-'));
-// ДО require main.js: env.js считает LOG_DIR из DSH_LOG_DIR
+// BEFORE requiring main.js: env.js computes LOG_DIR from DSH_LOG_DIR
 process.env.DSH_LOG_DIR = TMP;
 
 const origLoad = Module._load;
 const noop = () => {};
-// Стаб electron: только то, что main.js и src/* касаются при загрузке.
+// Electron stub: only what main.js and src/* touch at load time.
 const electron = new Proxy({}, { get: (_t, p) => {
   if (p === 'app') return {
     getName: () => 'dsh-launcher', setName: noop,
     requestSingleInstanceLock: () => true, on: noop,
-    whenReady: () => new Promise(() => {}), // не разрешается — окно не поднимается
+    whenReady: () => new Promise(() => {}), // never resolves — no window is raised
     commandLine: { appendSwitch: noop }, disableHardwareAcceleration: noop,
     getPath: () => TMP, getLocale: () => 'en-US', quit: noop,
   };
@@ -55,16 +55,16 @@ Module._load = function (req, ...rest) {
   return origLoad.call(this, req, ...rest);
 };
 
-test('main.js загружается, реестр launcher разрешается', () => {
+test('main.js loads, the launcher registry resolves', () => {
   require('../../main.js');
   const launcher = require('../../src/launcher');
   const names = Object.keys(launcher);
-  assert.ok(names.length > 0, 'реестр не пуст');
+  assert.ok(names.length > 0, 'registry is not empty');
   for (const n of names) {
     try {
-      void launcher[n]; // геттер — вызов имени в main.js
+      void launcher[n]; // the getter — calls the name in main.js
     } catch (e) {
-      assert.fail(`реестр launcher: ${n} не разрешается: ${e.message}`);
+      assert.fail(`launcher registry: ${n} does not resolve: ${e.message}`);
     }
   }
 });

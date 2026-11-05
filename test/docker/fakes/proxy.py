@@ -1,7 +1,7 @@
 #!/usr/bin/python3
-"""Мини HTTP-прокси для сценария proxy: CONNECT-туннели (HTTPS) и обычные
-запросы с абсолютным URI (HTTP). Каждый запрос — строка в /tmp/proxy.log.
-  proxy.py <порт>
+"""Mini HTTP proxy for the proxy scenario: CONNECT tunnels (HTTPS) and plain
+requests with an absolute URI (HTTP). Every request — a line in /tmp/proxy.log.
+  proxy.py <port>
 """
 import http.server
 import select

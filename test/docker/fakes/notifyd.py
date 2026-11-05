@@ -1,9 +1,9 @@
 #!/usr/bin/python3
-"""Подставной сервер уведомлений (org.freedesktop.Notifications) на сессионной
-шине D-Bus — как у GNOME: уведомление лежит в списке, пока его не закроют.
-  notifyd.py   (DBUS_SESSION_BUS_ADDRESS — шина)
-Журнал — /tmp/notifyd.log: «notify id=N …», «close id=N»; открытые сейчас —
-/tmp/notifyd-open.json (список id): столько и насчитала бы док-панель.
+"""Fake notification server (org.freedesktop.Notifications) on the session
+D-Bus bus — like GNOME: a notification stays in the list until it is closed.
+  notifyd.py   (DBUS_SESSION_BUS_ADDRESS — the bus)
+Log — /tmp/notifyd.log: "notify id=N …", "close id=N"; currently open —
+/tmp/notifyd-open.json (list of ids): that many the dock panel would count.
 """
 import json
 import time
@@ -11,7 +11,7 @@ import warnings
 
 from gi.repository import Gio, GLib
 
-warnings.filterwarnings('ignore', category=DeprecationWarning)  # register_object: новый API есть не везде
+warnings.filterwarnings('ignore', category=DeprecationWarning)  # register_object: the new API is not everywhere
 
 LOG = '/tmp/notifyd.log'
 OPEN = '/tmp/notifyd-open.json'

@@ -1,23 +1,23 @@
 'use strict';
-// Запуск dsh и доведение окна до GUI (вопросы при запуске, ожидание порта).
+// Launching dsh and driving the window to the GUI (prompts at start, waiting for the port).
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc } = require('./util');
 const { DSH_ARGS, PLAIN_URL } = require('./env');
-const { waitForPort, waitForAuthUrl } = require('./port'); // чистый модуль — прямой require, без реестра
+const { waitForPort, waitForAuthUrl } = require('./port'); // pure module — direct require, no registry
 const dshProcess = require('./dsh-process');
 const market = require('./market');
 const pages = require('./pages');
 const updatesLive = require('./updates-live');
 const updates = require('./updates');
-const launcher = require('./launcher'); // общий реестр (наполняет main.js)
+const launcher = require('./launcher'); // shared registry (populated by main.js)
 
-/* ---------------- запуск dsh и доведение окна до GUI ---------------- */
+/* ---------------- launching dsh and driving the window to the GUI ---------------- */
 
-// Защита от повторного запуска: двойной клик «Проверить ещё раз» или
-// «Установить» вызвал бы launchDsh дважды — второй spawn перезаписал бы
-// dshProc, и первый процесс остался бы без присмотра (не убит при закрытии).
+// Protection against a double launch: a double click on "Check again" or
+// "Install" would call launchDsh twice — the second spawn would overwrite
+// dshProc, and the first process would be left unsupervised (not killed on close).
 
 
 function ourDshAlive() {
@@ -31,13 +31,13 @@ async function launchDsh() {
   }
   state.launching = true;
   try {
-    if (await updates.offerLauncherUpdate()) return; // перезапуск в новую версию — dsh поднимет она
+    if (await updates.offerLauncherUpdate()) return; // the restart into the new version — it will bring dsh up
     if (state.stopping) return;
     await updates.offerDshUpdate();
     if (state.stopping) return;
     await market.offerMarketIfMissing();
     if (state.stopping) return;
-    void updatesLive.refreshAvailableUpdates(); // отложенное обновление — пунктом в «Справке»
+    void updatesLive.refreshAvailableUpdates(); // a deferred update — as an item in "Help"
     await launchDshInner();
   } finally {
     state.launching = false;
@@ -61,22 +61,22 @@ async function launchDshInner() {
          Check that the command runs in a terminal:
          <code>${esc(state.dshBin)} ${esc(DSH_ARGS.join(' '))}</code>.<br>
          Latest log lines:</p>`) + pages.stderrBlock(), true));
-    launcher.startWatchdog(); // если dsh запустят вручную — окно оживёт само
+    launcher.startWatchdog(); // if dsh is started manually — the window comes back to life on its own
     return;
   }
 
-  // Порт уже поднят нами: проверка watchdog, начатая во время запуска и
-  // завершившаяся после, не должна принять это за перезапуск dsh.
+  // The port has already been brought up by us: a watchdog check that started during the launch
+  // and finished after must not take this for a dsh restart.
   state.portState = 'up';
   const url = state.authUrl || (await waitForAuthUrl());
   if (url) {
-    await pages.loadInWin(url); // обмен токена на куки, затем редирект на чистый URL
+    await pages.loadInWin(url); // exchanging the token for cookies, then a redirect to the plain URL
   } else if (await launcher.plainUrlIsAuthed()) {
-    await pages.loadInWin(PLAIN_URL); // старое куки ещё валидно
+    await pages.loadInWin(PLAIN_URL); // the old cookie is still valid
   } else {
     pages.showPastePage();
   }
   launcher.startWatchdog();
 }
 
-Object.assign(module.exports, { launchDsh, launchDshInner }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { launchDsh, launchDshInner }); // we extend, not replace: the modules require each other cyclically

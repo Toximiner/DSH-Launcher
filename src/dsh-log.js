@@ -1,5 +1,5 @@
 'use strict';
-// Окно «Журнал dsh»: последние строки dsh.log, токены скрыты.
+// The «Журнал dsh» window: the last lines of dsh.log, tokens hidden.
 const fs = require('fs');
 const state = require('./state');
 const i18n = require('./i18n');
@@ -8,18 +8,18 @@ const { esc, redactLog } = require('./util');
 const { LOG_FILE } = require('./env');
 const dialogs = require('./dialogs');
 
-/* ---------------- журнал dsh ---------------- */
+/* ---------------- dsh log ---------------- */
 
-// «Справка → Журнал dsh»: хвост dsh.log в окне-диалоге. В логе есть токен
-// входа в GUI («dsh web: …?token=…») — его и похожее на ключи при показе и
-// копировании заменяем на ***.
+// «Справка → Журнал dsh»: the tail of dsh.log in a dialog window. The log contains
+// the GUI login token («dsh web: …?token=…») — we replace it and anything
+// resembling a key with *** on display and on copy.
 
 
 
-/* ===== logTail (тест test/dsh-log.js) =====
- * fs — модуль 'fs' (в тесте заменяется; сами функции openSync/fstatSync/
- * readSync/closeSync используются как есть). */
-// Последние строки файла (читаем только хвост — лог бывает большим).
+/* ===== logTail (test test/dsh-log.js) =====
+ * fs — the 'fs' module (replaced in the test; the functions openSync/fstatSync/
+ * readSync/closeSync themselves are used as-is). */
+// The last lines of the file (we read only the tail — the log can be large).
 function logTail(file, maxLines = 300, maxBytes = 256 * 1024) {
   let fd;
   try {
@@ -29,7 +29,7 @@ function logTail(file, maxLines = 300, maxBytes = 256 * 1024) {
     const buf = Buffer.alloc(len);
     fs.readSync(fd, buf, 0, len, size - len);
     let text = buf.toString('utf8');
-    if (len < size) text = text.slice(text.indexOf('\n') + 1); // первая строка — обрывок
+    if (len < size) text = text.slice(text.indexOf('\n') + 1); // the first line is a fragment
     return text.split('\n').slice(-maxLines).join('\n').replace(/\s+$/, '');
   } catch { return null; } finally { if (fd !== undefined) try { fs.closeSync(fd); } catch { /* noop */ } }
 }
@@ -60,4 +60,4 @@ function showLogDialog() {
   dialogs.dialogShow(gen, render);
 }
 
-Object.assign(module.exports, { logTail, showLogDialog }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { logTail, showLogDialog }); // we extend, not replace: the modules include each other in cycles

@@ -1,5 +1,5 @@
-"""Журнал лаунчера (launcher.log рядом с dsh.log): сообщения лаунчера со
-временем, без строк dsh и без токенов; ротация после 2 МБ."""
+"""Launcher log (launcher.log next to dsh.log): launcher messages with
+timestamps, no dsh lines and no tokens; rotation after 2 MB."""
 import os
 import re
 
@@ -20,14 +20,14 @@ def test_launcher_log(start, gui):
     launcher.term()
 
     text = read(LOG)
-    assert re.search(r'===== DeepSeek Harness Launcher \S+, pid \d+, ', text), 'заголовок запуска'
-    assert re.search(r'^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3} \[launcher\] окно показано$', text, re.M), 'строки со временем'
+    assert re.search(r'===== DeepSeek Harness Launcher \S+, pid \d+, ', text), 'launch header'
+    assert re.search(r'^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3} \[launcher\] окно показано$', text, re.M), 'lines with timestamps'
     assert '[launcher] starting: /opt/t/fakes/fakedsh.py' in text
-    assert '[launcher] SIGTERM' in text, 'и остановка'
-    # фейковый dsh печатает «dsh web: …?token=abc»: строки dsh — только в dsh.log
-    assert '[dsh]' not in text, 'строк dsh в журнале лаунчера нет'
-    assert 'token=abc' in read(f'{STATE}/dsh.log'), 'они — в dsh.log'
-    assert 'token=abc' not in text, 'токен скрыт'
+    assert '[launcher] SIGTERM' in text, 'and the shutdown'
+    # the fake dsh prints «dsh web: …?token=abc»: dsh lines — only in dsh.log
+    assert '[dsh]' not in text, 'no dsh lines in the launcher log'
+    assert 'token=abc' in read(f'{STATE}/dsh.log'), 'they are in dsh.log'
+    assert 'token=abc' not in text, 'the token is hidden'
 
 
 def test_launcher_log_rotate(start, gui):
@@ -36,24 +36,24 @@ def test_launcher_log_rotate(start, gui):
     gui.wait()
     launcher.term()
 
-    assert os.path.getsize(f'{LOG}.1') >= 2200000, 'большой журнал сдвинут в launcher.log.1'
+    assert os.path.getsize(f'{LOG}.1') >= 2200000, 'the big log was moved to launcher.log.1'
     text = read(LOG)
     assert 'лог прокручен: launcher.log (2200000 Б) -> launcher.log.1' in text, text[:500]
-    assert os.path.getsize(LOG) < 100000, 'новый журнал — с начала'
+    assert os.path.getsize(LOG) < 100000, 'the new log starts fresh'
 
 
 def test_log_rotate_while_running(start, gui):
-    """Ротация и во время работы, а не только при запуске: на каждый журнал —
-    не больше двух файлов (*.log и *.log.1), каждый не больше порога."""
-    max_bytes = 800  # за сеанс лаунчер пишет ~2 КБ — журнал лаунчера тоже прокрутится
+    """Rotation while running, not only at start: for each log — no more than
+    two files (*.log and *.log.1), each no bigger than the threshold."""
+    max_bytes = 800  # over the session the launcher writes ~2 KB — its log rotates too
     launcher = start(FAKE, NOUPD, DSH_LAUNCHER_LOG_MAX_BYTES=str(max_bytes), FAKE_SPAM_LINES='500')
     gui.wait()
-    assert wait_for(lambda: 'spam line 00499' in read(f'{STATE}/dsh.log'), 30), 'dsh допечатал'
+    assert wait_for(lambda: 'spam line 00499' in read(f'{STATE}/dsh.log'), 30), 'dsh finished printing'
     launcher.term()
 
-    logs = sorted(n for n in os.listdir(STATE) if '.log' in n)  # кроме, например, маркера GPU
+    logs = sorted(n for n in os.listdir(STATE) if '.log' in n)  # excluding, e.g., the GPU marker
     assert logs == ['dsh.log', 'dsh.log.1', 'launcher.log', 'launcher.log.1'], logs
     for name in logs:
-        # ротация — до записи: ни один файл не больше порога
-        assert os.path.getsize(f'{STATE}/{name}') <= max_bytes, f'{name}: {os.path.getsize(f"{STATE}/{name}")} Б'
-    assert 'spam line 00499' in read(f'{STATE}/dsh.log'), 'последние строки dsh — в новом файле'
+        # rotation happens before the write: no file exceeds the threshold
+        assert os.path.getsize(f'{STATE}/{name}') <= max_bytes, f'{name}: {os.path.getsize(f"{STATE}/{name}")} B'
+    assert 'spam line 00499' in read(f'{STATE}/dsh.log'), 'the last dsh lines are in the new file'

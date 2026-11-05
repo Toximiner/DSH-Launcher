@@ -1,16 +1,16 @@
 name: docker-tests
 
-# Сценарии установленного .deb в Docker на чистых Ubuntu 24.04 / 26.04 и
-# Debian 13 (test/docker/run.sh): закрытие окна и сигналы, «усыновлённый»
-# dsh, обновление dsh через npm и самого лаунчера через pkexec, меню,
-# поиск, прокси и т. д.
+# Scenarios for the installed .deb in Docker on clean Ubuntu 24.04 / 26.04
+# and Debian 13 (test/docker/run.sh): window closing and signals, an
+# "adopted" dsh, updating dsh via npm and the launcher itself via pkexec,
+# menus, search, proxy, etc.
 #
-# Каждая система — отдельная задача на своей машине (матрица), все
-# параллельно: прогон ~10–15 минут. Юнит-тесты — один раз, в задаче plan.
+# Each system — a separate job on its own machine (matrix), all in
+# parallel: the run takes ~10–15 minutes. Unit tests — once, in the plan job.
 #
-# Только ручной запуск, и сценарии ходят в сеть — npm, nodejs.org и (только
-# сценарий proxy) GitHub API, с токеном прогона. Релизы лаунчера для сценариев
-# обновления и отката отдаёт подставной GitHub (test/docker/fakes/github.py).
+# Manual runs only, and the scenarios go to the network — npm, nodejs.org
+# and (proxy scenario only) the GitHub API, with the run's token. Launcher
+# releases for update/rollback scenarios — a fake GitHub (test/docker/fakes/github.py).
 on:
   workflow_dispatch:
     inputs:
@@ -26,8 +26,8 @@ on:
         type: string
 
 jobs:
-  # Юнит-тесты и список систем для матрицы: строка «24.04 26.04 debian-13»
-  # → JSON-массив.
+  # Unit tests and the list of systems for the matrix: the line
+  # "24.04 26.04 debian-13" → a JSON array.
   plan:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -68,7 +68,7 @@ jobs:
     permissions:
       contents: read
     strategy:
-      fail-fast: false # падение на одной системе не останавливает остальные
+      fail-fast: false # a failure on one system does not stop the others
       matrix:
         os: ${{ fromJSON(needs.plan.outputs.oses) }}
     steps:
@@ -85,8 +85,8 @@ jobs:
       - name: Download Electron binary
         run: npx install-electron
 
-      # Кэш слоёв Docker-образа в GitHub Actions (run.sh: DOCKER_GHA_CACHE):
-      # buildx и доступ к кэшу Actions для `docker buildx build`.
+      # Docker image layer cache in GitHub Actions (run.sh: DOCKER_GHA_CACHE):
+      # buildx and access to the Actions cache for `docker buildx build`.
       - uses: docker/setup-buildx-action@v4
       - uses: crazy-max/ghaction-github-runtime@v4
 
@@ -96,9 +96,9 @@ jobs:
           OSES: ${{ matrix.os }}
           SCENARIOS: ${{ inputs.scenarios }}
           JOBS: '4'
-          # run.sh узнаёт последний релиз через GitHub API — с токеном без лимита 60/ч
+          # run.sh learns the latest release via the GitHub API — with a token free of the 60/h limit
           GITHUB_TOKEN: ${{ github.token }}
-        # $SCENARIOS без кавычек — список сценариев отдельными аргументами
+        # $SCENARIOS unquoted — the scenario list as separate arguments
         run: test/docker/run.sh $SCENARIOS
 
       - name: Upload logs
@@ -106,7 +106,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: docker-test-logs-${{ matrix.os }}
-          # results/ — логи, JUnit, coverage.txt; coverage/ — HTML-отчёт покрытия
+          # results/ — logs, JUnit, coverage.txt; coverage/ — the HTML coverage report
           path: |
             test/docker/.work/results/
             test/docker/.work/coverage/

@@ -1,5 +1,5 @@
 'use strict';
-// Трей и работа в фоне; сигнал «агент закончил ответ».
+// The tray and background operation; the "agent finished answering" signal.
 const { app, Menu, Tray, Notification, nativeImage } = require('electron');
 const path = require('path');
 const state = require('./state');
@@ -9,13 +9,14 @@ const { tr } = i18n;
 const { loadSettings, PLAIN_URL } = require('./env');
 const fileHelp = require('./file-help');
 
-/* ---------------- трей и работа в фоне ---------------- */
+/* ---------------- the tray and background operation ---------------- */
 
-// «Настройки → Окно»: closeToTray — крестик прячет окно в трей, dsh работает
-// дальше (по умолчанию выключено: без поддержки трея на рабочем столе —
-// в «чистом» GNOME нет — окно пропало бы без значка; вернуть его можно и
-// повторным запуском лаунчера). attention — привлечь внимание, когда агент
-// закончил ответ, а окно не в фокусе (по умолчанию включено).
+// «Настройки → Окно» (Settings → Window): closeToTray — the close button
+// hides the window to the tray, dsh keeps running (off by default: without
+// tray support on the desktop — plain GNOME has none — the window would be
+// lost with no icon; you can get it back by starting the launcher again).
+// attention — draw attention when the agent finished answering and the
+// window is not focused (on by default).
 
 let trayIcons = null;
 
@@ -23,7 +24,7 @@ const closeToTrayOn = () => loadSettings().closeToTray === true;
 const attentionOn = () => loadSettings().attention !== false;
 const attentionSoundOn = () => loadSettings().attentionSound === true;
 
-// Значок трея и он же с оранжевой точкой («агент закончил»).
+// The tray icon and the same one with an orange dot ("agent finished").
 function makeTrayIcons() {
   let base = nativeImage.createFromPath(path.join(__dirname, '..', 'icon.png'));
   if (base.isEmpty()) base = nativeImage.createFromPath('/usr/share/icons/hicolor/256x256/apps/dsh-launcher.png');
@@ -37,7 +38,7 @@ function makeTrayIcons() {
       const d = Math.hypot(x - cx, y - cy);
       if (d > r + 0.5) continue;
       const i = (y * w + x) * 4;
-      const ring = d > r - 1.2; // тёмная обводка — точку видно и на светлой панели
+      const ring = d > r - 1.2; // dark outline — the dot is visible on a light panel too
       px[i] = ring ? 0x15 : 0x0b; px[i + 1] = ring ? 0x11 : 0x9e; px[i + 2] = ring ? 0x0f : 0xf5; px[i + 3] = 0xff;
     }
   }
@@ -53,10 +54,10 @@ function trayMenu() {
   ]);
 }
 
-/* ===== trayStatusText (тест test/tray.js) =====
-   Подсказка значка о состоянии dsh: fatal — остановился (авто-перезапуск
-   остановлен), portState 'up' — запущен, 'down' — не запущен, null — ещё не
-   проверено (только имя лаунчера). tr — (ru, en) → строка. */
+/* ===== trayStatusText (test test/tray.js) =====
+   The icon tooltip about the dsh state: fatal — stopped (auto-restart
+   halted), portState 'up' — running, 'down' — not running, null — not
+   checked yet (only the launcher name). tr — (ru, en) → string. */
 function trayStatusText(portState, fatal, tr) {
   const name = 'DeepSeek Harness';
   if (fatal) return tr(`${name} — dsh остановлен (авто-перезапуск остановлен)`, `${name} — dsh has stopped (auto-restart halted)`);
@@ -66,8 +67,8 @@ function trayStatusText(portState, fatal, tr) {
 }
 /* ===== end trayStatusText ===== */
 
-/* ===== trayStatusLabel (тест test/tray.js) =====
-   То же состояние для лога (лог — на русском, tr не нужен). */
+/* ===== trayStatusLabel (test test/tray.js) =====
+   The same state for the log (the log is in Russian, tr is not needed). */
 function trayStatusLabel(portState, fatal) {
   if (fatal) return 'dsh остановлен (авто-перезапуск остановлен)';
   if (portState === 'up') return 'dsh запущен';
@@ -76,18 +77,19 @@ function trayStatusLabel(portState, fatal) {
 }
 /* ===== end trayStatusLabel ===== */
 
-// Подсказка о статусе dsh обновляется раз в 2 с (pollAgentState); кэш —
-// чтобы не трогать Electron при каждом тике, пока состояние не изменилось.
+// The dsh status tooltip is updated every 2 s (pollAgentState); the cache —
+// so Electron is not touched on every tick while the state is unchanged.
 let trayStatusCache = null;
 let trayAttention = false;
 
-/* ===== refreshTrayStatus (тест test/tray.js) =====
-   Обновляет подсказку значка по state.portState/dshFatal. Кэш (trayStatusCache,
-   trayAttention) — внешние: без изменения состояния в Electron не лезем.
-   state — { tray, portState, dshFatal }, tr — (ru, en) → строка,
-   console — лог, trayStatusText/trayStatusLabel — см. выше. */
+/* ===== refreshTrayStatus (test test/tray.js) =====
+   Updates the icon tooltip from state.portState/dshFatal. The cache
+   (trayStatusCache, trayAttention) — external: we do not touch Electron
+   without a state change. state — { tray, portState, dshFatal },
+   tr — (ru, en) → string, console — the log, trayStatusText/
+   trayStatusLabel — see above. */
 function refreshTrayStatus() {
-  if (!state.tray || trayAttention) return; // подсказка «агент закончил» важнее
+  if (!state.tray || trayAttention) return; // the "agent finished" tooltip matters more
   const key = `${state.portState}|${state.dshFatal ? 1 : 0}`;
   if (key === trayStatusCache) return;
   trayStatusCache = key;
@@ -106,17 +108,17 @@ function setTray(on) {
     state.tray.on('click', () => showMainWindow());
     console.log('[launcher] трей включён: крестик прячет окно, dsh работает дальше');
     trayStatusCache = null;
-    refreshTrayStatus(); // сразу показать статус dsh
+    refreshTrayStatus(); // show the dsh status immediately
   } else {
     state.tray.destroy();
     state.tray = null;
     trayStatusCache = null;
     console.log('[launcher] трей выключен');
-    if (state.win && !state.win.isDestroyed() && !state.win.isVisible()) showMainWindow(); // не оставить окно спрятанным без значка
+    if (state.win && !state.win.isDestroyed() && !state.win.isVisible()) showMainWindow(); // do not leave the window hidden without an icon
   }
 }
 
-// ev — событие agentEvent: подсказка у значка — что именно случилось.
+// ev — the agentEvent event: the tooltip next to the icon — exactly what happened.
 function setTrayAttention(on, ev = { type: 'finished' }) {
   if (!state.tray || !trayIcons) return;
   trayAttention = on;
@@ -124,7 +126,7 @@ function setTrayAttention(on, ev = { type: 'finished' }) {
   if (on) {
     state.tray.setToolTip(`DeepSeek Harness — ${agentNotice(ev)}`);
   } else {
-    trayStatusCache = null; // вернуть подсказку о статусе dsh
+    trayStatusCache = null; // restore the dsh status tooltip
     refreshTrayStatus();
   }
 }
@@ -141,7 +143,7 @@ function showMainWindow() {
   if (wasHidden) console.log('[launcher] окно показано из трея');
 }
 
-// Крестик при включённом трее — спрятать окно (не при выходе и перезапуске).
+// The close button with the tray on — hide the window (not on quit and restart).
 function onMainWindowClose(e) {
   if (!state.tray || !closeToTrayOn() || state.stopping || state.relaunchRequested || state.restarting) return;
   e.preventDefault();
@@ -149,37 +151,39 @@ function onMainWindowClose(e) {
   console.log('[launcher] окно спрятано в трей — dsh работает дальше');
 }
 
-// Агент закончил ответ: пока он отвечает, в чате GUI dsh есть индикатор
-// [data-chat-running] (только у открытой в окне сессии; это внутренняя
-// деталь интерфейса dsh — если её переименуют, сигнал просто перестанет
-// срабатывать). Проверка раз в 2 с; переход «работал → нет» при окне не в
-// фокусе (или спрятанном) — системное уведомление (клик — открыть окно),
-// точка на значке трея, мигание кнопки на панели задач (под X11; на Wayland
-// в GNOME его нет) и, если включён, звук.
+// The agent finished answering: while it answers, the dsh GUI chat has the
+// [data-chat-running] indicator (only for the session open in the window;
+// it is an internal detail of the dsh interface — if it is renamed, the
+// signal simply stops firing). Checked every 2 s; the "was running →
+// stopped" transition with the window not focused (or hidden) — a system
+// notification (click — open the window), a dot on the tray icon, flashing
+// of the taskbar button (under X11; on Wayland in GNOME there is none) and,
+// if enabled, a sound.
 const AGENT_POLL_MS = 2000;
-let agent = { running: false, waiting: null }; // что было при прошлой проверке
-// Последнее уведомление (ссылка нужна и затем, чтобы его click не собрал GC).
-// Оно одно: новое заменяет прежнее, а когда окно открыли — закрывается.
-// Иначе уведомления копятся в списке GNOME, и док-панель Ubuntu считает их
-// непрочитанными: счётчик на значке растёт 1, 2, … хотя окно уже открывали.
+let agent = { running: false, waiting: null }; // what it was on the previous check
+// The last notification (the reference is kept so its click is not GCed).
+// There is only one: a new one replaces the old, and when the window is
+// opened it is closed. Otherwise notifications pile up in the GNOME list
+// and the Ubuntu dock counts them as unread: the badge counter grows 1, 2,
+// … although the window was already opened.
 let agentNotification = null;
 
 function clearAgentNotification() {
   if (!agentNotification) return;
   const n = agentNotification;
   agentNotification = null;
-  try { n.close(); } catch { /* уже закрыто */ }
+  try { n.close(); } catch { /* already closed */ }
   console.log('[launcher] уведомление агента закрыто');
 }
 
 function agentSessionTitle() {
   try {
-    const m = /^(.*) — [^—]+$/.exec(state.win.webContents.getTitle()); // «<сессия> — DeepSeek Harness»
+    const m = /^(.*) — [^—]+$/.exec(state.win.webContents.getTitle()); // «<session> — DeepSeek Harness»
     return m ? m[1] : '';
   } catch { return ''; }
 }
 
-// Тексты уведомлений по событию agentEvent.
+// Notification texts per the agentEvent event.
 function agentNotice(ev) {
   if (ev.type === 'finished') return tr('Агент закончил ответ', 'The agent has finished');
   if (ev.kind === 'approval') return tr('Агент ждёт подтверждения команды', 'The agent is waiting for you to approve a command');
@@ -187,7 +191,7 @@ function agentNotice(ev) {
   return tr('Агент ждёт согласования плана', 'The agent is waiting for you to review the plan');
 }
 
-// Для журнала (он на русском независимо от языка окна).
+// For the log (it is in Russian regardless of the window language).
 const agentWhat = (ev) => (ev.type === 'finished' ? 'агент закончил ответ'
   : `агент ждёт: ${{ approval: 'подтверждение команды', question: 'ответ на вопрос', plan: 'согласование плана' }[ev.kind]}`);
 
@@ -195,7 +199,7 @@ function notifyAgent(ev) {
   const title = agentNotice(ev);
   console.log(`[launcher] уведомление: ${agentWhat(ev)}`);
   if (!Notification.isSupported()) return;
-  clearAgentNotification(); // не копить: одно, самое свежее
+  clearAgentNotification(); // do not pile up: one, the newest
   const n = new Notification({
     title,
     body: agentSessionTitle() || 'DeepSeek Harness',
@@ -206,7 +210,7 @@ function notifyAgent(ev) {
   agentNotification = n;
 }
 
-// Короткий двухнотный сигнал — WebAudio прямо в окне (без внешних программ).
+// A short two-note signal — WebAudio right in the window (no external programs).
 function playAgentSound() {
   console.log('[launcher] звук: агент закончил ответ');
   const js = `(() => { try {
@@ -223,11 +227,11 @@ function playAgentSound() {
   state.win.webContents.executeJavaScript(js, true).catch(() => {});
 }
 
-// Признаки в GUI dsh: [data-chat-running] — агент отвечает; панели ожидания
-// человека — подтверждение команды ([data-approval-key], после ответа —
-// aria-busy), вопрос ([data-question-key]), согласование плана
-// ([data-plan-review-key]). Внутренние детали интерфейса dsh: если их
-// переименуют, сигнал просто перестанет срабатывать.
+// Markers in the dsh GUI: [data-chat-running] — the agent is answering;
+// human-waiting panels — command approval ([data-approval-key], aria-busy
+// after the answer), a question ([data-question-key]), plan review
+// ([data-plan-review-key]). Internal details of the dsh interface: if they
+// are renamed, the signal simply stops firing.
 const AGENT_PROBE = `(() => ({
   running: !!document.querySelector('[data-chat-running]'),
   waiting: document.querySelector('[data-approval-key]:not([aria-busy="true"])') ? 'approval'
@@ -236,7 +240,7 @@ const AGENT_PROBE = `(() => ({
 }))()`;
 
 async function pollAgentState() {
-  refreshTrayStatus(); // статус dsh у значка — независимо от агента
+  refreshTrayStatus(); // the dsh status on the icon — independent of the agent
   if (!state.win || state.win.isDestroyed() || state.stopping) return;
   try { if (new URL(state.win.webContents.getURL()).origin !== new URL(PLAIN_URL).origin) { agent = { running: false, waiting: null }; return; } } catch { return; }
   let cur;
@@ -258,4 +262,4 @@ async function pollAgentState() {
   if (attentionSoundOn()) playAgentSound();
 }
 
-Object.assign(module.exports, { closeToTrayOn, attentionOn, attentionSoundOn, trayMenu, setTray, setTrayAttention, clearAgentNotification, showMainWindow, onMainWindowClose, AGENT_POLL_MS, playAgentSound, pollAgentState, trayStatusText, trayStatusLabel, refreshTrayStatus }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { closeToTrayOn, attentionOn, attentionSoundOn, trayMenu, setTray, setTrayAttention, clearAgentNotification, showMainWindow, onMainWindowClose, AGENT_POLL_MS, playAgentSound, pollAgentState, trayStatusText, trayStatusLabel, refreshTrayStatus }); // extend rather than replace: the modules require each other in a circle
