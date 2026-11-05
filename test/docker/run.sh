@@ -26,7 +26,7 @@ SCENARIOS=${*:-}
 
 mkdir -p "$WORK/src" "$WORK/ctx" "$WORK/results"
 
-echo ">> сборка .deb из текущего кода (номер версии 1.1.0-1 — нарочно ниже любого релиза, для сценариев обновления)"
+echo ">> building the .deb from the current code (version 1.1.0-1 — deliberately older than any release, for the update scenarios)"
 rm -rf "$WORK/src"/* && mkdir -p "$WORK/src"
 cp -a "$ROOT/main.js" "$ROOT/src" "$ROOT/package.json" "$ROOT/deb" "$ROOT/build-deb.sh" "$ROOT/icon.png" "$WORK/src/"
 ln -s "$ROOT/node_modules" "$WORK/src/node_modules"
@@ -44,14 +44,14 @@ for pkg in 2.0.0-1 1.0.0-14; do
   rm -rf "$stage" && cp -a "$WORK/src/build/deb" "$stage"
   sed -i "s/^Version: .*/Version: $pkg/" "$stage/DEBIAN/control"
   sed -i "s/^  \"version\": \"[^\"]*\"/  \"version\": \"${pkg%-*}\"/" "$stage/opt/dsh-launcher/package.json"
-  grep -q "\"version\": \"${pkg%-*}\"" "$stage/opt/dsh-launcher/package.json" || { echo "версия в package.json не заменилась" >&2; exit 1; }
+  grep -q "\"version\": \"${pkg%-*}\"" "$stage/opt/dsh-launcher/package.json" || { echo "the version in package.json was not replaced" >&2; exit 1; }
   dpkg-deb --build --root-owner-group -Zgzip -z1 "$stage" "$WORK/github/dsh-launcher_${pkg}_amd64.deb" >/dev/null
   rm -rf "$stage"
 done
 
 TARBALL=node-$NODE_VER-linux-x64.tar.xz
 if [ ! -f "$WORK/ctx/$TARBALL" ]; then
-  echo ">> скачиваю $TARBALL"
+  echo ">> downloading $TARBALL"
   curl -fsSL -o "$WORK/ctx/$TARBALL" "https://nodejs.org/dist/$NODE_VER/$TARBALL"
   curl -fsSL "https://nodejs.org/dist/$NODE_VER/SHASUMS256.txt" | grep " $TARBALL\$" \
     | (cd "$WORK/ctx" && sha256sum -c --quiet -) || { rm -f "$WORK/ctx/$TARBALL"; exit 1; }
@@ -94,10 +94,10 @@ build_image() {
   for base in "$img" "mirror.gcr.io/library/$img"; do
     for try in 1 2 3; do
       if out=$(docker_build "$os" --build-arg BASE="$base" --build-arg NODE_VER="$NODE_VER" -t "dshl-test:$os" "$WORK/ctx" 2>&1); then
-        [ "$base" = "$img" ] || echo "   база с зеркала: $base"
+        [ "$base" = "$img" ] || echo "   base from the mirror: $base"
         return 0
       fi
-      echo "   сборка не удалась ($base, попытка $try): $(echo "$out" | grep -m1 -iE 'error|429' | cut -c1-200)"
+      echo "   build failed ($base, attempt $try): $(echo "$out" | grep -m1 -iE 'error|429' | cut -c1-200)"
       # Retrying only makes sense for network failures (rate limit, timeout,
       # DNS, npm 404 of a fresh publish); a Dockerfile or package error will repeat.
       echo "$out" | grep -qiE '429|Too Many Requests|toomanyrequests|failed to resolve source metadata|timeout|TLS handshake|connection reset|EAI_AGAIN|E404|ECONNRESET|ETIMEDOUT' || break 2
@@ -105,12 +105,12 @@ build_image() {
     done
   done
   echo "$out" | tail -20
-  annotate "Docker: образ $os" "$(echo "$out" | tail -5)"
+  annotate "Docker: image $os" "$(echo "$out" | tail -5)"
   return 1
 }
 
 for os in $OSES; do
-  echo ">> образ dshl-test:$os"
+  echo ">> image dshl-test:$os"
   build_image "$os" || exit 1
 done
 
@@ -118,7 +118,7 @@ if [ -z "$SCENARIOS" ]; then
   first=${OSES%% *}
   SCENARIOS=$(docker run --rm "dshl-test:$first" python3 -m pytest -p no:cacheprovider -q \
     --rootdir /opt/t /opt/t/tests --list-scenarios 2>/dev/null | sed -n 's/^SCENARIO //p' | tr '\n' ' ')
-  [ -n "$SCENARIOS" ] || { echo "не удалось получить список сценариев (pytest --list-scenarios)" >&2; exit 1; }
+  [ -n "$SCENARIOS" ] || { echo "could not get the scenario list (pytest --list-scenarios)" >&2; exit 1; }
 fi
 
 rm -f "$WORK/results"/*
@@ -139,18 +139,18 @@ one() {
     >"$WORK/results/$os-$sc.log" 2>&1
   local rc=$?
   docker rm -f "$name" >/dev/null 2>&1 || true
-  [ $rc -eq 124 ] || [ $rc -eq 137 ] && echo "  [FAIL] сценарий не уложился в 10 минут" >>"$WORK/results/$os-$sc.log"
+  [ $rc -eq 124 ] || [ $rc -eq 137 ] && echo "  [FAIL] the scenario did not finish in 10 minutes" >>"$WORK/results/$os-$sc.log"
   echo "$([ $rc -eq 0 ] && echo PASS || echo "FAIL") $os $sc"
 }
 [ -n "${GITHUB_TOKEN:-}" ] && export DSH_LAUNCHER_GITHUB_TOKEN="$GITHUB_TOKEN"
 export -f one; export WORK
-echo ">> сценарии (параллельно: $JOBS)"
+echo ">> scenarios (parallel: $JOBS)"
 for os in $OSES; do for sc in $SCENARIOS; do echo "$os $sc"; done; done \
   | xargs -P "$JOBS" -L 1 bash -c 'one $0 $1' | tee "$WORK/results/summary.txt"
 
 FAILED=$(grep -c '^FAIL' "$WORK/results/summary.txt" || true)
 TOTAL=$(wc -l < "$WORK/results/summary.txt")
-echo ">> итог: $((TOTAL - FAILED))/$TOTAL прошли"
+echo ">> result: $((TOTAL - FAILED))/$TOTAL passed"
 for f in $(grep '^FAIL' "$WORK/results/summary.txt" | awk '{print $2"-"$3}'); do
   fails=$(grep -E '^E  |^(FAILED|ERROR) ' "$WORK/results/$f.log" | head -20 || true)
   [ -n "$fails" ] || fails=$(tail -20 "$WORK/results/$f.log")
@@ -174,10 +174,10 @@ if ls "$WORK/results"/coverage-*.json >/dev/null 2>&1 && [ -x "$ROOT/node_module
   (cd "$ROOT" && node_modules/.bin/c8 report --temp-directory "$WORK/v8" --reports-dir "$WORK/coverage" \
     --all --src . --include main.js --include 'src/**' \
     --reporter text --reporter text-summary --reporter html) >"$WORK/results/coverage.txt" 2>&1 || true
-  echo ">> покрытие кода лаунчера сценариями ($(ls "$WORK/v8" | wc -l) процессов):"
+  echo ">> launcher code coverage from the scenarios ($(ls "$WORK/v8" | wc -l) processes):"
   grep -A6 '^=* Coverage summary' "$WORK/results/coverage.txt" || tail -5 "$WORK/results/coverage.txt"
   if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
-    { echo "### Покрытие кода лаунчера сценариями ($OSES)"; echo '```'; cat "$WORK/results/coverage.txt"; echo '```'; } >>"$GITHUB_STEP_SUMMARY"
+    { echo "### Launcher code coverage from the scenarios ($OSES)"; echo '```'; cat "$WORK/results/coverage.txt"; echo '```'; } >>"$GITHUB_STEP_SUMMARY"
   fi
 fi
 [ "$FAILED" -eq 0 ]
