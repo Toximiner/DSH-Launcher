@@ -16,6 +16,9 @@ const dialogs = require('./dialogs');
 
 
 
+/* ===== logTail (тест test/dsh-log.js) =====
+ * fs — модуль 'fs' (в тесте заменяется; сами функции openSync/fstatSync/
+ * readSync/closeSync используются как есть). */
 // Последние строки файла (читаем только хвост — лог бывает большим).
 function logTail(file, maxLines = 300, maxBytes = 256 * 1024) {
   let fd;
@@ -30,6 +33,7 @@ function logTail(file, maxLines = 300, maxBytes = 256 * 1024) {
     return text.split('\n').slice(-maxLines).join('\n').replace(/\s+$/, '');
   } catch { return null; } finally { if (fd !== undefined) try { fs.closeSync(fd); } catch { /* noop */ } }
 }
+/* ===== end logTail ===== */
 
 function showLogDialog() {
   const title = tr('Журнал dsh', 'dsh log');

@@ -376,6 +376,12 @@ class FindBar:
     def next(self):
         self.drv.go('dshlauncher://find/next/', page=self.PAGE)
 
+    def prev(self):
+        self.drv.go('dshlauncher://find/prev/', page=self.PAGE)
+
+    def close(self):
+        self.drv.go('dshlauncher://find/close/', page=self.PAGE)
+
 
 class UpdatePrompt:
     """Вопрос об обновлении (служебная страница главного окна)."""

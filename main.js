@@ -188,6 +188,9 @@ async function onReady() {
     // первая загрузка GUI dsh — показать «Что нового», если лаунчер обновился
     try {
       if (new URL(state.win.webContents.getURL()).origin === new URL(PLAIN_URL).origin) {
+        // Окно на странице dsh, а не служебной: смена языка не должна
+        // перерисовать старую статус-страницу («Запуск dsh…») поверх GUI.
+        state.currentPage = null;
         void maybeShowWhatsNew();
         maybeShowCrashNotice();
         maybeShowDshCrashNotice();
