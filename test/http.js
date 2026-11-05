@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// Юнит-тест httpGet (main.js): переходы по редиректам (ассеты релизов GitHub
-// отдаются через 302), защита от петли, таймаут и запрос через прокси (агент
-// от proxyAgentFor). Всё на локальных серверах, без сети.
+// Unit test of httpGet (main.js): following redirects (GitHub release
+// assets are served via 302), loop protection, a timeout and a request
+// through a proxy (the agent from proxyAgentFor). Everything on local
+// servers, no network.
 'use strict';
 const assert = require('assert');
 const http = require('http');
@@ -12,7 +13,7 @@ const listen = (srv) => new Promise((r) => srv.listen(0, '127.0.0.1', () => r(sr
 const text = async (res) => { let b = ''; res.setEncoding('utf8'); for await (const c of res) b += c; return b; };
 
 (async () => {
-  // Целевой сервер: /final — ответ, /r/N — цепочка редиректов, /loop — петля, /hang — молчит
+  // The target server: /final — the answer, /r/N — a chain of redirects, /loop — a loop, /hang — silent
   const hits = [];
   const target = http.createServer((q, s) => {
     hits.push(q.url);
@@ -20,49 +21,50 @@ const text = async (res) => { let b = ''; res.setEncoding('utf8'); for await (co
     const m = q.url.match(/^\/r\/(\d+)$/);
     if (m) { const n = Number(m[1]); s.writeHead(302, { location: n > 1 ? `/r/${n - 1}` : '/final' }); s.end(); return; }
     if (q.url === '/loop') { s.writeHead(301, { location: '/loop' }); s.end(); return; }
-    if (q.url === '/hang') return; // не отвечаем
+    if (q.url === '/hang') return; // we don't answer
     if (q.url === '/auth') { s.end('auth:' + (q.headers.authorization || '-')); return; }
     if (q.url === '/to-auth') { s.writeHead(302, { location: '/auth' }); s.end(); return; }
     if (q.url === '/cross') { s.writeHead(302, { location: `${otherBase}/auth` }); s.end(); return; }
     s.writeHead(404); s.end('nope');
   });
-  // Другой сервер (другой порт — другой origin): что пришло в Authorization
+  // Another server (another port — another origin): what arrived in Authorization
   const other = http.createServer((q, s) => { s.end('auth:' + (q.headers.authorization || '-')); });
   const otherBase = `http://127.0.0.1:${await listen(other)}`;
   const tport = await listen(target);
   const base = `http://127.0.0.1:${tport}`;
 
-  // Без прокси
+  // Without a proxy
   const direct = extract('httpGet', { http, https, proxyAgentFor: async () => undefined });
   let res = await direct(`${base}/final`, { headers: { 'User-Agent': 'dsh-launcher' } });
-  assert.strictEqual(res.statusCode, 200, 'прямой запрос');
-  assert.strictEqual(await text(res), 'ok:dsh-launcher', 'заголовки передаются');
+  assert.strictEqual(res.statusCode, 200, 'direct request');
+  assert.strictEqual(await text(res), 'ok:dsh-launcher', 'headers are passed through');
 
   res = await direct(`${base}/r/3`, { headers: { 'User-Agent': 'x' } });
-  assert.strictEqual(await text(res), 'ok:x', 'цепочка из 3 редиректов, заголовки сохраняются');
+  assert.strictEqual(await text(res), 'ok:x', 'chain of 3 redirects, headers preserved');
 
   res = await direct(`${base}/missing`);
-  assert.strictEqual(res.statusCode, 404, 'код ошибки отдаётся вызывающему');
+  assert.strictEqual(res.statusCode, 404, 'the error status is passed to the caller');
   await text(res);
 
-  // Токен — только исходному адресу: редирект на тот же origin — с ним, на другой — без
+  // The token — only to the original address: a redirect to the same origin — with it, to another — without it
   const auth = { 'User-Agent': 'x', Authorization: 'Bearer t0ken' };
-  assert.strictEqual(await text(await direct(`${base}/to-auth`, { headers: auth })), 'auth:Bearer t0ken', 'тот же origin — с токеном');
-  assert.strictEqual(await text(await direct(`${base}/cross`, { headers: auth })), 'auth:-', 'другой origin — без токена');
-  assert.strictEqual(auth.Authorization, 'Bearer t0ken', 'заголовки вызывающего не меняются');
+  assert.strictEqual(await text(await direct(`${base}/to-auth`, { headers: auth })), 'auth:Bearer t0ken', 'same origin — with the token');
+  assert.strictEqual(await text(await direct(`${base}/cross`, { headers: auth })), 'auth:-', 'different origin — without the token');
+  assert.strictEqual(auth.Authorization, 'Bearer t0ken', 'the caller’s headers are not mutated');
 
-  await assert.rejects(direct(`${base}/loop`), /слишком много перенаправлений/, 'петля редиректов → ошибка');
-  await assert.rejects(direct(`${base}/hang`, { timeoutMs: 200 }), /таймаут/, 'нет ответа → таймаут');
+  await assert.rejects(direct(`${base}/loop`), /слишком много перенаправлений/, 'redirect loop → error');
+  await assert.rejects(direct(`${base}/hang`, { timeoutMs: 200 }), /таймаут/, 'no response → timeout');
 
-  // Через прокси: агент Node с proxyEnv шлёт запрос на прокси (для http —
-  // абсолютным URI), прокси пересылает его целевому серверу. proxyEnv — с
-  // Node 24.5; в лаунчере Node из Electron 44 (24.x), а юнит-тесты CI идут
-  // на Node 22 — там эту часть пропускаем.
+  // Through a proxy: a Node agent with proxyEnv sends the request to the
+  // proxy (for http — an absolute URI), the proxy forwards it to the
+  // target server. proxyEnv — since Node 24.5; in the launcher Node is
+  // from Electron 44 (24.x), and the CI unit tests run on Node 22 — we
+  // skip this part there.
   const [maj, min] = process.versions.node.split('.').map(Number);
   if (maj < 24 || (maj === 24 && min < 5)) {
-    console.log(`  (прокси: пропущено — Node ${process.versions.node} без proxyEnv, нужен 24.5+)`);
+    console.log(`  (proxy: skipped — Node ${process.versions.node} has no proxyEnv, need 24.5+)`);
     other.closeAllConnections(); other.close(); target.closeAllConnections(); target.close();
-    console.log('OK: httpGet — все проверки прошли');
+    console.log('OK: httpGet — all checks passed');
     return;
   }
   let proxied = 0;
@@ -78,9 +80,9 @@ const text = async (res) => { let b = ''; res.setEncoding('utf8'); for await (co
     proxyAgentFor: async (u) => new http.Agent({ proxyEnv: { HTTP_PROXY: `http://127.0.0.1:${pport}` } }),
   });
   res = await viaProxy(`${base}/r/1`, { headers: { 'User-Agent': 'p' } });
-  assert.strictEqual(await text(res), 'ok:p', 'через прокси, с редиректом');
-  assert.strictEqual(proxied, 2, 'оба запроса (редирект и цель) прошли через прокси');
+  assert.strictEqual(await text(res), 'ok:p', 'through the proxy, with a redirect');
+  assert.strictEqual(proxied, 2, 'both requests (the redirect and the target) went through the proxy');
 
   other.closeAllConnections(); other.close(); target.closeAllConnections(); target.close(); proxy.close();
-  console.log('OK: httpGet — все проверки прошли');
+  console.log('OK: httpGet — all checks passed');
 })().catch((e) => { console.error(e); process.exit(1); });

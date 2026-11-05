@@ -1,11 +1,11 @@
 'use strict';
 /*
- * test/gpu.js — onChildProcessGone (src/gpu.js): две смерти GPU-процесса
- * за сессию = драйвер сломан — пишем маркер gpu-disabled.marker, следующие
- * запуски идут в программном рендере. Функция извлекается по маркерам
- * (test/_extract.js); fs/console/константы инжектим, чтобы не трогать
- * реальный диск и логи.
- * Запуск: node test/gpu.js (или npm test).
+ * test/gpu.js — onChildProcessGone (src/gpu.js): two GPU process deaths in
+ * a session = the driver is broken — we write the gpu-disabled.marker,
+ * the next starts go into software rendering. The function is extracted
+ * by markers (test/_extract.js); fs/console/constants are injected, so we
+ * don't touch the real disk and logs.
+ * Run: node test/gpu.js (or npm test).
  */
 const assert = require('assert');
 const { EventEmitter } = require('events');
@@ -32,26 +32,26 @@ function makeDeps() {
 }
 
 async function main() {
-  // 1) Два краша GPU-процесса → маркер записан, в тексте — причина и причина.
+  // 1) Two GPU process crashes → the marker is written, the text has the reason and the date.
   let d = makeDeps();
   let onGone = extract('onChildProcessGone', d);
   let restarts = 0;
   const app = new EventEmitter();
   onGone(app, () => { restarts += 1; });
   app.emit('child-process-gone', {}, { type: 'GPU', reason: 'crashed', exitCode: 11 });
-  assert.strictEqual(d.written.length, 0, 'один краш — маркера ещё нет');
+  assert.strictEqual(d.written.length, 0, 'one crash — no marker yet');
   app.emit('child-process-gone', {}, { type: 'GPU', reason: 'abnormal-exit', exitCode: 42 });
-  assert.strictEqual(d.written.length, 2, 'второй краш — mkdir + запись маркера');
-  assert.ok(d.written[0][0] === 'mkdir' && d.written[0][1] === '/tmp', 'LOG_DIR создан (recursive)');
+  assert.strictEqual(d.written.length, 2, 'second crash — mkdir + marker write');
+  assert.ok(d.written[0][0] === 'mkdir' && d.written[0][1] === '/tmp', 'LOG_DIR created (recursive)');
   assert.ok(d.written[0][2] && d.written[0][2].recursive === true, 'mkdir recursive');
   assert.strictEqual(d.written[1][0], 'write');
-  assert.strictEqual(d.written[1][1], MARKER, 'маркер в GPU_MARKER_FILE');
-  assert.ok(/GPU process crashed x2, reason=abnormal-exit/.test(d.written[1][2]), 'содержимое маркера: причина + x2');
-  assert.ok(/20\d{2}-\d{2}-\d{2}T/.test(d.written[1][2]), 'в маркере ISO-дата');
-  assert.ok(d.logs.some((m) => /GPU-драйвер, похоже, сломан/.test(m)), 'лог о сломанном драйвере');
-  assert.strictEqual(restarts, 0, 'без обновления на диске — не перезапускаемся');
+  assert.strictEqual(d.written[1][1], MARKER, 'marker in GPU_MARKER_FILE');
+  assert.ok(/GPU process crashed x2, reason=abnormal-exit/.test(d.written[1][2]), 'marker content: reason + x2');
+  assert.ok(/20\d{2}-\d{2}-\d{2}T/.test(d.written[1][2]), 'ISO date in the marker');
+  assert.ok(d.logs.some((m) => /GPU-драйвер, похоже, сломан/.test(m)), 'log about the broken driver');
+  assert.strictEqual(restarts, 0, 'no on-disk update — no restart');
 
-  // 2) Не-GPU-процессы и безобидные завершения не считаются.
+  // 2) Non-GPU processes and harmless exits are not counted.
   d = makeDeps();
   onGone = extract('onChildProcessGone', d);
   const app2 = new EventEmitter();
@@ -60,11 +60,11 @@ async function main() {
   app2.emit('child-process-gone', {}, { type: 'Utility', reason: 'killed', exitCode: 0 });
   app2.emit('child-process-gone', {}, { type: 'GPU', reason: 'clean-exit', exitCode: 0 });
   app2.emit('child-process-gone', {}, { type: 'GPU', reason: 'killed', exitCode: 15 });
-  assert.strictEqual(d.written.length, 0, 'не-GPU / чистые выходы — маркер не пишется');
-  assert.strictEqual(restarts, 0, 'перезапусков нет');
+  assert.strictEqual(d.written.length, 0, 'non-GPU / clean exits — no marker written');
+  assert.strictEqual(restarts, 0, 'no restarts');
 
-  // 3) Процесс завершился после обновления на диске → restartLauncher()
-  //    без подсчёта GPU-крашей.
+  // 3) The process exited after an update on disk → restartLauncher()
+  //    without counting the GPU crashes.
   d = makeDeps();
   d.state.launcherUpdatedOnDisk = true;
   onGone = extract('onChildProcessGone', d);
@@ -72,11 +72,11 @@ async function main() {
   let called = 0;
   onGone(app3, () => { called += 1; });
   app3.emit('child-process-gone', {}, { type: 'GPU', reason: 'crashed', exitCode: 11 });
-  assert.strictEqual(called, 1, 'обновление на диске — перезапуск лаунчера');
-  assert.strictEqual(d.written.length, 0, '…и маркер не пишется');
-  assert.ok(d.logs.some((m) => /перезапускаюсь/.test(m)), 'лог о перезапуске');
+  assert.strictEqual(called, 1, 'on-disk update — launcher restarts');
+  assert.strictEqual(d.written.length, 0, '…and no marker is written');
+  assert.ok(d.logs.some((m) => /перезапускаюсь/.test(m)), 'log about the restart');
 
-  // 4) Маркер уже живёт (gpuDisabledByMarker) — третий краш не дописывает его.
+  // 4) The marker already lives (gpuDisabledByMarker) — a third crash doesn't append to it.
   d = makeDeps();
   d.gpuDisabledByMarker = true;
   onGone = extract('onChildProcessGone', d);
@@ -84,9 +84,9 @@ async function main() {
   onGone(app4, () => { });
   app4.emit('child-process-gone', {}, { type: 'GPU', reason: 'crashed', exitCode: 11 });
   app4.emit('child-process-gone', {}, { type: 'GPU', reason: 'crashed', exitCode: 11 });
-  assert.strictEqual(d.written.length, 0, 'маркер уже есть — не дублируем');
+  assert.strictEqual(d.written.length, 0, 'marker already exists — not duplicated');
 
-  // 5) Ошибка записи (нет прав на LOG_DIR) — не роняет хендлер.
+  // 5) A write error (no rights on LOG_DIR) — doesn't drop the handler.
   d = makeDeps();
   d.fs.mkdirSync = () => { throw new Error('EACCES'); };
   onGone = extract('onChildProcessGone', d);
@@ -97,9 +97,9 @@ async function main() {
     app5.emit('child-process-gone', {}, { type: 'GPU', reason: 'crashed', exitCode: 11 });
     app5.emit('child-process-gone', {}, { type: 'GPU', reason: 'crashed', exitCode: 11 });
     threw = false;
-  } catch { /* не должно дойти */ }
-  assert.strictEqual(threw, false, 'исключение из записи маркера не пробрасывается');
-  assert.ok(d.logs.some((m) => /не удалось записать GPU-маркер/.test(m)), 'ошибка записи залогирована');
+  } catch { /* should not get here */ }
+  assert.strictEqual(threw, false, 'an exception from the marker write is not rethrown');
+  assert.ok(d.logs.some((m) => /не удалось записать GPU-маркер/.test(m)), 'write error is logged');
 
   console.log('OK: gpu — onChildProcessGone');
 }

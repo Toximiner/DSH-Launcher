@@ -1,44 +1,44 @@
 'use strict';
 
 /*
- * dsh-launcher — окно, которое ведёт процесс DeepSeek Harness.
+ * dsh-launcher — a window that manages the DeepSeek Harness process.
  *
- *  - если порт 3080 не слушается, запускает `dsh --profile web --no-open`;
- *  - строку `dsh web: http://127.0.0.1:3080/?token=...`, которую dsh печатает
- *    в stdout, подхватывает и открывает в окне — так выдаётся сессийный куки,
- *    который запоминается в профиле приложения;
- *  - если dsh уже запущен (например, из терминала), подключается к нему и НЕ
- *    убивает его при закрытии; если валидного куки нет, просит вставить URL
- *    с токеном из терминала, где работает dsh;
- *  - закрытие окна завершает всё дерево процессов dsh, которое запустил лаунчер
- *    (и dsh, «усыновлённый» после самовозрождения — он ищется по порту):
- *    сначала SIGTERM, через 4 с — SIGKILL;
- *  - SIGTERM/SIGINT/SIGHUP самому лаунчеру: штатное закрытие (как закрытие окна);
- *    повторный сигнал или зависание дольше 8 с — SIGKILL дереву dsh. Прямой
- *    SIGKILL лаунчеру перехватить нельзя — тот случай остаётся незакрытым.
+ *  - if port 3080 is not listening, starts `dsh --profile web --no-open`;
+ *  - catches the `dsh web: http://127.0.0.1:3080/?token=...` line in dsh's
+ *    stdout and opens it in the window — that issues the session cookie,
+ *    remembered in the app profile;
+ *  - if dsh is already running (e.g. from a terminal), attaches to it and
+ *    does NOT kill it on close; if there is no valid cookie, asks to paste
+ *    the URL with the token from the terminal where dsh is running;
+ *  - closing the window terminates the whole dsh process tree started by the
+ *    launcher (and dsh "adopted" after self-revival — it is found by port):
+ *    SIGTERM first, SIGKILL after 4 s;
+ *  - SIGTERM/SIGINT/SIGHUP to the launcher itself: a graceful close (same as
+ *    closing the window); a repeated signal or a hang longer than 8 s —
+ *    SIGKILL to the dsh tree (a direct SIGKILL to the launcher is uncatchable).
  *
- * Разделение по модулям: src/gpu.js — GPU/EGL/ozone и маркер «GPU сломан»;
- * src/port.js — порт dsh и его журнал; src/routes.js — схема dshlauncher://
- * и хендлеры; src/watchdog.js — авто-восстановление окна; src/signals.js —
- * сигналы и жёсткая остановка dsh.
+ * Module split: src/gpu.js — GPU/EGL/ozone and the «GPU broken» marker;
+ * src/port.js — dsh's port and its log; src/routes.js — the dshlauncher://
+ * scheme and handlers; src/watchdog.js — window auto-recovery; src/signals.js
+ * — signals and hard stop of dsh.
  */
 
 const { app, BrowserWindow, crashReporter, protocol, screen } = require('electron');
 const fs = require('fs');
 
-const state = require('./src/state'); // общее состояние (окно, процесс dsh, флаги)
+const state = require('./src/state'); // shared state (window, dsh process, flags)
 const i18n = require('./src/i18n');
 const { tr } = i18n;
 const { guardNavigation, restrictPermissions, denyExternalOpen } = require('./src/guard');
 const { WIN_MIN, keyAction, isAltKey, windowSize } = require('./src/ui');
 
-// Параметры запуска и журнал лаунчера — первыми: env.js убирает токен CI из
-// окружения, log.js начинает писать launcher.log.
+// Launch parameters and the launcher log — first: env.js removes the CI
+// token from the environment, log.js starts writing launcher.log.
 const { CONFIG, DSH_BIN_DEFAULT, PORT, PLAIN_URL, LANG_FORCED } = require('./src/env');
 const { startLauncherLog } = require('./src/log');
 startLauncherLog();
 
-const gpu = require('./src/gpu'); // GPU/EGL/marker — детект при загрузке, решения до ready
+const gpu = require('./src/gpu'); // GPU/EGL/marker — detection at load, decisions before ready
 const { portOpen } = require('./src/port');
 const { openRunningGui, plainUrlIsAuthed, registerProtocol } = require('./src/routes');
 const { recoverWindow, startWatchdog } = require('./src/watchdog');
@@ -56,26 +56,26 @@ const { stopDsh, stopAdoptedDsh } = require('./src/dsh-stop');
 const { checkPreviousRun, clearRunMarker, maybeShowCrashNotice } = require('./src/diagnostics');
 const { showClosingWindow, CLOSING_DELAY_MS } = require('./src/closing-window');
 const { closeToTrayOn, setTray, setTrayAttention, clearAgentNotification, showMainWindow, onMainWindowClose, AGENT_POLL_MS, pollAgentState } = require('./src/tray');
-const { inputHistoryOn, inputHistoryScript } = require('./src/input-history'); // ↑/↓: история введённого в поле dsh
+const { inputHistoryOn, inputHistoryScript } = require('./src/input-history'); // ↑/↓: input history in the dsh field
 const { maybeShowWhatsNew } = require('./src/whats-new');
 const { maybeShowDshCrashNotice } = require('./src/dsh-process');
 const { loadWindowState, trackWindowState } = require('./src/window-state');
-// ---- реестр launcher: имена, нужные модулям (генерируется) ----
-// В реестре остались только имена из модулей, подключающих electron (и с
-// циклами require): чистые модули (port.js, gpu.js, respond.js) потребители
-// подключают прямым require. Геттеры разрешаются в момент вызова — циклы
-// не мешают.
+// ---- launcher registry: names needed by the modules (generated) ----
+// The registry keeps only names from modules that require electron (and
+// have require cycles): pure modules (port.js, gpu.js, respond.js) are
+// included by consumers via direct require. The getters resolve at call
+// time — cycles are no obstacle.
 const launcher = require('./src/launcher');
 Object.defineProperties(launcher, {
   plainUrlIsAuthed: { get: () => plainUrlIsAuthed, enumerable: true },
   recoverWindow: { get: () => recoverWindow, enumerable: true },
   startWatchdog: { get: () => startWatchdog, enumerable: true },
 });
-// ---- конец реестра ----
+// ---- end registry ----
 
-// путь к dsh задан явно (переменная DSH_BIN или «Настройки»); иначе, если
-// /usr/bin/dsh нет, — ищется в PATH, npm prefix, nvm и т.п. (см. findDsh),
-// найденный путь запоминается
+// the path to dsh is set explicitly (the DSH_BIN variable or «Настройки»);
+// otherwise, if /usr/bin/dsh is absent — it is looked up in PATH, npm
+// prefix, nvm, etc. (see findDsh), and the found path is remembered
 state.dshBin = CONFIG.dshBin || DSH_BIN_DEFAULT;
 
 i18n.setLang(LANG_FORCED || i18n.systemLang());
@@ -83,12 +83,12 @@ i18n.setLang(LANG_FORCED || i18n.systemLang());
 /* ============================================================== */
 
 app.setName('dsh-launcher');
-// Дампы падений Electron (minidump) — только локально, в userData/Crashpad,
-// никуда не отправляются. Свежие кладутся в «Справка → Сохранить отчёт…»:
-// по ним можно разобрать падение (segfault), которое в журнале — только код.
+// Electron crash dumps (minidump) — local only, in userData/Crashpad,
+// nowhere sent. The fresh ones are put into «Справка → Сохранить отчёт…»:
+// they let you analyze a crash (segfault) that the log shows only as a code.
 crashReporter.start({ uploadToServer: false });
 
-// Диагностика сессии в лог — первое, что смотреть, если «окно не появляется».
+// Session diagnostics to the log — the first thing to look at if "the window does not appear".
 if (process.platform === 'linux') {
   console.log(
     `[launcher] сессия: XDG_SESSION_TYPE=${process.env.XDG_SESSION_TYPE || '(пусто)'} ` +
@@ -96,43 +96,43 @@ if (process.platform === 'linux') {
   );
 }
 
-// ozone-platform / disableHardwareAcceleration — до app ready (см. src/gpu.js)
+// ozone-platform / disableHardwareAcceleration — before app ready (see src/gpu.js)
 gpu.apply(app);
-// Две и более смерти GPU-процесса за сессию = драйвер сломан: маркер
+// Two or more GPU process deaths per session = the driver is broken: the marker
 gpu.onChildProcessGone(app, restartLauncher);
 
-// Начальные значения state — дефолты src/state.js (до onReady поля никто
-// не меняет; dshBin присвоен выше).
+// Initial state values — the defaults from src/state.js (nobody changes the
+// fields before onReady; dshBin was assigned above).
 
-/* ---------------- основной поток ---------------- */
+/* ---------------- main flow ---------------- */
 
 protocol.registerSchemesAsPrivileged([
   { scheme: 'dshlauncher', privileges: { standard: false, secure: true } },
 ]);
 
-let snapshotWindow = null; // снимок размеров главного окна (window-state.js)
+let snapshotWindow = null; // a snapshot of the main window size (window-state.js)
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => showMainWindow()); // в т.ч. спрятанное в трей
+  app.on('second-instance', () => showMainWindow()); // including one hidden to the tray
   app.whenReady().then(onReady);
 }
 
 async function onReady() {
-  checkPreviousRun(); // блокировка «один экземпляр» уже наша
+  checkPreviousRun(); // the "single instance" lock is already ours
   installSignalHandlers(app);
-  buildAppMenu(); // «Файл», «Правка», «Вид», «Справка» (подписи следуют за
-                  // языком окна, при RU|EN собирается заново)
+  buildAppMenu(); // «Файл», «Правка», «Вид», «Справка» (the labels follow the
+                  // window language, rebuilt on RU|EN)
   loadLangPref();
-  // Проверки обновлений — параллельно всему остальному; перед стартом dsh
-  // их ждём не дольше UPDATE_CHECK_TIMEOUT.
+  // Update checks — in parallel with everything else; before starting dsh
+  // we wait for them at most UPDATE_CHECK_TIMEOUT.
   startUpdateChecks();
   if (CONFIG.pollUpdates) setUpdatePolling(true);
   if (closeToTrayOn()) setTray(true);
   setInterval(() => { void pollAgentState(); }, AGENT_POLL_MS);
-  restrictPermissions(); // до первого окна
-  registerProtocol(); // dshlauncher:// — схема и таблица маршрутов (src/routes.js)
+  restrictPermissions(); // before the first window
+  registerProtocol(); // dshlauncher:// — the scheme and the route table (src/routes.js)
 
   const size = windowSize(loadWindowState(), screen.getPrimaryDisplay().workAreaSize);
   state.win = new BrowserWindow({
@@ -142,11 +142,11 @@ async function onReady() {
     minHeight: WIN_MIN.height,
     title: 'DeepSeek Harness',
     backgroundColor: '#0f1115',
-    autoHideMenuBar: false, // строка меню всегда видна
+    autoHideMenuBar: false, // the menu bar is always visible
     show: false,
-    // spellcheck включён всегда, а вкл/выкл — session.setSpellCheckerEnabled
-    // (меню «Вид»): так переключается без перезапуска.
-    // autoplayPolicy — звук «агент закончил» (WebAudio) без нажатия в окне
+    // spellcheck is always on, and toggling is done via session.setSpellCheckerEnabled
+    // (the «Вид» menu): that way it switches without a restart.
+    // autoplayPolicy — the "agent finished" sound (WebAudio) without a click in the window
     webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: true, autoplayPolicy: 'no-user-gesture-required' },
   });
   if (size.maximized) state.win.maximize();
@@ -155,37 +155,37 @@ async function onReady() {
   state.win.on('focus', () => { state.win.flashFrame(false); setTrayAttention(false); clearAgentNotification(); });
   initSpellcheck();
   denyExternalOpen(state.win.webContents);
-  guardNavigation(state.win.webContents, { gui: true }); // чужие сайты — в браузере
-  // Правый клик — контекстное меню (копировать / вставить …): своего у
-  // Electron нет. И в GUI dsh, и на служебных страницах лаунчера.
+  guardNavigation(state.win.webContents, { gui: true }); // foreign sites — in the browser
+  // Right click — a context menu (copy / paste …): Electron has none of its
+  // own. Both in the dsh GUI and on the launcher's service pages.
   state.win.webContents.on('context-menu', (_e, params) => showContextMenu(params));
-  // диагностика: из лога должно быть видно, что окно показало и что загрузилось
+  // diagnostics: the log must show that the window was shown and what loaded
   state.win.once('ready-to-show', () => { state.win.show(); console.log('[launcher] окно показано'); });
   let shownOnce = false;
   state.win.once('show', () => { shownOnce = true; });
-  // Страховка: на нативном Wayland ready-to-show может прийти с большим
-  // опозданием (или не прийти вовсе) — окно с show:false остаётся невидимым.
-  // Если через 8 с оно ни разу не показано — показываем вручную. Именно «ни
-  // разу»: окно, которое уже успели спрятать в трей, возвращать нельзя.
+  // Safety net: on native Wayland ready-to-show may arrive much later
+  // (or not at all) — a window with show:false stays invisible.
+  // If it was not shown even once within 8 s — we show it manually. Exactly "not
+  // even once": a window that has already been hidden to the tray must not be restored.
   setTimeout(() => {
-    // isDestroyed: окно могли закрыть (и app.quit()) раньше таймера —
-    // методы на уничтоженном окне бросают исключение.
+    // isDestroyed: the window may have been closed (and app.quit()) before the timer —
+    // methods on a destroyed window throw.
     if (state.win && !state.win.isDestroyed() && !shownOnce && !state.win.isVisible()) {
       console.log('[launcher] ready-to-show не пришло за 8 с — показываю окно вручную');
       state.win.show();
     }
   }, 8000);
-  // Восстановленный при старте масштаб (см. setZoomLevel ниже) не задерживается
-  // после перехода на страницу dsh — каждый cross-origin-переход Chromium
-  // сбрасывает zoom к 0. Поэтому держим его здесь и переносим на GUI один раз,
-  // при первой загрузке страницы dsh, чтобы «масштаб между запусками» работал.
+  // The zoom restored at startup (see setZoomLevel below) does not persist
+  // after navigating to the dsh page — every cross-origin navigation in
+  // Chromium resets zoom to 0. So we keep it here and carry it over to the
+  // GUI once, on the first load of the dsh page, so "zoom between runs" works.
   let savedZoomPending = null;
   state.win.webContents.on('did-finish-load', () => {
-    // первая загрузка GUI dsh — показать «Что нового», если лаунчер обновился
+    // first load of the dsh GUI — show "What's new" if the launcher was updated
     try {
       if (new URL(state.win.webContents.getURL()).origin === new URL(PLAIN_URL).origin) {
-        // Окно на странице dsh, а не служебной: смена языка не должна
-        // перерисовать старую статус-страницу («Запуск dsh…») поверх GUI.
+        // The window is on the dsh page, not a service one: a language change
+        // must not repaint an old status page («Запуск dsh…») over the GUI.
         state.currentPage = null;
         if (savedZoomPending != null) {
           state.win.webContents.setZoomLevel(savedZoomPending);
@@ -194,7 +194,7 @@ async function onReady() {
         void maybeShowWhatsNew();
         maybeShowCrashNotice();
         maybeShowDshCrashNotice();
-        // ↑/↓ в поле dsh: впрыск истории введённого (тексты в журнал не пишутся)
+        // ↑/↓ in the dsh field: injection of the input history (the texts are not written to the log)
         if (inputHistoryOn()) void state.win.webContents.executeJavaScript(inputHistoryScript()).catch(() => {});
       }
     } catch { /* data: */ }
@@ -205,29 +205,29 @@ async function onReady() {
   });
   state.win.webContents.on('render-process-gone', (_e, details) => {
     console.error('[launcher] рендер-процесс завершился:', details.reason, 'exitCode=' + details.exitCode);
-    if (state.launcherUpdatedOnDisk) restartLauncher(); // новые файлы на диске — старому не подняться
+    if (state.launcherUpdatedOnDisk) restartLauncher(); // new files on disk — the old one cannot come up
   });
 
-  // Клавиши «как в браузере» (F5, Ctrl+R, Ctrl+= / - / 0, Ctrl+F, F3, F11) —
-  // keyAction → viewActions; в меню «Вид» те же действия. Ускорители меню
-  // не регистрируются — только подсказки, чтобы не перебивать клавиши GUI dsh.
+  // "Browser-like" keys (F5, Ctrl+R, Ctrl+= / - / 0, Ctrl+F, F3, F11) —
+  // keyAction → viewActions; the same actions in the «Вид» menu. Menu
+  // accelerators are not registered — only hints, so as not to override the dsh GUI keys.
   try {
     const savedZoom = JSON.parse(fs.readFileSync(zoomFile(), 'utf8'));
     if (Number.isFinite(savedZoom.zoomLevel)) {
       const z = Math.max(-5, Math.min(5, savedZoom.zoomLevel));
       state.win.webContents.setZoomLevel(z);
-      savedZoomPending = z; // перенесём на страницу dsh (см. did-finish-load выше)
+      savedZoomPending = z; // we will carry it over to the dsh page (see did-finish-load above)
       console.log(`[launcher] восстановлен масштаб: ${savedZoom.zoomLevel}`);
     }
   } catch { /* noop */ }
   state.win.webContents.on('before-input-event', (event, input) => {
     try {
-      // Alt (обе клавиши, нажатие и отпускание): на Linux он переводит
-      // фокус в строку меню — по нажатию подсвечивает «Файл», по
-      // отпусканию подтверждает фокус. Гасим по code (не по key:
-      // Shift+Alt — смена раскладки — приходит как key="GroupNext");
-      // см. isAltKey в src/ui.js. Сочетания Alt+буква и GUI dsh не
-      // затрагиваются — на них code не AltLeft/AltRight.
+      // Alt (both keys, press and release): on Linux it moves
+      // focus to the menu bar — on press it highlights «Файл», on
+      // release it confirms the focus. We swallow by code (not by key:
+      // Shift+Alt — layout switch — arrives as key="GroupNext");
+      // see isAltKey in src/ui.js. The Alt+letter combinations and the dsh GUI are
+      // untouched — for them the code is not AltLeft/AltRight.
       if (isAltKey(input)) { event.preventDefault(); return; }
       if (input.type !== 'keyDown') return;
       const act = keyAction(input);
@@ -248,8 +248,8 @@ async function onReady() {
     return;
   }
 
-  // Порт закрыт — будем запускать dsh сами. Сначала проверяем, что он вообще
-  // установлен: иначе вместо понятной страницы — ENOENT после попытки старта.
+  // Port is closed — we will start dsh ourselves. First check that it is
+  // installed at all: otherwise ENOENT after the start attempt, not a clear page.
   const installCheck = await dshInstallCheck();
   state.dshInstalledVersion = installCheck.version || null;
   if (!installCheck.ok) {
@@ -259,13 +259,13 @@ async function onReady() {
       ') — показываю страницу установки'
     );
     showInstallPage();
-    startWatchdog(); // если dsh поставят и запустят вручную — окно оживёт само
+    startWatchdog(); // if dsh is installed and started manually — the window will come back to life on its own
     return;
   }
   await launchDsh();
 }
 
-/* ---------------- закрытие = остановка ---------------- */
+/* ---------------- close = stop ---------------- */
 
 app.on('window-all-closed', () => app.quit());
 
@@ -273,14 +273,14 @@ app.on('before-quit', (e) => {
   if (state.stopping) return;
   state.stopping = true;
   e.preventDefault();
-  // Окно прячем сразу, а если остановка dsh затянется — окошко «закрывается…»
+  // Hide the window immediately, and if stopping dsh drags on — the "closing…" window
   if (state.win && !state.win.isDestroyed()) {
     if (state.win.isVisible() && snapshotWindow) snapshotWindow();
     state.win.hide();
   }
   const closingTimer = setTimeout(() => showClosingWindow(state.relaunchRequested), CLOSING_DELAY_MS);
-  // установка dsh / маркета / шаг обновления: свой процесс и таймер перерисовки
-  // (функции очистки регистрируют модули через state.settleOperation)
+  // dsh install / market / update step: its own process and redraw timer
+  // (the cleanup functions are registered by the modules via state.settleOperation)
   state.settleAllOperations();
   Promise.resolve().then(async () => {
     await stopDsh();
@@ -292,5 +292,5 @@ app.on('before-quit', (e) => {
   });
 });
 
-// страховка: если before-quit почему-то не сработала — жёстко
+// safety net: if before-quit did not fire for some reason — hard stop
 app.on('will-quit', () => { killDshNow(); clearRunMarker(); });

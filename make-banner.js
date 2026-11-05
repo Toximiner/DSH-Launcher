@@ -1,10 +1,10 @@
 'use strict';
 
-/* Генерирует social-preview.png (1280×640) — картинку для Settings → General →
- * Social preview на GitHub. Запуск: npm run banner (через Electron: нужен
- * рендер текста системными шрифтами, который у make-icon.js не предусмотрен).
- * Значок — тот же, что в make-icon.js (координаты и цвета 1:1), но в SVG,
- * чтобы оставаться чётким в крупном размере. */
+/* Generates social-preview.png (1280×640) — the image for Settings → General →
+ * Social preview on GitHub. Run: npm run banner (via Electron: rendering text
+ * with system fonts is needed, which make-icon.js does not provide).
+ * The icon is the same as in make-icon.js (coordinates and colors 1:1), but
+ * in SVG, to stay crisp at large sizes. */
 
 const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
@@ -56,7 +56,7 @@ app.whenReady().then(async () => {
   });
   win.webContents.setZoomFactor(1);
   await win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(HTML));
-  await new Promise((r) => setTimeout(r, 500)); // шрифты и раскладка
+  await new Promise((r) => setTimeout(r, 500)); // fonts and layout
   const img = await win.webContents.capturePage({ x: 0, y: 0, width: W, height: H });
   const sized = img.getSize().width === W ? img : img.resize({ width: W, height: H, quality: 'best' });
   fs.writeFileSync(OUT, sized.toPNG());

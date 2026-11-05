@@ -1,8 +1,8 @@
-"""Объекты окон лаунчера (page objects): тест говорит, ЧТО делает, а как —
-маршруты dshlauncher://…, CDP, разметка — спрятано здесь.
+"""Launcher window objects (page objects): the test says WHAT it does, while the
+how — the dshlauncher://… routes, CDP, the markup — is hidden here.
 
-Окна меню открываются по маршрутам (по нативному меню driver кликать не
-умеет); маршрут отвечает 204 — страница, с которой перешли, остаётся на месте.
+Menu windows are opened via routes (the driver cannot click the native menu);
+a route answers 204 — the page you came from stays in place.
 """
 import json
 import re
@@ -13,20 +13,20 @@ from .procs import wait_for
 
 
 class Gui:
-    """Главное окно с GUI dsh."""
+    """The main window with the dsh GUI."""
 
     def __init__(self, drv):
         self.drv = drv
 
     def wait(self, timeout=60):
-        """Дождаться загрузки GUI dsh (окно ищем по адресу: первым в списке CDP
-        может оказаться окно-диалог)."""
+        """Wait for the dsh GUI to load (we look for the window by address: the
+        first entry in the CDP list may be a dialog window)."""
         self.drv.wait_url(GUI_URL, timeout, page=GUI_URL)
-        # Адрес в списке CDP меняется в момент перехода, а документ ещё может быть
-        # прежним (служебная страница «Подключение…»): ждём, что внутри страницы —
-        # уже GUI dsh и он догружен.
+        # The address in the CDP list changes at the moment of navigation, while the
+        # document may still be the old one (the helper page “Connecting…”): we wait
+        # until the page already contains the dsh GUI and it is fully loaded.
         assert wait_for(lambda: self.eval("location.origin === 'http://127.0.0.1:3080' && "
-                                          "document.readyState === 'complete'"), timeout, 0.2), 'GUI dsh не догрузился'
+                                          "document.readyState === 'complete'"), timeout, 0.2), 'dsh GUI did not finish loading'
         return self
 
     def eval(self, js):
@@ -36,21 +36,21 @@ class Gui:
         self.drv.go(route, page=GUI_URL, keyed=keyed)
 
     def close(self):
-        """Закрыть окно из страницы (window.close())."""
+        """Close the window from the page (window.close())."""
         self.drv.eval('window.close()', page=GUI_URL)
 
     def quit(self):
-        """«Файл → Выйти» (то же app.quit(), что пункт меню и трея)."""
+        """“File → Quit” (the same app.quit() as the menu item and the tray)."""
         self.go('dshlauncher://menu/quit/')
 
     def hidden(self):
-        """Главное окно спрятано (страница GUI dsh ещё жива)."""
+        """The main window is hidden (the dsh GUI page is still alive)."""
         return self.eval('document.visibilityState') == 'hidden'
 
-    # ---- состояние страницы ----
+    # ---- page state ----
 
     def mark(self):
-        """Пометить страницу — not_reloaded() потом покажет, что её не перезагружали."""
+        """Mark the page — not_reloaded() will later show that it was not reloaded."""
         self.eval('window.__mark = 42; 1')
 
     def not_reloaded(self):
@@ -59,49 +59,49 @@ class Gui:
     def outer_width(self):
         return self.eval('window.outerWidth')
 
-    # ---- содержимое страницы для проверок ----
+    # ---- page content for checks ----
 
     def set_body(self, html):
-        """Подложить содержимое страницы; вернуть, когда оно на месте."""
+        """Replace the page content; return once it is in place."""
         self.eval(f'document.body.innerHTML = {json.dumps(html)}; window.__body = true; 1')
-        assert wait_for(lambda: self.eval('window.__body === true'), 5, 0.1), 'содержимое страницы не подложилось'
+        assert wait_for(lambda: self.eval('window.__body === true'), 5, 0.1), 'page content was not set'
 
     def select_text_of(self, element_id):
-        """Выделить текст элемента; вернуть, когда выделение действительно стоит."""
-        # Закрывающееся нативное меню от прошлого клика может сбросить
-        # выделение — ставим заново, пока не удержится.
+        """Select the element's text; return once the selection is really in place."""
+        # A native menu closing from a previous click may reset the
+        # selection — we set it again until it holds.
         js_id = json.dumps(element_id)
         select = f"""(() => {{ const s = getSelection();
             if (s.rangeCount && !s.isCollapsed && s.toString().trim() === document.getElementById({js_id}).textContent.trim()) return true;
             const r = document.createRange(); r.selectNodeContents(document.getElementById({js_id}));
             s.removeAllRanges(); s.addRange(r); return false; }})()"""
-        assert wait_for(lambda: self.eval(select), 5, 0.2), 'выделение не встало'
+        assert wait_for(lambda: self.eval(select), 5, 0.2), 'the selection was not set'
 
     def select_input(self, element_id):
-        """Фокус в поле и выделить всё; вернуть, когда выделение стоит."""
+        """Focus the field and select all; return once the selection is in place."""
         js_id = json.dumps(element_id)
         select = f"""(() => {{ const i = document.getElementById({js_id});
             if (document.activeElement === i && i.selectionEnd - i.selectionStart === i.value.length) return true;
             i.focus(); i.select(); return false; }})()"""
-        assert wait_for(lambda: self.eval(select), 5, 0.2), 'выделение в поле не встало'
+        assert wait_for(lambda: self.eval(select), 5, 0.2), 'the field selection was not set'
 
     def clear_selection(self):
         self.eval('getSelection().removeAllRanges(); document.activeElement && document.activeElement.blur(); 1')
         assert wait_for(lambda: self.eval("getSelection().toString() === '' && document.activeElement === document.body"),
-                        5, 0.1), 'выделение не снято'
+                        5, 0.1), 'the selection was not cleared'
 
     def right_click(self, x, y):
         self.drv.right_click(x, y, page=GUI_URL)
 
     def close_context_menu(self):
-        """Закрыть открытое контекстное меню (в контейнере оно само не закроется)."""
+        """Close an open context menu (in the container it will not close by itself)."""
         self.go('dshlauncher://menu/close-context/')
 
     def press(self, key):
-        """Нажатие клавиши в главном окне (например, «Ctrl+Equal»)."""
+        """A key press in the main window (e.g. “Ctrl+Equal”)."""
         self.drv.key(key, page=GUI_URL)
 
-    # ---- окна меню ----
+    # ---- menu windows ----
 
     def open_about(self):
         self.go('dshlauncher://menu/about/')
@@ -120,7 +120,7 @@ class Gui:
         return SettingsDialog(self.drv).wait_loaded()
 
     def open_update_now(self, kind):
-        """«Справка → Обновить … до X…» (пункт есть, когда найдено обновление)."""
+        """“Help → Update … to X…” (the item exists when an update is found)."""
         self.go(f'dshlauncher://menu/update/?k={kind}')
         return UpdateNowDialog(self.drv, kind).wait_loaded()
 
@@ -133,34 +133,34 @@ class Gui:
         return FindBar(self.drv).wait_ready()
 
     def restart_dsh(self):
-        """«Файл → Перезапустить dsh» без вопроса-подтверждения."""
+        """“File → Restart dsh” without a confirmation prompt."""
         self.go('dshlauncher://menu/restart-dsh/')
 
 
 class Dialog:
-    """Окно-диалог поверх главного (отдельная страница CDP с заголовком TITLE)."""
-    TITLE = None  # регулярное выражение заголовка
+    """A dialog window over the main one (a separate CDP page with the TITLE title)."""
+    TITLE = None  # a title regex
 
     def __init__(self, drv):
         self.drv = drv
 
     def text(self):
-        """То, что отрисовано (DOM). Адрес страницы при перерисовке меняется
-        раньше, чем загружается новый DOM, — проверять по нему нельзя."""
+        """What is rendered (the DOM). The page address changes on a redraw
+        before the new DOM is loaded — it cannot be used to check."""
         return ' '.join((self.drv.eval('document.body ? document.body.innerText : ""', page=self.TITLE) or '').split())
 
     def wait_text(self, pattern, timeout=30):
         rx = re.compile(pattern)
         last = []
         ok = wait_for(lambda: last.append(self.text()) or rx.search(last[-1]), timeout, 0.25)
-        assert ok, f'окно {self.TITLE}: не дождались /{pattern}/ за {timeout} с; последнее: {(last or [""])[-1][:600]}'
+        assert ok, f'window {self.TITLE}: did not see /{pattern}/ within {timeout}s; last: {(last or [""])[-1][:600]}'
         return last[-1]
 
     def is_open(self):
         return self.drv.page(self.TITLE) is not None
 
     def is_overlay(self):
-        """Диалог — слой внутри главного окна: затемнение во всю площадь, карточка по центру."""
+        """The dialog is a layer inside the main window: a dimming over the whole area, a card in the center."""
         return bool(self.drv.eval("document.documentElement.classList.contains('ovl')"
                                   " && getComputedStyle(document.body).backgroundColor.includes('0.55')", page=self.TITLE))
 
@@ -168,17 +168,17 @@ class Dialog:
         self.drv.go(route, page=self.TITLE)
 
     def rows(self):
-        """Таблица окна: {подпись: значение}."""
+        """The window's table: {label: value}."""
         raw = self.drv.eval("JSON.stringify([...document.querySelectorAll('tr')]"
                             ".map(r => [...r.cells].map(c => c.innerText.trim())))", page=self.TITLE)
         return {r[0]: r[1] for r in json.loads(raw or '[]') if len(r) >= 2}
 
     def close(self):
         self.go('dshlauncher://dialog/close/')
-        assert wait_for(lambda: not self.is_open(), 10), f'окно {self.TITLE} не закрылось'
+        assert wait_for(lambda: not self.is_open(), 10), f'window {self.TITLE} did not close'
 
     def press(self, key):
-        """Нажатие клавиши в окне (например, «Escape»)."""
+        """A key press in the window (e.g. “Escape”)."""
         self.drv.key(key, page=self.TITLE)
 
 
@@ -186,7 +186,7 @@ class AboutDialog(Dialog):
     TITLE = '^About$'
 
     def wait_loaded(self):
-        self.wait_text('Copy for report', 30)  # кнопка появляется, когда версии загружены
+        self.wait_text('Copy for report', 30)  # the button appears once the versions are loaded
         return self
 
     def value(self, label):
@@ -197,7 +197,7 @@ class AboutDialog(Dialog):
         self.wait_text('Copied', 10)
 
     def reenable_gpu(self):
-        """«Включить GPU снова» (кнопка есть, только если GPU отключён после сбоев)."""
+        """“Re-enable GPU” (the button exists only if the GPU was disabled after failures)."""
         self.wait_text('Re-enable GPU', 5)
         self.go('dshlauncher://dialog/gpu-enable/')
 
@@ -217,7 +217,7 @@ class LogDialog(Dialog):
     TITLE = '^dsh log$'
 
     def wait_loaded(self):
-        assert wait_for(lambda: self.is_open() and self.log_text() is not None, 15), 'окно журнала не открылось'
+        assert wait_for(lambda: self.is_open() and self.log_text() is not None, 15), 'the log window did not open'
         return self
 
     def log_text(self):
@@ -232,27 +232,27 @@ class SettingsDialog(Dialog):
         return self
 
     def set(self, key, value):
-        """Изменить поле (как это делает само окно при изменении поля)."""
+        """Change a field (the way the window itself does when the field changes)."""
         self.go(f'dshlauncher://settings/set/?k={key}&v={value}')
 
     def note_inside_card(self):
-        """Всплывающее «Сохранено»/ошибка — внутри карточки диалога (не в углу окна)."""
+        """The floating “Saved”/error — inside the dialog card (not in the window corner)."""
         return bool(self.drv.eval("(() => { const p = document.querySelector('.pop'), w = document.querySelector('.wrap');"
                                   " if (!p || !w) return false; const a = p.getBoundingClientRect(), b = w.getBoundingClientRect();"
                                   " return a.left >= b.left && a.right <= b.right && a.top >= b.top && a.bottom <= b.bottom; })()",
                                   page=self.TITLE))
 
     def active_section(self):
-        """Какой раздел выбран в меню слева (и его содержимое показано)."""
+        """Which section is selected in the left menu (and its content is shown)."""
         return self.drv.eval("(() => { const a = document.querySelector('.sett nav a.on');"
                              " return a && !document.getElementById('sec-' + a.dataset.s).hidden ? a.dataset.s : null; })()",
                              page=self.TITLE)
 
     def section(self, sid):
-        """Раздел в меню слева: general, updates, dsh, window, graphics."""
+        """A section in the left menu: general, updates, dsh, window, graphics."""
         self.drv.eval(f"sec({json.dumps(sid)})", page=self.TITLE)
         assert wait_for(lambda: self.drv.eval(
-            f"!document.getElementById('sec-' + {json.dumps(sid)}).hidden", page=self.TITLE), 5, 0.2), f'раздел {sid}'
+            f"!document.getElementById('sec-' + {json.dumps(sid)}).hidden", page=self.TITLE), 5, 0.2), f'section {sid}'
 
     def wait_note(self, pattern, timeout=10):
         return self.wait_text(pattern, timeout)
@@ -264,7 +264,7 @@ class SettingsDialog(Dialog):
         return self.drv.eval(f"(document.getElementById({json.dumps(element_id)}) || {{}}).disabled === true", page=self.TITLE)
 
     def value(self, element_id):
-        """Значение поля окна (текст поля ввода в innerText не попадает)."""
+        """The window field's value (input field text does not land in innerText)."""
         return self.drv.eval(f"(document.getElementById({json.dumps(element_id)}) || {{}}).value", page=self.TITLE)
 
     def relaunch(self):
@@ -272,7 +272,7 @@ class SettingsDialog(Dialog):
 
 
 class Toast:
-    """Плашка в углу главного окна (своя страница CDP): обновление, сбой."""
+    """A toast in the corner of the main window (its own CDP page): an update, a failure."""
     TITLE = '^launcher-toast$'
 
     def __init__(self, drv):
@@ -284,14 +284,14 @@ class Toast:
     def wait_shown(self, pattern='Details', timeout=30):
         rx = re.compile(pattern)
         assert wait_for(lambda: self.drv.page(self.TITLE) is not None and rx.search(self.text()), timeout, 0.25), \
-            f'плашка /{pattern}/ не появилась'
+            f'toast /{pattern}/ did not appear'
         return self
 
     def is_shown(self):
         return self.drv.page(self.TITLE) is not None
 
     def details(self, kind):
-        """«Подробнее…» — окно «Обновить … до X…»; плашка закрывается."""
+        """“Details…” — the “Update … to X…” window; the toast closes."""
         self.drv.go(f'dshlauncher://toast/open/?k={kind}', page=self.TITLE)
         return UpdateNowDialog(self.drv, kind).wait_loaded()
 
@@ -299,7 +299,7 @@ class Toast:
         self.drv.go('dshlauncher://toast/close/', page=self.TITLE)
 
 
-UpdateToast = Toast  # плашка обновления — та же
+UpdateToast = Toast  # the update toast — the same one
 
 
 class RollbackDialog(Dialog):
@@ -311,7 +311,7 @@ class ReportDialog(Dialog):
 
 
 class UpdateNowDialog(Dialog):
-    """Окно «Обновить … до X…»: что нового, предупреждение, «Обновить сейчас» / «Позже»."""
+    """The “Update … to X…” window: what's new, a warning, “Update now” / “Later”."""
 
     def __init__(self, drv, kind):
         super().__init__(drv)
@@ -323,7 +323,7 @@ class UpdateNowDialog(Dialog):
         return self
 
     def later(self):
-        self.close()  # «Позже» — то же, что закрыть окно
+        self.close()  # “Later” — the same as closing the window
 
     def update_now(self):
         self.go(f'dshlauncher://update-now/?k={self.kind}')
@@ -334,17 +334,17 @@ class WhatsNewDialog(Dialog):
 
 
 class FindBar:
-    """Панель поиска по странице (отдельный WebContentsView — своя страница CDP)."""
-    PAGE = '%3Cinput%20id%3D%22q%22'  # узнаём по адресу (data:-страница с полем q)
+    """The in-page search bar (a separate WebContentsView — its own CDP page)."""
+    PAGE = '%3Cinput%20id%3D%22q%22'  # recognized by address (a data: page with the q field)
 
     def __init__(self, drv):
         self.drv = drv
 
     def wait_ready(self):
-        # страница панели появляется в CDP раньше, чем догружается
+        # the bar's page appears in CDP before it is fully loaded
         assert wait_for(lambda: self.drv.page(self.PAGE) is not None and
                         self.drv.eval("!!document.getElementById('q') && typeof setCount === 'function'",
-                                      page=self.PAGE), 10), 'панель поиска не открылась'
+                                      page=self.PAGE), 10), 'the find bar did not open'
         return self
 
     def type(self, text):
@@ -352,21 +352,21 @@ class FindBar:
                       "q.dispatchEvent(new Event('input')); return 1; })()" % json.dumps(text), page=self.PAGE)
 
     def count(self):
-        """Счётчик совпадений: «2 / 3», «none» или ''."""
+        """The match counter: “2 / 3”, “none”, or ''."""
         return self.drv.eval("document.getElementById('n').textContent", page=self.PAGE) or ''
 
     def wait_count(self, cond, timeout=5):
         return wait_for(lambda: cond(self.count()), timeout, 0.25)
 
     def search(self, text, expect, tries=3):
-        """Ввести текст и дождаться счётчика, для которого expect(счётчик) истинно.
-        Первый поиск сразу после открытия панели иногда отвечает «none» —
-        повторяем ввод с паузой. Поле перед повтором НЕ очищаем: пустая строка
-        останавливает поиск (stopFindInPage), и это асинхронно может отменить
-        следующий запрос."""
-        # панель только что открылась: дождаться, что фокус — в поле поиска
+        """Type the text and wait for the counter for which expect(counter) is true.
+        The first search right after opening the bar sometimes answers “none” —
+        we repeat the input with a pause. The field is NOT cleared before a retry:
+        an empty string stops the search (stopFindInPage), and that can
+        asynchronously cancel the next request."""
+        # the bar was just opened: wait for the focus to be in the search field
         assert wait_for(lambda: self.drv.eval("document.activeElement && document.activeElement.id === 'q'",
-                                              page=self.PAGE), 5, 0.1), 'фокус не в поле поиска'
+                                              page=self.PAGE), 5, 0.1), 'focus is not in the search field'
         for _ in range(tries):
             self.type(text)
             if self.wait_count(expect, 4):
@@ -384,7 +384,7 @@ class FindBar:
 
 
 class UpdatePrompt:
-    """Вопрос об обновлении (служебная страница главного окна)."""
+    """The update prompt (a helper page of the main window)."""
 
     def __init__(self, drv):
         self.drv = drv
@@ -421,7 +421,7 @@ class UpdatePrompt:
 
 
 class MarketPrompt(UpdatePrompt):
-    """Вопрос «Установить dshmarket?» (служебная страница главного окна)."""
+    """The “Install dshmarket?” prompt (a helper page of the main window)."""
 
     def install(self):
         self.drv.go('dshlauncher://market/install/')
@@ -434,13 +434,13 @@ class MarketPrompt(UpdatePrompt):
 
 
 class PastePage(UpdatePrompt):
-    """«Нужен токен»: dsh уже запущен, а у окна нет сессионного куки."""
+    """“A token is needed”: dsh is already running, but the window has no session cookie."""
 
     def paste(self, value):
-        """Вставить ссылку или токен в поле и нажать Enter — как пользователь.
-        Enter — синтетическим событием; под нагрузкой CI навигация после него
-        могла теряться (флэк 26.04): проверяем, что окно ушло с paste-страницы,
-        — не ушло, повторяем."""
+        """Paste a link or token into the field and press Enter — like a user.
+        Enter is a synthetic event; under CI load the navigation after it
+        could be lost (a 26.04 flake): we check that the window left the paste page,
+        — if it did not, we repeat."""
         for _ in range(3):
             start = self.drv.url()
             self.drv.eval(f"(() => {{ const el = document.getElementById('u'); el.value = {json.dumps(value)};"

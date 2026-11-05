@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Юнит-тесты src/tray.js: статус dsh у значка трея — trayStatusText
-// (подсказка), trayStatusLabel (строка для лога) и refreshTrayStatus (кэш).
+// Unit tests for src/tray.js: dsh status on the tray icon — trayStatusText
+// (tooltip), trayStatusLabel (log line) and refreshTrayStatus (cache).
 'use strict';
 const assert = require('assert');
 const { extract } = require('./_extract');
@@ -10,13 +10,13 @@ const en = (r, e) => e;
 
 const trayStatusText = extract('trayStatusText', {});
 
-// подсказка (ru)
+// tooltip (ru)
 assert.strictEqual(trayStatusText('up', false, ru), 'DeepSeek Harness — dsh запущен', 'port up');
 assert.strictEqual(trayStatusText('down', false, ru), 'DeepSeek Harness — dsh не запущен', 'port down');
 assert.strictEqual(trayStatusText('down', true, ru), 'DeepSeek Harness — dsh остановлен (авто-перезапуск остановлен)', 'fatal');
-assert.strictEqual(trayStatusText('up', true, ru), 'DeepSeek Harness — dsh остановлен (авто-перезапуск остановлен)', 'fatal важнее port');
-assert.strictEqual(trayStatusText(null, false, ru), 'DeepSeek Harness', 'ещё не проверено — только имя');
-// подсказка (en)
+assert.strictEqual(trayStatusText('up', true, ru), 'DeepSeek Harness — dsh остановлен (авто-перезапуск остановлен)', 'fatal takes precedence over port');
+assert.strictEqual(trayStatusText(null, false, ru), 'DeepSeek Harness', 'not checked yet — name only');
+// tooltip (en)
 assert.strictEqual(trayStatusText('up', false, en), 'DeepSeek Harness — dsh is running', 'port up (en)');
 assert.strictEqual(trayStatusText('down', true, en), 'DeepSeek Harness — dsh has stopped (auto-restart halted)', 'fatal (en)');
 
@@ -26,8 +26,8 @@ assert.strictEqual(trayStatusLabel('down', false), 'dsh не запущен', 'l
 assert.strictEqual(trayStatusLabel(null, true), 'dsh остановлен (авто-перезапуск остановлен)', 'label fatal');
 assert.strictEqual(trayStatusLabel(null, false), 'состояние dsh ещё не проверено', 'label null');
 
-// refreshTrayStatus: в Electron лезём только при смене состояния (кэш
-// trayStatusCache — параметр замыкания), при attention — вообще не лезем.
+// refreshTrayStatus: in Electron we touch it only on state change (the
+// trayStatusCache — a closure parameter), and at all not when attention is set.
 function mk(tray, attention) {
   const tools = {
     tooltips: [],
@@ -49,36 +49,36 @@ function mk(tray, attention) {
 {
   const t = mk(null, false);
   t.run();
-  assert.strictEqual(t.tooltips.length, 0, 'трея нет — ничего не делаем');
+  assert.strictEqual(t.tooltips.length, 0, 'no tray — nothing to do');
 }
 {
   const t = mk({}, false);
   t.run();
-  assert.strictEqual(t.tooltips.length, 1, 'включили трей — показали статус');
+  assert.strictEqual(t.tooltips.length, 1, 'tray enabled — status shown');
   assert.strictEqual(t.tooltips[0], 'DeepSeek Harness');
   t.run();
-  assert.strictEqual(t.tooltips.length, 1, 'повторно без изменения — не трогаем (кэш)');
+  assert.strictEqual(t.tooltips.length, 1, 'repeat without a change — leave it alone (cache)');
   t.state.portState = 'up';
   t.run();
-  assert.strictEqual(t.tooltips.length, 2, 'port up — подсказка обновлена');
+  assert.strictEqual(t.tooltips.length, 2, 'port up — tooltip updated');
   assert.strictEqual(t.tooltips[1], 'DeepSeek Harness — dsh запущен');
-  assert.ok(t.logs.some((l) => l.includes('трей: dsh запущен')), 'статус в лог');
+  assert.ok(t.logs.some((l) => l.includes('трей: dsh запущен')), 'status in the log');
   t.state.dshFatal = true;
   t.run();
-  assert.strictEqual(t.tooltips.length, 3, 'fatal — подсказка обновлена');
+  assert.strictEqual(t.tooltips.length, 3, 'fatal — tooltip updated');
   assert.strictEqual(t.tooltips[2], 'DeepSeek Harness — dsh остановлен (авто-перезапуск остановлен)');
   t.state.portState = 'down';
   t.state.dshFatal = false;
   t.run();
-  assert.strictEqual(t.tooltips.length, 4, 'порт закрылся — подсказка обновлена');
+  assert.strictEqual(t.tooltips.length, 4, 'port closed — tooltip updated');
   assert.strictEqual(t.tooltips[3], 'DeepSeek Harness — dsh не запущен');
 }
 {
   const t = mk({}, true);
   t.state.portState = 'up';
   t.run();
-  assert.strictEqual(t.tooltips.length, 0, 'attention — статус не перетираем');
-  assert.strictEqual(t.logs.length, 0, 'attention — в лог тоже не пишем');
+  assert.strictEqual(t.tooltips.length, 0, 'attention — do not overwrite the status');
+  assert.strictEqual(t.logs.length, 0, 'attention — do not write to the log either');
 }
 
-console.log('OK: tray — статус dsh у значка');
+console.log('OK: tray — dsh status on the icon');

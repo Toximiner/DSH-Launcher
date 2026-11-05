@@ -1,17 +1,18 @@
 'use strict';
-// Окно — чистая логика: пункты контекстного меню, горячие клавиши, размер
-// окна, состояние GPU, имя и текст отчёта.
+// The window — pure logic: context menu items, hotkeys, window size, GPU
+// state, the report name and text.
 const { tr } = require('./i18n');
 
 const WIN_DEFAULT = { width: 1440, height: 900 };
 const WIN_MIN = { width: 760, height: 480 };
 
-/* Контекстное меню по правому клику — по params события context-menu:
-   в поле ввода — Вырезать / Копировать / Вставить / Выделить всё (доступность
-   по editFlags); вне поля — Копировать (если есть выделение) и Выделить всё;
-   на ссылке — ещё «Копировать адрес ссылки»; на слове с ошибкой — первой
-   группой варианты исправления и «Добавить в словарь». Пункты — { action,
-   label, enabled[, value] }, группы разделены { type: 'separator' }. */
+/* The right-click context menu — from the context-menu event's params:
+   in an input field — Cut / Copy / Paste / Select all (availability per
+   editFlags); outside a field — Copy (if there is a selection) and
+   Select all; on a link — additionally "Copy link address"; on a
+   misspelled word — first group: the correction suggestions and
+   "Add to dictionary". Items — { action, label, enabled[, value] },
+   groups separated by { type: 'separator' }. */
 function contextMenuItems(params) {
   const f = params.editFlags || {};
   const groups = [];
@@ -48,8 +49,9 @@ function contextMenuItems(params) {
   return items;
 }
 
-/* Клавиша → действие «Вида» (имя из viewActions) или null — клавиша
-   странице. code — физическая клавиша, не зависит от раскладки (RU/EN). */
+/* Key → an action of "View" (a name from viewActions), or null — the key
+   belongs to the page. code — the physical key, independent of the
+   layout (RU/EN). */
 function keyAction(input) {
   const c = input.control;
   if (input.key === 'F5' || (c && input.code === 'KeyR')) return input.shift ? 'reloadHard' : 'reload';
@@ -63,21 +65,22 @@ function keyAction(input) {
   return null;
 }
 
-/* Обе Alt-клавиши (нажатие и отпускание), по физическому code — от
-   раскладки не зависит: голый Alt приходит как key="Alt", Shift+Alt
-   (смена раскладки) — как key="GroupNext", AltGr — как key="AltGraph",
-   а code в любом случае AltLeft/AltRight. На Linux Alt переводит фокус
-   в строку меню окна (по нажатию — подсветка, по отпусканию — фокус),
-   поэтому такие события гасятся (preventDefault в обработчиках
-   before-input-event). Смена раскладки не ломается: её состояние ведёт
-   композитор, а altKey на последующих клавишах сохраняется. */
+/* Both Alt keys (down and up), by the physical code — independent of the
+   layout: a bare Alt arrives as key="Alt", Shift+Alt (layout switch) — as
+   key="GroupNext", AltGr — as key="AltGraph", while code is always
+   AltLeft/AltRight. On Linux Alt moves focus to the window's menu bar
+   (on press — highlight, on release — focus), so such events are swallowed
+   (preventDefault in the before-input-event handlers). Layout switching is
+   not broken: the compositor keeps its state, and altKey is preserved on
+   subsequent keys. */
 function isAltKey(input) {
   return (input.type === 'keyDown' || input.type === 'keyUp') &&
     (input.code === 'AltLeft' || input.code === 'AltRight');
 }
 
-/* Размер окна из сохранённого состояния: не меньше WIN_MIN и не больше
-   рабочей области экрана (монитор могли сменить); мусор — размер по умолчанию. */
+/* Window size from the saved state: not less than WIN_MIN and not more
+   than the screen's work area (the monitor may have been changed);
+   garbage — the default size. */
 function windowSize(saved, workArea) {
   const num = (v) => (Number.isFinite(v) && v > 0 ? v : null);
   const fit = (v, def, min, max) => {
@@ -93,9 +96,10 @@ function windowSize(saved, workArea) {
   };
 }
 
-/* Состояние GPU-ускорения для «О программе». Причины отключения — как в
-   начале main.js; markerAgeMs — возраст маркера сбоев сейчас (null — нет).
-   Маркер при включённом GPU = отключится со следующего запуска. */
+/* The GPU acceleration state for "About". The reasons for disabling — as
+   at the start of main.js; markerAgeMs — the crash marker's age now
+   (null — none). A marker while GPU is on = it will be disabled from the
+   next start. */
 function gpuStatus(st) {
   const marker = st.markerAgeMs !== null && st.markerAgeMs < st.ttlMs;
   const daysLeft = marker ? Math.max(1, Math.ceil((st.ttlMs - st.markerAgeMs) / 86400000)) : 0;
@@ -107,7 +111,7 @@ function gpuStatus(st) {
   return { on: reason === null, reason, marker, daysLeft };
 }
 
-/* Имя файла отчёта (по местному времени) и текст сведений «ключ: значение». */
+/* The report file name (local time) and the "key: value" info text. */
 function reportFileName(d) {
   const p = (n) => String(n).padStart(2, '0');
   return `dsh-launcher-report-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}.tar.gz`;
@@ -117,12 +121,12 @@ function reportInfoText(facts) {
   return facts.map(([k, v]) => `${k}: ${v === undefined || v === null || v === '' ? '—' : v}`).join('\n') + '\n';
 }
 
-/* ===== agentEvent (чистая функция, тест test/agent.js) =====
-   Что изменилось в GUI dsh между двумя проверками: prev/cur — { running,
+/* ===== agentEvent (pure function, test test/agent.js) =====
+   What changed in the dsh GUI between two checks: prev/cur — { running,
    waiting } (waiting — 'approval' | 'question' | 'plan' | null). →
-   { type: 'waiting', kind } — агент остановился и ждёт человека (новое
-   ожидание или другого вида); { type: 'finished' } — ответ закончен и агент
-   ничего не ждёт; null — сообщать не о чем. */
+   { type: 'waiting', kind } — the agent has stopped and is waiting for a
+   human (a new wait or of another kind); { type: 'finished' } — the answer
+   is over and the agent waits for nothing; null — nothing to report. */
 function agentEvent(prev, cur) {
   if (cur.waiting && cur.waiting !== prev.waiting) return { type: 'waiting', kind: cur.waiting };
   if (prev.running && !cur.running && !cur.waiting) return { type: 'finished' };
@@ -130,11 +134,12 @@ function agentEvent(prev, cur) {
 }
 /* ===== end agentEvent ===== */
 
-/* ===== crashRestart (чистая функция, тест test/agent.js) =====
-   Перезапускать ли dsh, который завершился сам: только при сбое (код не 0
-   или сигнал) и не больше max раз за windowMs — иначе dsh падает снова и
-   снова, крутить его по кругу бессмысленно. history — времена прошлых
-   авто-перезапусков (мс). → { restart, history } (history — с учётом этого). */
+/* ===== crashRestart (pure function, test test/agent.js) =====
+   Whether to restart a dsh that exited on its own: only on a crash (a
+   nonzero code or a signal) and no more than max times within windowMs —
+   otherwise dsh keeps crashing again and again, and spinning it in a
+   circle is pointless. history — the times of past auto-restarts (ms).
+   → { restart, history } (history — including this one). */
 function crashRestart(history, now, code, signal, max = 3, windowMs = 10 * 60 * 1000) {
   const recent = (Array.isArray(history) ? history : []).filter((t) => now - t >= 0 && now - t < windowMs);
   const crashed = code !== 0 || Boolean(signal);
@@ -143,9 +148,10 @@ function crashRestart(history, now, code, signal, max = 3, windowMs = 10 * 60 * 
 }
 /* ===== end crashRestart ===== */
 
-/* ===== pickCrashDumps (чистая функция, тест test/report.js) =====
-   Какие дампы падений класть в отчёт: files — [{ path, mtimeMs, size }];
-   не старше maxAgeDays, новые первыми, не больше max штук и maxBytes вместе. */
+/* ===== pickCrashDumps (pure function, test test/report.js) =====
+   Which crash dumps to put into the report: files — [{ path, mtimeMs,
+   size }]; no older than maxAgeDays, newest first, no more than max of
+   them and maxBytes in total. */
 function pickCrashDumps(files, now, maxAgeDays = 30, max = 3, maxBytes = 25 * 1024 * 1024) {
   const fresh = (Array.isArray(files) ? files : [])
     .filter((f) => f && now - f.mtimeMs >= 0 && now - f.mtimeMs <= maxAgeDays * 86400000)

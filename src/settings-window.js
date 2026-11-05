@@ -1,5 +1,5 @@
 'use strict';
-// Окно «Настройки»: разделы, сохранение полей, перезапуск лаунчера.
+// «Настройки» (Settings) window: sections, field saving, launcher restart.
 const { app, dialog } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -20,15 +20,16 @@ const tray = require('./tray');
 const updatesLive = require('./updates-live');
 const updates = require('./updates');
 const view = require('./view');
-const { noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
-const { inputHistoryOn, inputHistoryScript } = require('./input-history'); // ↑/↓: история введённого в поле dsh
+const { noContentResponse } = require('./respond'); // pure module — direct require, no registry
+const { inputHistoryOn, inputHistoryScript } = require('./input-history'); // ↑/↓: input history in the dsh field
 
-/* ---------------- окно «Настройки» ---------------- */
+/* ---------------- the «Настройки» (Settings) window ---------------- */
 
-// «Файл → Настройки…» (Ctrl+,). Каждое поле сохраняется сразу (переход на
-// dshlauncher://settings/set/?k=…&v=…, ответ 204); язык, орфография, маркет,
-// «снова спрашивать» действуют сразу, проверка обновлений — со следующего
-// запуска, остальное — после перезапуска лаунчера (кнопка в окне).
+// «Файл → Настройки…» (File → Settings…) (Ctrl+,). Each field is saved
+// immediately (a navigation to dshlauncher://settings/set/?k=…&v=…, 204
+// response); language, spell check, market, "ask again" take effect
+// immediately, the update check — from the next start, the rest — after the
+// launcher restarts (the button in the window).
 
 
 
@@ -80,8 +81,8 @@ function onSettingsSet(url) {
       else if (key === 'closeToTray') { saveSettings({ closeToTray: r.value ? true : null }); tray.setTray(r.value); }
       else if (key === 'attention') saveSettings({ attention: r.value ? null : false });
       else if (key === 'sandbox') saveSettings({ sandbox: r.value ? true : null });
-      else if (key === 'attentionSound') { saveSettings({ attentionSound: r.value ? true : null }); if (r.value && state.win) tray.playAgentSound(); } // сразу — услышать
-      else if (key === 'inputHistory') { // сразу: впрыск в уже открытую страницу dsh
+      else if (key === 'attentionSound') { saveSettings({ attentionSound: r.value ? true : null }); if (r.value && state.win) tray.playAgentSound(); } // immediately — to hear it
+      else if (key === 'inputHistory') { // immediately: inject into the already open dsh page
         saveSettings({ inputHistory: r.value ? null : false });
         try {
           if (state.win && !state.win.isDestroyed()) {
@@ -90,7 +91,7 @@ function onSettingsSet(url) {
           }
         } catch { /* noop */ }
       }
-      else saveSettings({ [key]: r.value || null }); // dshPath, cwd: '' — по умолчанию
+      else saveSettings({ [key]: r.value || null }); // dshPath, cwd: '' — the default
       console.log(`[launcher] настройки: ${key} = ${key === 'dshPath' || key === 'cwd' ? (r.value || '(по умолчанию)') : r.value}`);
       settingsNote = { text: tr('Сохранено', 'Saved'), error: false };
     } catch (e) {
@@ -123,13 +124,14 @@ function onSettingsResetUpdates() {
   return noContentResponse();
 }
 
-// Перезапуск лаунчера (применить настройки). Не app.relaunch(): Electron
-// запускает новый экземпляр, пока старый ещё держит блокировку «один
-// экземпляр», и новый тут же закрывается. Поэтому так: before-quit
-// останавливает dsh, затем (relaunchRequested) старый отпускает блокировку
-// и запускает новый экземпляр через sh, который ждёт, пока старый выйдет
-// совсем (не дольше 20 с): иначе экземпляры перекрываются — новый не может
-// занять то, что ещё держит старый (порт отладки, файлы Chromium).
+// Launcher restart (apply settings). Not app.relaunch(): Electron starts
+// the new instance while the old one still holds the "single instance"
+// lock, and the new one closes right away. That's why it goes like this:
+// before-quit stops dsh, then (relaunchRequested) the old one releases the
+// lock and starts the new instance via sh, which waits until the old one
+// has fully exited (at most 20 s): otherwise the instances overlap — the
+// new one can't take what the old one still holds (the debug port,
+// Chromium files).
 
 
 function relaunchLauncher(why = 'чтобы применить настройки') {
@@ -139,10 +141,10 @@ function relaunchLauncher(why = 'чтобы применить настройк�
   app.quit();
 }
 
-// Новый экземпляр лаунчера — отдельно от этого, через bash: закрыть
-// унаследованные дескрипторы (CLOSE_INHERITED_FDS), дождаться, пока этот
-// процесс выйдет (до 20 с), и exec — тот же pid.
-// $0 — pid этого процесса, "$@" — команда нового экземпляра.
+// The new launcher instance — separately from this one, via bash: close
+// the inherited descriptors (CLOSE_INHERITED_FDS), wait for this process
+// to exit (up to 20 s), and exec — the same pid.
+// $0 — this process's pid, "$@" — the new instance's command.
 function spawnLauncherAfterExit(cmd, args, stdio) {
   const script = dshProcess.CLOSE_INHERITED_FDS +
     'i=0; while kill -0 "$0" 2>/dev/null && [ $i -lt 200 ]; do sleep 0.1; i=$((i+1)); done; exec "$@"';
@@ -151,19 +153,19 @@ function spawnLauncherAfterExit(cmd, args, stdio) {
 
 function spawnNewInstance() {
   app.releaseSingleInstanceLock();
-  // песочница — по настройке (как в run.sh): только с галочкой и настроенным SUID-хелпером
+  // sandbox — per the setting (as in run.sh): only with the checkbox and a configured SUID helper
   const sb = path.join(path.dirname(process.execPath), 'chrome-sandbox');
   let helperOk = false;
-  try { const st = fs.statSync(sb); helperOk = st.uid === 0 && (st.mode & 0o4000) !== 0; } catch { /* нет хелпера */ }
+  try { const st = fs.statSync(sb); helperOk = st.uid === 0 && (st.mode & 0o4000) !== 0; } catch { /* no helper */ }
   const args = process.argv.slice(1).filter((a) => a !== '--no-sandbox');
   if (!(helperOk && effectiveConfig(process.env, loadSettings(), os.homedir()).sandbox)) args.push('--no-sandbox');
-  // stdout/stderr — те же: вывод нового экземпляра идёт туда же, что и прежнего
+  // stdout/stderr — the same: the new instance's output goes to the same place as the old one's
   const p = spawnLauncherAfterExit(process.execPath, args, ['ignore', 'inherit', 'inherit']);
   p.unref();
   console.log(`[launcher] новый экземпляр (pid ${p.pid}) запустится, когда этот завершится`);
 }
 
-// Раздел окна «Настройки» (меню слева) — запоминается, пока лаунчер открыт.
+// The section of the «Настройки» (Settings) window (the left menu) — remembered while the launcher is open.
 const SETTINGS_SECTIONS = ['general', 'updates', 'dsh', 'window', 'graphics'];
 
 
@@ -255,7 +257,7 @@ function showSettingsDialog() {
       <script>
         function set(k, v) { location.href = 'dshlauncher://settings/set/?k=' + encodeURIComponent(k) + '&v=' + encodeURIComponent(v); }
         function go(r) { location.href = 'dshlauncher://settings/' + r + '/'; }
-        // раздел — сразу на странице; лаунчер запоминает его для перерисовок
+        // the section — immediately on the page; the launcher remembers it for redraws
         function sec(id) {
           for (const el of document.querySelectorAll('.sett section')) el.hidden = el.id !== 'sec-' + id;
           for (const a of document.querySelectorAll('.sett nav a')) a.className = a.dataset.s === id ? 'on' : '';
@@ -267,4 +269,4 @@ function showSettingsDialog() {
   dialogs.dialogShow(gen, render);
 }
 
-Object.assign(module.exports, { onSettingsSet, onSettingsPick, onSettingsResetUpdates, relaunchLauncher, spawnLauncherAfterExit, spawnNewInstance, SETTINGS_SECTIONS, showSettingsDialog }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { onSettingsSet, onSettingsPick, onSettingsResetUpdates, relaunchLauncher, spawnLauncherAfterExit, spawnNewInstance, SETTINGS_SECTIONS, showSettingsDialog }); // extend rather than replace: the modules require each other in a circle

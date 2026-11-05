@@ -1,38 +1,38 @@
 name: build-deb
 
-# Как выпустить релиз:
-#   1. Дописать раздел `## [Unreleased]` в CHANGELOG.md (русский) и
-#      CHANGELOG.en.md (английский) — оба станут описанием релиза.
-#   2. (по желанию) Actions → docker-tests → Run workflow: сценарии
-#      установленного пакета на Ubuntu 24.04 / 26.04 и Debian 13 (~15 минут).
-#   3. npm run release X.Y.Z — раздел становится `## [X.Y.Z] — <дата>`,
-#      версия — в package.json, package-lock.json и deb/control; коммит
-#      «Версия X.Y.Z» (тег не создаётся — его накладывают после слитого PR).
-#   4. Прямой пуш в main закрыт правилом «Changes must be made through a
-#      pull request» — релиз идёт через PR:
+# How to make a release:
+#   1. Complete the `## [Unreleased]` section in CHANGELOG.md (Russian) and
+#      CHANGELOG.en.md (English) — both become the release description.
+#   2. (optional) Actions → docker-tests → Run workflow: scenarios of the
+#      installed package on Ubuntu 24.04 / 26.04 and Debian 13 (~15 minutes).
+#   3. npm run release X.Y.Z — the section becomes `## [X.Y.Z] — <date>`,
+#      the version — in package.json, package-lock.json and deb/control; a
+#      «Version X.Y.Z» commit (the tag is not created — applied after the merged PR).
+#   4. Direct push to main is closed by the «Changes must be made through a
+#      pull request» rule — the release goes through a PR:
 #        git push origin main:release/X.Y.Z
 #        gh pr create --base main --head release/X.Y.Z
-#      (чужие PR, напр. dependabot — 1 approval от владельца;
-#      свой PR владелец сливает сам — enforce_admins выключен),
-#      по зелёному build — мерж (обычный merge commit).
+#      (other people's PRs, e.g. dependabot — 1 approval from the owner;
+#      their own PR the owner merges themselves — enforce_admins is off),
+#      on green build — merge (regular merge commit).
 #   5. git fetch origin
 #      git tag vX.Y.Z origin/main && git push origin vX.Y.Z
-# Тег vX.Y.Z даёт пакет X.Y.Z-1; тег vX.Y.Z-R — пакет X.Y.Z-R (перепаковка
-# той же версии). Version: в deb/control для релиза переписывается из тега.
+# Tag vX.Y.Z gives package X.Y.Z-1; tag vX.Y.Z-R — package X.Y.Z-R (a repack
+# of the same version). Version: in deb/control is rewritten from the tag.
 #
-# Пуш в main (кроме правок *.md) — только сборка: .deb в артефактах прогона,
-# без релиза. PR — тоже только сборка и тесты: это pull_request, не
-# pull_request_target, так что у PR из форка токен только на чтение и нет
-# секретов, а первый PR нового участника GitHub запускает лишь после
-# одобрения владельцем.
+# Push to main (except *.md edits) — build only: the .deb in the run's
+# artifacts, no release. PR — build and tests only too: this is
+# pull_request, not pull_request_target, so a PR from a fork has a
+# read-only token and no secrets, and a new contributor's first PR GitHub
+# runs only after approval by the owner.
 on:
   push:
     branches: [main]
     tags: ['v*']
-    # Для пушей тегов фильтр путей не применяется — только для веток.
+    # The paths filter does not apply to tag pushes — only to branches.
     paths-ignore: ['**.md']
-  # PR (в том числе от Dependabot): юнит-тесты, ESLint и сборка пакета; релиз
-  # выходит только по тегу
+  # PR (including from Dependabot): unit tests, ESLint and package build; a
+  # release happens only on a tag
   pull_request:
     branches: [main]
     paths-ignore: ['**.md']
@@ -45,23 +45,23 @@ on:
 
 jobs:
   build:
-    # Зафиксировано: ubuntu-latest 19.10.2026 переезжает на Ubuntu 26.
-    # После миграции можно сменить на ubuntu-26.04 (сборка просто копирует
-    # бинарник Electron, от версии ОС раннера она не зависит).
+    # Pinned: ubuntu-latest moves to Ubuntu 26 on 2026-10-19.
+    # After the migration it can be changed to ubuntu-26.04 (the build just
+    # copies the Electron binary, it does not depend on the runner OS version).
     runs-on: ubuntu-24.04
     permissions:
-      contents: write # создание Release (и тега — при ручном запуске)
+      contents: write # creating the Release (and the tag — on manual run)
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 0 # история и теги — для поиска предыдущего релиза
+          fetch-depth: 0 # history and tags — for finding the previous release
 
       - name: Determine version
-        # - пуш тега v*: релиз этого тега;
-        # - ручной запуск с полем «Тег релиза»: релиз с этим тегом (если тега
-        #   ещё нет — его создаст акция на текущем коммите);
-        # - пуш в main / ручной запуск без поля: только сборка, версия из
-        #   deb/control.
+        # - push of a v* tag: release of that tag;
+        # - manual run with the «Тег релиза» field: release with that tag (if
+        #   the tag does not exist yet — the action creates it on the commit);
+        # - push to main / manual run without the field: build only, version
+        #   from deb/control.
         id: ver
         env:
           DISPATCH_TAG: ${{ inputs.tag }}
@@ -73,8 +73,8 @@ jobs:
           elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ -n "${DISPATCH_TAG:-}" ]; then
             tag="$DISPATCH_TAG"
             case "$tag" in v*) ;; *) tag="v$tag" ;; esac
-            # Существующий тег должен указывать на собираемый коммит — иначе
-            # к релизу приложился бы пакет из другого кода.
+            # An existing tag must point to the commit being built — otherwise
+            # the release would attach a package from different code.
             if sha=$(git rev-parse -q --verify "refs/tags/$tag^{commit}"); then
               [ "$sha" = "$GITHUB_SHA" ] || {
                 echo "::error::Тег $tag уже есть и указывает на ${sha:0:7}, а собирается ${GITHUB_SHA:0:7}. Запустите воркфлоу на нужном коммите или возьмите новый тег."
@@ -108,29 +108,29 @@ jobs:
           echo "releasing=$releasing" >> "$GITHUB_OUTPUT"
 
       - name: Release notes
-        # Описание релиза — раздел версии из CHANGELOG.md (русский) и
-        # CHANGELOG.en.md (английский), через разделитель. В каждом файле
-        # ищется сначала `## [X.Y.Z-R]` (как в теге), затем `## [X.Y.Z]`.
-        # Нет английского — релиз выйдет с одним русским (с предупреждением);
-        # нет ни одного — список коммитов с предыдущего тега v*.
-        # В конце — ссылка на полное сравнение.
+        # Release description — the version section from CHANGELOG.md (Russian)
+        # and CHANGELOG.en.md (English), separated by a divider. In each file
+        # `## [X.Y.Z-R]` (as in the tag) is looked up first, then `## [X.Y.Z]`.
+        # No English — the release goes out with Russian only (with a warning);
+        # none at all — the commit list since the previous v* tag.
+        # At the end — a link to the full comparison.
         if: steps.ver.outputs.releasing == 'true'
         env:
           TAG: ${{ steps.ver.outputs.tag }}
         run: |
           set -eu
           v="${TAG#v}"
-          section() { # section <файл> <версия>
+          section() { # section <file> <version>
             [ -f "$1" ] || return 0
             awk -v h="## [$2]" '
               index($0, h) == 1 { on = 1; next }
               on && /^## / { exit }
-              # служебный HTML-комментарий (плейсхолдер [Unreleased]) — не в описание
+              # service HTML comment ([Unreleased] placeholder) — not into the description
               on && $0 ~ /^<!--/ && $0 ~ /-->$/ { next }
               on { print }
-            ' "$1" | sed -e '/./,$!d' # без пустых строк в начале
+            ' "$1" | sed -e '/./,$!d' # no blank lines at the start
           }
-          notes_for() { # notes_for <файл>
+          notes_for() { # notes_for <file>
             n=$(section "$1" "$v")
             [ -n "$n" ] || n=$(section "$1" "${v%-*}")
             printf '%s' "$n"
@@ -165,15 +165,15 @@ jobs:
         run: npm ci
 
       - name: Unit tests
-        # Сравнение версий и поиск pid по порту (test/*.js). Упавший тест
-        # останавливает сборку — пакет и релиз не выйдут.
+        # Version comparison and pid lookup by port (test/*.js). A failing
+        # test stops the build — the package and the release will not go out.
         run: npm test
 
       - name: Unit test coverage
-        # Отчёт о покрытии модулей, которые тесты подключают напрямую (функции
-        # в блоках-маркеров проверяет test/markers.js) — во вкладку Summary.
-        # Пороги (--test-coverage-*) заданы в package.json: упало покрытие
-        # ниже них — шаг завершается ошибкой и сборка не выйдет.
+        # Coverage report for the modules the tests include directly (the
+        # functions in marker blocks are checked by test/markers.js) — into
+        # the Summary tab. The thresholds (--test-coverage-*) are set in
+        # package.json: coverage below them — the step fails, no build.
         run: |
           npm run -s coverage > coverage-report.txt 2>&1 || { cat coverage-report.txt; exit 1; }
           {
@@ -184,19 +184,19 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Download Electron binary
-        # Electron 44+ не скачивает бинарник из postinstall — только вручную
+        # Electron 44+ no longer downloads the binary in postinstall — manually only
         run: npx install-electron
 
       - name: Build .deb
         run: ./build-deb.sh
 
       - name: Checksums
-        # SHA256SUMS — для ручной установки; само-обновление лаунчера сверяет
-        # digest .deb, который отдаёт GitHub API, с файлом.
+        # SHA256SUMS — for manual installation; the launcher's self-update
+        # cross-checks the digest of the .deb from the GitHub API with the file.
         run: sha256sum dsh-launcher_*_amd64.deb > SHA256SUMS
 
       - name: Upload artifact
-        # v5 всё ещё node20; node24 появился с v6, берём актуальный major
+        # v5 is still node20; node24 appeared with v6 — taking the current major
         uses: actions/upload-artifact@v7
         with:
           name: dsh-launcher-deb
@@ -206,14 +206,14 @@ jobs:
           if-no-files-found: error
 
       - name: Publish GitHub Release
-        # success() по умолчанию и так применяется к условию (статусных
-        # функций в нём нет), но пишем явно: Release публикуется только
-        # после того, как все шаги выше завершились успешно.
+        # success() is applied to the condition by default anyway (it has no
+        # status functions in it), but we write it explicitly: the Release is
+        # published only after all steps above finished successfully.
         if: success() && steps.ver.outputs.releasing == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.ver.outputs.tag }}
-          # Если тега ещё нет (ручной запуск) — акция создаст его на собранном коммите
+          # If the tag does not exist yet (manual run) — the action creates it on the built commit
           target_commitish: ${{ github.sha }}
           files: |
             dsh-launcher_*_amd64.deb

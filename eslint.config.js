@@ -1,8 +1,8 @@
 'use strict';
-// Статическая проверка (npm run lint; входит в npm test): неизвестные имена,
-// неиспользуемые переменные и импорты, недостижимый код и т. п. — то, что
-// иначе всплывает только при запуске (потерянный импорт, ссылка на имя,
-// которого больше нет).
+// Static checks (npm run lint; part of npm test): unknown names, unused
+// variables and imports, unreachable code, etc. — the things that would
+// otherwise surface only at runtime (a lost import, a reference to a name
+// that no longer exists).
 const js = require('@eslint/js');
 const globals = require('globals');
 

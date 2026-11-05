@@ -1,5 +1,5 @@
 'use strict';
-// Окно-диалог поверх главного: открытие, содержимое, закрытие, «О программе», «Проверить обновления…».
+// A dialog window over the main one: opening, content, closing, «О программе», «Проверить обновления…».
 const { WebContentsView, clipboard } = require('electron');
 const os = require('os');
 const { guardNavigation, denyExternalOpen } = require('./guard');
@@ -15,20 +15,20 @@ const { isAltKey } = require('./ui');
 const pages = require('./pages');
 const updatesLive = require('./updates-live');
 const updates = require('./updates');
-const { noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
+const { noContentResponse } = require('./respond'); // a pure module — direct require, no registry
 
-/* ---------------- окно-диалог: «О программе», «Проверить обновления» ---------------- */
+/* ---------------- dialog window: «О программе», «Проверить обновления» ---------------- */
 
-// Диалог — слой внутри главного окна (WebContentsView во всю его площадь):
-// затемнение и карточка по центру, как у панели поиска и плашек. Отдельного
-// окна ОС нет — в панели задач и списке окон ничего лишнего, на Wayland
-// композитор не решает, где его показать. GUI dsh под слоем не
-// перезагружается и не теряет состояние. Один слой на все пункты: повторный
-// вызов меняет содержимое. Закрыть — кнопкой или Esc (клик мимо карточки
-// диалог не закрывает — легко промахнуться).
-// Кнопки — переходы на dshlauncher://dialog/… (ответ 204: страница остаётся,
-// обработчик делает своё).
-let dialogGen = 0; // поколение: поздний async-результат не попадёт в закрытый или сменившийся диалог
+// A dialog — a layer inside the main window (a WebContentsView over its whole
+// area): a dimming and a card in the center, like the search panel and the
+// toasts. There is no separate OS window — nothing extra in the taskbar and
+// window list; on Wayland the compositor does not decide where to show it.
+// The dsh GUI under the layer is not reloaded and does not lose state.
+// One layer for all items: a repeated call changes the content. Close — by
+// button or Esc (a click outside the card does not close the dialog — easy to miss it).
+// Buttons — navigations to dshlauncher://dialog/… (a 204 reply: the page
+// stays, the handler does its thing).
+let dialogGen = 0; // generation: a late async result does not land in a closed or replaced dialog
 
 const dialogOpen = () => Boolean(state.dialogView && !state.dialogView.webContents.isDestroyed());
 
@@ -38,25 +38,25 @@ function placeDialog() {
   state.dialogView.setBounds({ x: 0, y: 0, width: w, height: h });
 }
 
-// Открыть диалог (или переиспользовать открытый) — поколение нового содержимого,
-// null — окна нет / идёт выход.
+// Open a dialog (or reuse an open one) — the generation of the new content,
+// null — there is no window / exit is in progress.
 function openDialog(title) {
   if (!state.win || state.win.isDestroyed() || state.stopping) return null;
   dialogGen++;
   if (dialogOpen()) { state.dialogView.webContents.focus(); return dialogGen; }
   const v = new WebContentsView({ webPreferences: { contextIsolation: true, nodeIntegration: false, spellcheck: false } });
-  v.setBackgroundColor('#00000000'); // затемнение рисует страница слоя
+  v.setBackgroundColor('#00000000'); // the dimming is drawn by the layer's page
   state.dialogView = v;
   const wc = v.webContents;
   denyExternalOpen(wc);
-  guardNavigation(wc); // ссылка без target=_blank — тоже в браузере, не в слое
+  guardNavigation(wc); // a link without target=_blank — in the browser too, not in the layer
   wc.on('context-menu', (_e, params) => menus.showContextMenu(params, state.win, wc));
   wc.on('before-input-event', (e, input) => {
     if (input.type === 'keyDown' && input.key === 'Escape') { e.preventDefault(); closeDialog(); }
-    if (isAltKey(input)) e.preventDefault(); // фокус не в строку меню (см. main.js)
+    if (isAltKey(input)) e.preventDefault(); // no focus to the menu bar (see main.js)
   });
   wc.on('did-finish-load', () => { if (!wc.isDestroyed()) wc.focus(); });
-  state.win.contentView.addChildView(v); // поверх всего: GUI, поиска, плашек
+  state.win.contentView.addChildView(v); // above everything: the GUI, the search, the toasts
   placeDialog();
   if (!resizeHooked) { state.win.on('resize', placeDialog); resizeHooked = true; }
   console.log(`[launcher] диалог: ${title}`);
@@ -66,18 +66,18 @@ let resizeHooked = false;
 
 function closeDialog() {
   if (!dialogOpen()) return;
-  // слушатель resize один на всё окно (resizeHooked) и живёт с окном —
-  // не снимаем: пересоздавать его на каждый диалог только лишние события
+  // the resize listener is one for the whole window (resizeHooked) and lives
+  // with the window — we do not remove it: recreating it per dialog is extra events
   const v = state.dialogView;
   state.dialogView = null; state.dialogRender = null; dialogGen++;
   if (state.win && !state.win.isDestroyed()) {
     state.win.contentView.removeChildView(v);
     state.win.webContents.focus();
   }
-  try { v.webContents.close(); } catch { /* уже закрыт */ }
+  try { v.webContents.close(); } catch { /* already closed */ }
 }
 
-// Показать содержимое, если диалог того же поколения ещё открыт.
+// Show the content, if the dialog of the same generation is still open.
 function dialogShow(gen, render) {
   if (gen !== dialogGen || !dialogOpen()) return;
   state.dialogRender = render;
@@ -100,7 +100,7 @@ function onDialogClose() {
 
 function onDialogCopy() {
   if (state.dialogCopyText) clipboard.writeText(state.dialogCopyText);
-  if (state.dialogRender) state.dialogRender(true); // перерисовка: «Скопировано»
+  if (state.dialogRender) state.dialogRender(true); // repaint: «Скопировано»
   return noContentResponse();
 }
 
@@ -144,7 +144,7 @@ async function showAboutDialog() {
     dialogPage(title, body);
   };
   dialogShow(gen, render);
-  // Версии подставим, когда придут (dsh --version может занять до 8 с)
+  // The versions will be plugged in when they arrive (dsh --version can take up to 8 s)
   const [lver, dver] = await Promise.all([menus.launcherVersionRaw(), menus.dshVersionRaw()]);
   Object.assign(ver, { lver, dver, loaded: true });
   dialogShow(gen, render);
@@ -166,7 +166,7 @@ async function showUpdateCheckDialog() {
   const isSrc = !IS_PKG_INSTALL;
   const lSt = updateStatus(latestL && latestL.version, lver, isSrc ? 'semver' : 'deb');
   const dSt = updateStatus(latestD && latestD.version, dver, 'semver');
-  // найденное — и в меню «Справка» (уведомлять не нужно: окно и так открыто)
+  // the findings — into the «Справка» menu too (no need to notify: the window is open anyway)
   const canL = lSt === 'available' && !isSrc && Boolean(lver);
   const canD = dSt === 'available' && Boolean(dver);
   if (!updates.NO_UPDATE_CHECK || canL || canD) {
@@ -175,12 +175,12 @@ async function showUpdateCheckDialog() {
       ...(canD ? { dsh: { version: latestD.version, installed: dver } } : {}),
     }, false);
   }
-  // Диалог закрыли или открыли в нём другое — dialogShow ничего не покажет.
+  // The dialog was closed or another opened in it — dialogShow will show nothing.
   dialogShow(gen, () => {
     let lStatus;
     if (lSt === 'nocheck') lStatus = tr('не удалось проверить (нет ответа GitHub)', 'could not check (no reply from GitHub)');
     else if (lSt === 'uptodate') lStatus = tr('актуальная версия', 'up to date');
-    // 'notinstalled' (версию не узнали) — как и раньше, просто называем последнюю
+    // 'notinstalled' (the version was not found out) — as before, we simply name the latest one
     else lStatus = tr('доступна версия <code>' + esc(latestL.version) + '</code>', 'version <code>' + esc(latestL.version) + '</code> is available');
     let dStatus;
     if (dSt === 'nocheck') dStatus = tr('не удалось проверить (нет ответа npm)', 'could not check (no reply from npm)');
@@ -209,4 +209,4 @@ async function showUpdateCheckDialog() {
   });
 }
 
-Object.assign(module.exports, { openDialog, closeDialog, dialogOpen, dialogShow, dialogPage, dialogCloseButton, onDialogClose, onDialogCopy, showAboutDialog, showUpdateCheckDialog }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { openDialog, closeDialog, dialogOpen, dialogShow, dialogPage, dialogCloseButton, onDialogClose, onDialogCopy, showAboutDialog, showUpdateCheckDialog }); // we extend, not replace: the modules include each other in cycles

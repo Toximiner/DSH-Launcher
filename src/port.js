@@ -1,7 +1,7 @@
 'use strict';
-// Порт dsh и его stdout/stderr: проверка соединения, ожидание порта и
-// авторизационного URL, хвост stderr (для страницы ошибки). Чистый модуль
-// (без electron) — его можно подключать и из юнит-тестов.
+// dsh port and its stdout/stderr: connection check, waiting for the port and
+// the auth URL, stderr tail (for the error page). Pure module
+// (no electron) — can be imported from unit tests as well.
 const nodeNet = require('net');
 const state = require('./state');
 const { HOST, PORT, START_TIMEOUT } = require('./env');

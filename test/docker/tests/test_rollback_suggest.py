@@ -1,7 +1,7 @@
-"""Предложение отката: прошлый запуск завершился аварийно, и это была только
-что обновлённая версия (last-update.json, в пределах 30 минут) — в плашке
-кнопка «Вернуть предыдущую версию…», она открывает диалог отката. Обновление
-старое (часы назад) — кнопки нет (сбой уже не связывают с обновлением)."""
+"""The rollback suggestion: the previous run terminated abnormally, and it was the
+just-updated version (last-update.json, within 30 minutes) — in the toast a
+«Roll back to the previous version…» button, it opens the rollback dialog. The
+update is old (hours ago) — no button (the crash is no longer linked to the update)."""
 import json
 import os
 import signal
@@ -19,10 +19,10 @@ def _iso(delta):
 
 
 def _crash_and_set_update(launcher, updated_ago, started_ago):
-    """Убить лаунчер (kill -9) и подставить метки: прошлый аварийный запуск —
-    версия LATEST_PKG, обновлена updated_ago (по умолчанию недавно), стартовал
-    started_ago. updated_ago — когда было обновление, started_ago — когда
-    начался упавший запуск (обычно позже обновления)."""
+    """Kill the launcher (kill -9) and substitute the markers: the previous
+    crash run — version LATEST_PKG, updated updated_ago (recently by
+    default), started started_ago. updated_ago — when the update happened,
+    started_ago — when the crashed run started (usually after the update)."""
     os.kill(launcher.pid, signal.SIGKILL)
     assert wait_exit(launcher.pid, 10) is not None
     with open(f'{CONF}/running.json', 'w') as f:
@@ -32,20 +32,20 @@ def _crash_and_set_update(launcher, updated_ago, started_ago):
 
 
 def test_rollback_suggested_after_update(start, gui, drv):
-    """Обновление 10 минут назад, упавший запуск с ним 5 минут назад — плашка
-    «завершился аварийно» с кнопкой «Вернуть предыдущую версию…»; она
-    открывает диалог отката."""
+    """An update 10 minutes ago, the crashed run with it 5 minutes ago — the
+    «closed unexpectedly» toast with a «Roll back to the previous version…»
+    button; it opens the rollback dialog."""
     launcher = start(FAKE, NOUPD)
     gui.wait()
     _crash_and_set_update(launcher, updated_ago=10 * MIN, started_ago=5 * MIN)
 
-    launcher = start(FAKE, NOUPD)  # dsh прежнего ещё работает — лаунчер подключится к нему
+    launcher = start(FAKE, NOUPD)  # the previous dsh is still running — the launcher will attach to it
     gui.wait()
     toast = Toast(drv).wait_shown('closed unexpectedly last time')
     log = launcher.log()
     assert 'завершился аварийно' in log
-    assert 'предлагаю откат' in log and LATEST_PKG in log, 'лог: связали сбой с обновлением'
-    assert 'Roll back to the previous version' in toast.text(), 'кнопка «Вернуть предыдущую версию…»'
+    assert 'предлагаю откат' in log and LATEST_PKG in log, 'log: the crash is linked to the update'
+    assert 'Roll back to the previous version' in toast.text(), 'the «Roll back to the previous version…» button'
 
     toast.drv.go('dshlauncher://toast/rollback/', page=Toast.TITLE)
     RollbackDialog(drv).wait_text(rf'Installed: {INSTALLED}\. Choose a version: .*{ROLLBACK} ', 30)
@@ -53,9 +53,9 @@ def test_rollback_suggested_after_update(start, gui, drv):
 
 
 def test_no_rollback_stale_update(start, gui, drv):
-    """Обновление 3 часа назад, упала версия с ним — кнопки «Вернуть
-    предыдущую версию…» нет (вне окна 30 минут); штатный выход — и плашки
-    больше нет."""
+    """An update 3 hours ago, the version with it crashed — no «Roll back to
+    the previous version…» button (outside the 30-minute window); a clean
+    exit — and no toast anymore."""
     launcher = start(FAKE, NOUPD)
     gui.wait()
     _crash_and_set_update(launcher, updated_ago=timedelta(hours=3), started_ago=timedelta(hours=3, minutes=-10))
@@ -65,13 +65,13 @@ def test_no_rollback_stale_update(start, gui, drv):
     toast = Toast(drv).wait_shown('closed unexpectedly last time')
     log = launcher.log()
     assert 'завершился аварийно' in log
-    assert 'предлагаю откат' not in log, 'вне окна 30 минут — не связываем с обновлением'
-    assert 'Roll back to the previous version' not in toast.text(), 'кнопки отката нет'
+    assert 'предлагаю откат' not in log, 'outside the 30-minute window — not linked to the update'
+    assert 'Roll back to the previous version' not in toast.text(), 'there is no rollback button'
     toast.close()
     launcher.term()
 
     launcher = start(FAKE, NOUPD)
     gui.wait()
-    assert 'завершился аварийно' not in launcher.log(), 'после штатного выхода — без плашки'
+    assert 'завершился аварийно' not in launcher.log(), 'after a clean exit — no toast'
     assert not Toast(drv).is_shown()
     launcher.term()

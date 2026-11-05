@@ -1,5 +1,5 @@
 'use strict';
-// «Файл» / «Справка»: перезапуск dsh, папка логов, состояние GPU.
+// "File" / "Help": restarting dsh, the logs folder, GPU status.
 const { dialog, shell } = require('electron');
 const fs = require('fs');
 const state = require('./state');
@@ -7,14 +7,14 @@ const i18n = require('./i18n');
 const { tr } = i18n;
 const { gpuStatus } = require('./ui');
 const { CONFIG, LOG_DIR } = require('./env');
-const { portOpen, sleep } = require('./port'); // чистый модуль — прямой require, без реестра
+const { portOpen, sleep } = require('./port'); // pure module — direct require, no registry
 const { GPU_MARKER_FILE, GPU_MARKER_TTL_MS, gpuDisabledByMarker, hasEglLibs, hasGpuRenderNode, noGpuRequested } = require('./gpu');
 const dshStop = require('./dsh-stop');
 const launch = require('./launch');
 const pages = require('./pages');
-const { noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
+const { noContentResponse } = require('./respond'); // pure module — direct require, no registry
 
-/* ---------------- «Файл» / «Справка»: перезапуск dsh, папка логов ---------------- */
+/* ---------------- "File" / "Help": restarting dsh, the logs folder ---------------- */
 
 async function openLogsFolder() {
   try { fs.mkdirSync(LOG_DIR, { recursive: true }); } catch { /* noop */ }
@@ -22,13 +22,13 @@ async function openLogsFolder() {
   if (err) console.error('[launcher] не удалось открыть папку логов:', err);
 }
 
-/* ===== restartDsh (тест test/file-help.js) =====
-   «Перезапустить dsh» (например, после обновления плагинов): останавливаем
-   dsh, который запустил лаунчер, и запускаем заново — без вопросов об
-   обновлениях. dsh, к которому лаунчер лишь подключился (запущен в
-   терминале), не трогаем — у него свой хозяин.
-   state/dialog/tr/console/pages/dshStop/portOpen/sleep/launch — инжектимые
-   (тест подменяет). */
+/* ===== restartDsh (test test/file-help.js) =====
+   "Restart dsh" (e.g. after a plugins update): we stop the
+   dsh the launcher started and start it again — without update
+   prompts. A dsh the launcher merely attached to (started in a
+   terminal) is left alone — it has its own owner.
+   state/dialog/tr/console/pages/dshStop/portOpen/sleep/launch are injectable
+   (the test replaces them). */
 async function restartDsh({ confirm = true } = {}) {
   if (!state.win || state.win.isDestroyed() || state.stopping || state.launching || state.restartingDsh) return;
   if (!state.weStartedDsh && !state.adoptedDsh) {
@@ -55,12 +55,12 @@ async function restartDsh({ confirm = true } = {}) {
   }
   console.log('[launcher] перезапуск dsh по запросу');
   state.restartingDsh = true;
-  state.launching = true; // watchdog не трогает окно, пока порт падает и поднимается
+  state.launching = true; // the watchdog does not touch the window while the port goes down and up
   try {
     pages.showPage(() => pages.showStatus(tr('Перезапуск dsh…', 'Restarting dsh…'),
       tr('<p>Останавливаю <code>dsh</code> и запускаю заново…</p>', '<p>Stopping <code>dsh</code> and starting it again…</p>'), false));
     if (state.adoptedDsh) await dshStop.stopAdoptedDsh(); else await dshStop.stopDsh();
-    for (let i = 0; i < 50 && await portOpen(); i++) await sleep(100); // порт освободился
+    for (let i = 0; i < 50 && await portOpen(); i++) await sleep(100); // the port is released
     state.weStartedDsh = false; state.adoptedDsh = false; state.adoptedOldPgid = null; state.dshProc = null; state.dshFatal = false;
   } finally {
     state.restartingDsh = false;
@@ -74,16 +74,16 @@ async function restartDsh({ confirm = true } = {}) {
 
 function gpuStatusNow() {
   let markerAgeMs = null;
-  try { markerAgeMs = Date.now() - fs.statSync(GPU_MARKER_FILE).mtimeMs; } catch { /* маркера нет */ }
+  try { markerAgeMs = Date.now() - fs.statSync(GPU_MARKER_FILE).mtimeMs; } catch { /* no marker */ }
   return gpuStatus({
     noGpuRequested, noGpuBySettings: CONFIG.src.gpu === 'settings', disabledByMarker: gpuDisabledByMarker, hasRenderNode: hasGpuRenderNode, hasEgl: hasEglLibs,
     markerAgeMs, ttlMs: GPU_MARKER_TTL_MS,
   });
 }
 
-/* ===== gpuStatusText (тест test/file-help.js) =====
-   Строка состояния GPU для «О программе»: tr — инжективный (тест проверяет
-   формулировки без i18n). */
+/* ===== gpuStatusText (test test/file-help.js) =====
+   GPU status line for "About": tr is injectable (the test checks the
+   wording without i18n). */
 function gpuStatusText(g) {
   if (g.on) {
     return g.marker
@@ -109,4 +109,4 @@ function onDialogGpuEnable() {
   return noContentResponse();
 }
 
-Object.assign(module.exports, { openLogsFolder, restartDsh, gpuStatusNow, gpuStatusText, onDialogGpuEnable }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { openLogsFolder, restartDsh, gpuStatusNow, gpuStatusText, onDialogGpuEnable }); // we extend, not replace: the modules require each other cyclically

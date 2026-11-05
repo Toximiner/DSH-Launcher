@@ -1,4 +1,4 @@
-"""Процессы, порт и ожидания."""
+"""Processes, the port, and waiting."""
 import os
 import subprocess
 import time
@@ -8,10 +8,10 @@ from .env import FAKEDSH_LOG
 
 
 def sh(cmd, check=False):
-    """Команда оболочки → (код, вывод)."""
+    """Shell command → (code, output)."""
     r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     if check and r.returncode:
-        raise AssertionError(f'{cmd}: код {r.returncode}\n{r.stdout}{r.stderr}')
+        raise AssertionError(f'{cmd}: exit code {r.returncode}\n{r.stdout}{r.stderr}')
     return r.returncode, (r.stdout + r.stderr).strip()
 
 
@@ -20,12 +20,12 @@ def quote(s):
 
 
 def as_tester(cmd):
-    """Команда оболочки от пользователя tester."""
+    """Shell command as user tester."""
     return sh(f'runuser -u tester -- sh -c {quote(cmd)}')
 
 
 def wait_for(cond, timeout, step=0.5):
-    """Ждать, пока cond() не станет истинным; вернуть итоговое значение."""
+    """Wait until cond() becomes true; return the final value."""
     end = time.time() + timeout
     while time.time() < end:
         if cond():
@@ -35,16 +35,16 @@ def wait_for(cond, timeout, step=0.5):
 
 
 def pgrep(pattern, user=None):
-    """Есть ли процесс с такой командной строкой. Без оболочки: у `sh -c "pgrep -f X"`
-    в командной строке тоже есть X — pgrep нашёл бы саму оболочку."""
+    """Whether there is a process with such a command line. No shell: `sh -c "pgrep -f X"`
+    also has X in its command line — pgrep would find the shell itself."""
     args = ['pgrep'] + (['-u', user] if user else []) + ['-f', pattern]
     return subprocess.run(args, capture_output=True).returncode == 0
 
 
 def alive(pid):
-    """Процесс жив. Завершившийся, но не подобранный родителем («зомби», Z) —
-    уже не жив: лаунчер — прямой потомок pytest, и до waitpid он остаётся
-    зомби, а os.kill(pid, 0) для зомби проходит."""
+    """The process is alive. A finished one not yet reaped by its parent (“zombie”, Z) —
+    is already not alive: the launcher is a direct child of pytest, and until waitpid it
+    remains a zombie, while os.kill(pid, 0) succeeds for zombies."""
     try:
         os.kill(pid, 0)
     except OSError:
@@ -58,14 +58,14 @@ def alive(pid):
 
 
 def wait_exit(pid, timeout):
-    """Секунды до выхода процесса или None, если не вышел."""
+    """Seconds until the process exits, or None if it did not."""
     t0 = time.time()
     if wait_for(lambda: not alive(pid), timeout, 0.1):
         return round(time.time() - t0, 1)
     return None
 
 
-# ---- фейковый dsh: сам процесс и его потомок sleep 7777 в той же группе ----
+# ---- fake dsh: the process itself and its child sleep 7777 in the same group ----
 
 def dsh_tree_alive():
     return pgrep('fakedsh.py') and pgrep('^sleep 7777')
@@ -88,17 +88,17 @@ def fakedsh_starts():
 
 
 def real_dsh_gone():
-    """Настоящий dsh (npm) не запущен."""
+    """The real dsh (npm) is not running."""
     return not pgrep('@deepseek-ai/dsh|bin/dsh', user='tester')
 
 
-# ---- порт GUI dsh, пакет ----
+# ---- the dsh GUI port, the package ----
 
 def port_up():
     try:
         urllib.request.urlopen('http://127.0.0.1:3080/', timeout=2).close()
         return True
-    except Exception as e:  # HTTP-ошибка — тоже «порт отвечает»
+    except Exception as e:  # an HTTP error is also “the port answers”
         return hasattr(e, 'code')
 
 

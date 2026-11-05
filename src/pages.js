@@ -1,16 +1,16 @@
 'use strict';
-// Служебные страницы в главном окне: общий вид, статусы, страница вставки токена.
+// Service pages in the main window: the common look, the statuses, the token-paste page.
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc, withRouteKey, CSP_META } = require('./util');
 const { prefFile, readPref, writePref } = require('./prefs');
 const { PLAIN_URL, LANG_FORCED, ROUTE_KEY } = require('./env');
-const { stderrTail } = require('./port'); // чистый модуль — прямой require, без реестра
+const { stderrTail } = require('./port'); // pure module — direct require, no registry
 const menus = require('./menus');
-const { blankResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
+const { blankResponse } = require('./respond'); // pure module — direct require, no registry
 
-/* ---------------- страницы-статусы ---------------- */
+/* ---------------- status pages ---------------- */
 
 
 
@@ -51,11 +51,11 @@ const PAGE_CSS = `
   .notes a{color:#7aa2f7}
   .dlg .wrap{max-width:none;padding:20px 24px;height:100%;box-sizing:border-box;
     display:flex;flex-direction:column}
-  /* диалог — слой внутри главного окна: затемнение и карточка по центру */
+  /* dialog — a layer inside the main window: dimming and a centered card */
   html.ovl,html.ovl body{background:transparent}
   html.ovl body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;
     background:rgba(0,0,0,.55);animation:ovlin .12s ease-out}
-  /* всплывающее «Сохранено» и ошибки — в углу карточки, а не всего окна */
+  /* the «Сохранено» (Saved) popup and errors — in the card corner, not the whole window */
   html.ovl .wrap{position:relative}
   html.ovl .dlg .pop,html.ovl .pop{position:absolute}
   html.ovl .wrap{width:min(760px,calc(100vw - 48px));height:min(580px,calc(100vh - 48px));
@@ -87,8 +87,9 @@ const PAGE_CSS = `
     margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
   .dlg .note{margin:0 0 8px;color:#3fb950}
   .dlg .note.err{color:#f85149}
-  /* «Сохранено» / ошибка в окне «Настройки» — поверх, в углу над кнопками:
-     не сдвигает поля. «Сохранено» гаснет само, ошибка остаётся. */
+  /* «Сохранено» (Saved) / error in the «Настройки» (Settings) window — on top,
+     in the corner above the buttons: does not shift the fields. The
+     «Сохранено» fades out on its own, the error stays. */
   .dlg .pop{position:fixed;right:22px;bottom:74px;margin:0;padding:8px 14px;border-radius:9px;z-index:5;
     background:#14251a;border:1px solid #2f6b3d;color:#3fb950;box-shadow:0 6px 20px rgba(0,0,0,.45);
     pointer-events:none;animation:popfade 2.6s ease forwards}
@@ -100,8 +101,8 @@ const PAGE_CSS = `
   .dlg button{padding:9px 18px}
 `;
 
-/* ===== pageHtml (чистая функция, тест test/pages.js) ===== */
-// opts.dialog — для окна-диалога: без переключателя языка, компактно.
+/* ===== pageHtml (pure function, test test/pages.js) ===== */
+// opts.dialog — for the dialog window: no language switch, compact.
 function pageHtml(title, body, isError, opts = {}) {
   const langLink = (code, label) =>
     `<a href="dshlauncher://lang/${code}/"${i18n.getLang() === code ? ' class="on"' : ''}>${label}</a>`;
@@ -115,9 +116,9 @@ function stderrBlock() {
   return `<pre>${esc(stderrTail.slice(-50).join('\n') || tr('нет данных журнала', 'no log data'))}</pre>`;
 }
 
-// Текущая служебная страница как функция отрисовки: переключатель RU | EN
-// перерисовывает её на новом языке. Каждая show*-страница регистрирует себя
-// сама; разовые showStatus оборачиваются в showPage.
+// The current service page as a render function: the RU | EN switcher
+// repaints it in the new language. Each show* page registers itself
+// on its own; one-off showStatus calls are wrapped in showPage.
 
 
 function showPage(render) {
@@ -130,7 +131,7 @@ const langPrefFile = () => prefFile(LANG_PREFS);
 
 function loadLangPref() {
   if (LANG_FORCED) return;
-  const p = readPref(LANG_PREFS); // выбора ещё не было — остаётся язык локали
+  const p = readPref(LANG_PREFS); // no choice yet — the locale's language stays
   if (p && (p.lang === 'ru' || p.lang === 'en')) i18n.setLang(p.lang);
 }
 
@@ -140,13 +141,13 @@ function onLangSwitch(lang) {
     writePref(LANG_PREFS, { lang });
     console.log(`[launcher] язык окна: ${lang}`);
   }
-  menus.buildAppMenu(); // подписи меню на новом языке
+  menus.buildAppMenu(); // the menu labels in the new language
   if (state.currentPage) state.currentPage();
   return blankResponse();
 }
 
-// Загрузка в окно. ERR_ABORTED (-3) — не ошибка: эту навигацию сменила
-// более новая (статус-страница, watchdog), окно уже показывает её.
+// Loading into the window. ERR_ABORTED (-3) is not an error: this navigation was
+// superseded by a newer one (a status page, the watchdog), and the window already shows it.
 async function loadInWin(url) {
   if (!state.win || state.win.isDestroyed()) return;
   try {
@@ -201,21 +202,21 @@ function showPastePage() {
   showStatus(tr('Нужен токен', 'Token required'), body, true);
 }
 
-/* ---------------- живой лог на странице-статусе ----------------
- * Страницы «выполняется» раньше перерисовывались целиком каждые 800 мс
- * (новый data: URL) — скролл сбрасывался наверх, и лог нельзя было читать.
- * Теперь первая отрисовка — обычная страница с <pre id="live-log">, а
- * последующие — через executeJavaScript: строки только дописываются, и если
- * пользователь прижат ко дну, остаётся прижатым, иначе скролл не трогают.
- * Если страница уже не живая (ушли по переходу, перегрузили) — false:
- * вызывающий делает полную отрисовку, которая сбрасывает счётчик.
+/* ---------------- live log on the status page ----------------
+ * The "running" pages were formerly repainted in full every 800 ms
+ * (a new data: URL) — the scroll reset to the top, and the log could not be read.
+ * Now the first draw is a regular page with <pre id="live-log">, and
+ * the subsequent ones go through executeJavaScript: lines are only appended, and if
+ * the user is pinned to the bottom, they stay pinned; otherwise the scroll is left alone.
+ * If the page is no longer live (navigated away, reloaded) — false:
+ * the caller does a full redraw, which resets the counter.
  */
-const livePushed = new Map(); // st → logSeq последней строки, уже на странице
+const livePushed = new Map(); // st → logSeq of the last line already on the page
 
-/* ===== liveLogAppend (чистая функция, тест test/live-log.js) ===== */
-// Страницная функция: дописать строки в <pre id="live-log">. Лимит 500 —
-// как LOG_MAX_LINES в proc-log.js: при превышении старые строки уходят
-// сверху. false — на странице нет такого <pre> (уже не наша страница).
+/* ===== liveLogAppend (pure function, test test/live-log.js) ===== */
+// A page function: append lines to <pre id="live-log">. The limit is 500 —
+// the same as LOG_MAX_LINES in proc-log.js: when exceeded, the old lines drop
+// from the top. false — the page has no such <pre> (it is no longer our page).
 function liveLogAppend(document, lines) {
   const pre = document.getElementById('live-log');
   if (!pre) return false;
@@ -233,11 +234,11 @@ function liveLogAppend(document, lines) {
 }
 /* ===== end liveLogAppend ===== */
 
-/* ===== liveLogFresh (чистая функция, тест test/live-log.js) ===== */
-// Строки, которых ещё нет на странице: с logSeq = shown+1 по st.logSeq.
-// null — ничего нового. st.log хранит только последние 500 строк
-// (proc-log), поэтому индекс считается от logSeq; строки, ушедшие из окна
-// раньше, чем их успели показать, не восстанавливаются (редко: лог > 500).
+/* ===== liveLogFresh (pure function, test test/live-log.js) ===== */
+// The lines not yet on the page: from logSeq = shown+1 up to st.logSeq.
+// null — nothing new. st.log keeps only the last 500 lines
+// (proc-log), so the index is computed from logSeq; lines that left the window
+// before they were shown are not restored (rare: log > 500).
 function liveLogFresh(st, shown) {
   const seq = st.logSeq || 0;
   if (seq === shown) return null;
@@ -245,29 +246,29 @@ function liveLogFresh(st, shown) {
 }
 /* ===== end liveLogFresh ===== */
 
-// Для первой отрисовки страницы «выполняется»: <pre> с текущими строками
-// и скриптом дописывания (liveLogAppend — сама функция, целиком в страницу).
+// For the first draw of the "running" page: the <pre> with the current lines
+// and the append script (liveLogAppend — the function itself, verbatim into the page).
 function liveLogPre(lines) {
   return `<pre id="live-log">${esc(lines.join('\n') || '…')}</pre>
   <script>window.__liveLog = (lines) => (${liveLogAppend.toString()})(document, lines);</script>`;
 }
 
-// После полной отрисовки «выполняется»: на странице все текущие строки.
+// After a full redraw of "running": the page has all the current lines.
 function liveLogSync(st) {
   livePushed.set(st, st.logSeq || 0);
 }
 
-// redraw-колбэк для runWithLiveLog: дописать строки живой страницей, а если
-// страница к моменту тика уже не живая — полная отрисовка. active() — страница
-// всё ещё «выполняется» (тик мог разрешиться после переключения страницы).
+// A redraw callback for runWithLiveLog: append the lines via the live page, and if
+// the page is no longer live by the time of the tick — a full redraw. active() — the page
+// is still "running" (the tick could resolve after a page switch).
 const liveRedraw = (st, active, page) => () => {
   liveLogTick(st).then((ok) => {
     if (!ok && active()) page();
   });
 };
 
-// Дописать новые строки на открытую страницу. true — дописано (или новых
-// нет); false — страница уже не живая, вызывающий делает полную отрисовку.
+// Append new lines to the open page. true — appended (or there are no new
+// ones); false — the page is no longer live, the caller does a full redraw.
 async function liveLogTick(st) {
   if (!state.win || state.win.isDestroyed()) return false;
   const fresh = liveLogFresh(st, livePushed.get(st) || 0);
@@ -282,4 +283,4 @@ async function liveLogTick(st) {
   }
 }
 
-Object.assign(module.exports, { pageHtml, stderrBlock, showPage, langPrefFile, loadLangPref, onLangSwitch, loadInWin, showStatus, showPastePage, liveLogPre, liveLogSync, liveLogTick, liveRedraw }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { pageHtml, stderrBlock, showPage, langPrefFile, loadLangPref, onLangSwitch, loadInWin, showStatus, showPastePage, liveLogPre, liveLogSync, liveLogTick, liveRedraw }); // we extend, not replace: the modules require each other cyclically

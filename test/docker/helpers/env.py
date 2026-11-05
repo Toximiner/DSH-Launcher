@@ -1,53 +1,55 @@
-"""Пути, переменные окружения и версии, общие для всех сценариев."""
+"""Paths, environment variables, and versions shared by all scenarios."""
 import os
 import re
 import secrets
 
-T = '/opt/t'                                   # каталог тестов в контейнере
+T = '/opt/t'                                   # the tests directory in the container
 HOME = '/home/tester'
-CONF = f'{HOME}/.config/dsh-launcher'          # userData лаунчера
-UPD = f'{CONF}/updates'                        # скачанные .deb обновлений
-LAUNCHER_OUT = '/tmp/launcher.out'             # stdout/stderr лаунчера
-STATE = f'{HOME}/.local/state/dsh-launcher'    # логи лаунчера и dsh (DSH_LOG_DIR из run.sh пакета)
+CONF = f'{HOME}/.config/dsh-launcher'          # the launcher's userData
+UPD = f'{CONF}/updates'                        # downloaded update .deb files
+LAUNCHER_OUT = '/tmp/launcher.out'             # the launcher's stdout/stderr
+STATE = f'{HOME}/.local/state/dsh-launcher'    # launcher and dsh logs (DSH_LOG_DIR from the package's run.sh)
 FAKEDSH = f'{T}/fakes/fakedsh.py'
 FAKEDSH_LOG = '/tmp/fakedsh.log'
 PROXY = f'{T}/fakes/proxy.py'
 PROXY_LOG = '/tmp/proxy.log'
-GUI_URL = r'^http://127\.0\.0\.1:3080/'        # адрес GUI dsh (регулярное выражение)
+GUI_URL = r'^http://127\.0\.0\.1:3080/'        # the dsh GUI address (a regular expression)
 
-# «Последняя» версия dsh, которую видит лаунчер (DSH_LAUNCHER_FAKE_DSH_LATEST).
-# Пиним: настоящий npm-реестр живёт своей жизнью — когда там появился
-# 0.2.1-rc.2, сценарии, ждавшие 0.2.0-rc.2, упали без единой правки кода.
-# 0.2.0-rc.2 совпадает с FAKE_DSH_VERSION фейкового dsh (он же «установлен»).
+# The “latest” dsh version the launcher sees (DSH_LAUNCHER_FAKE_DSH_LATEST).
+# Pinned: the real npm registry lives its own life — when 0.2.1-rc.2
+# appeared there, the scenarios waiting for 0.2.0-rc.2 failed without a
+# single code change. 0.2.0-rc.2 matches the fake dsh's FAKE_DSH_VERSION
+# (which is also the “installed” one).
 DSH_LATEST = '0.2.0-rc.2'
 
-# Наборы переменных окружения для запуска лаунчера
-FAKE = {'DSH_BIN': FAKEDSH}                                         # фейковый dsh
-NOUPD = {'DSH_LAUNCHER_NO_UPDATE_CHECK': '1'}                       # без проверки обновлений
-NO_PROMPTS = {'DSH_LAUNCHER_FAKE_LAUNCHER_LATEST': '1.0.0',         # проверка идёт, но «последние»
-              'DSH_LAUNCHER_FAKE_DSH_LATEST': '0.0.1'}              # версии старые — без вопросов
+# Environment variable sets for launching the launcher
+FAKE = {'DSH_BIN': FAKEDSH}                                         # fake dsh
+NOUPD = {'DSH_LAUNCHER_NO_UPDATE_CHECK': '1'}                       # no update check
+NO_PROMPTS = {'DSH_LAUNCHER_FAKE_LAUNCHER_LATEST': '1.0.0',         # the check runs, but the “latest”
+              'DSH_LAUNCHER_FAKE_DSH_LATEST': '0.0.1'}              # versions are old — no prompts
 
-# Токен CI для запросов лаунчера к GitHub API: убираем из окружения pytest при
-# импорте — дочерние процессы теста его не наследуют; лаунчеру передаётся явно.
+# The CI token for the launcher's GitHub API requests: we pop it from the
+# pytest environment at import time — the test's child processes do not
+# inherit it; the launcher receives it explicitly.
 GITHUB_TOKEN = os.environ.pop('DSH_LAUNCHER_GITHUB_TOKEN', '')
 
-# Ключ маршрутов dshlauncher://… (без него лаунчер команды не принимает):
-# в тестах задаём сами (DSH_LAUNCHER_ROUTE_KEY), драйвер подставляет его в адрес.
+# The key for the dshlauncher://… routes (without it the launcher rejects commands):
+# in tests we set it ourselves (DSH_LAUNCHER_ROUTE_KEY); the driver substitutes it into the address.
 ROUTE_KEY = secrets.token_hex(16)
 
-# Покрытие кода лаунчера сценариями: main-процесс Electron пишет его сюда
-# (NODE_V8_COVERAGE, при штатном выходе); conftest после сценария оставляет
-# только файлы лаунчера и кладёт в /results, отчёт строит run.sh (c8).
+# Launcher code coverage from the scenarios: the Electron main process writes it here
+# (NODE_V8_COVERAGE, on a clean exit); after the scenario conftest keeps
+# only the launcher's files and puts them in /results; run.sh (c8) builds the report.
 V8_COVERAGE = '/tmp/v8-coverage'
 
-# Подставной GitHub (fakes/github.py, helpers/github.py): лаунчер берёт список
-# релизов и .deb у него (кроме сценариев прокси — те ходят к настоящему).
+# The fake GitHub (fakes/github.py, helpers/github.py): the launcher takes the
+# release list and .deb files from it (except the proxy scenarios — those go to the real one).
 GITHUB_API = 'http://127.0.0.1:8765'
 
-# Пакет лаунчера в образе собран версией 1.1.0-1 — «старее» последнего релиза.
+# The launcher package in the image is built at version 1.1.0-1 — “older” than the latest release.
 INSTALLED = '1.1.0-1'
-# Последний релиз в подставном GitHub: тег v2.0.0 → пакет 2.0.0-1 (из текущего
-# кода, собирает run.sh). ROLLBACK — старый релиз с .deb, на него откатываются.
+# The latest release in the fake GitHub: tag v2.0.0 → package 2.0.0-1 (from the current
+# code, built by run.sh). ROLLBACK — an older release with a .deb, used for rollbacks.
 LATEST = '2.0.0'
 LATEST_PKG = f'{LATEST}-1'
 ROLLBACK = '1.0.0-14'

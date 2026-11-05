@@ -1,9 +1,9 @@
-"""«Проверить снова» с фатальной страницы: dsh мёртв (порт закрыт) — страница
-«dsh не запущен» с командой для терминала; запустили dsh руками — «Проверить
-снова» снова доводит окно до GUI (чужой dsh не убиваем при закрытии).
+"""«Check again» from a fatal page: dsh is dead (the port is closed) — the «dsh is not
+running» page with a terminal command; dsh started by hand — «Check again» again
+brings the window to the GUI (a foreign dsh is not killed on close).
 
-Все CDP-операции — с page= (по заголовку): в списке /json/list первым может
-оказаться плашка-уведомление (launcher-toast — отдельная CDP-страница)."""
+All CDP operations are done with page= (by title): the first entry in /json/list
+may be a toast notification (launcher-toast — a separate CDP page)."""
 import subprocess
 
 from helpers.env import FAKE, FAKEDSH, NOUPD
@@ -18,27 +18,27 @@ def test_retry_dead(start, gui, drv):
     launcher = start(FAKE, NOUPD, FAKE_CRASH_AFTER='2')
     gui.wait()
 
-    # dsh падает и снова падает — лаунчер перестаёт перезапускать и показывает
-    # фатальную страницу с кнопкой «Проверить снова».
+    # dsh crashes and crashes again — the launcher stops restarting it and
+    # shows the fatal page with a «Check again» button.
     assert launcher.wait_log('dsh падает снова и снова — авто-перезапуск остановлен', 150), launcher.log()[-2000:]
     drv.wait_text(FATAL + r'.*Check again', 30, page=FATAL)
 
-    # Порт закрыт (dsh мёртв) → «Проверить снова» не до GUI, а к странице
-    # «dsh не запущен» с командой запуска в терминале.
+    # The port is closed (dsh is dead) → «Check again» does not go to the GUI,
+    # but to the «dsh is not running» page with the start command for a terminal.
     drv.go('dshlauncher://retry/', page=FATAL)
     drv.wait_text(NOTRUN + r'.*Port 3080 is closed.*Start it in a terminal', 30, page=NOTRUN)
 
-    # Запускаем dsh «из терминала» (руками) — «Проверить снова» подключается
-    # к нему: GUI, и лаунчер не считает этот dsh своим.
+    # Start dsh «from a terminal» (by hand) — «Check again» connects to it:
+    # the GUI, and the launcher does not count this dsh as its own.
     subprocess.Popen(['runuser', '-u', 'tester', '--', 'env', 'FAKE_ROLE=terminal', FAKEDSH],
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
-    assert wait_port(15), 'ручной dsh поднял порт'
+    assert wait_port(15), 'the manual dsh brought up the port'
     drv.go('dshlauncher://retry/', page=NOTRUN)
     assert launcher.wait_log('retry: dsh запущен: куки валидны — открываю GUI', 60), launcher.log()[-2000:]
     gui.wait()
-    assert 'FAKE DSH terminal' in (gui.eval('document.body.innerText') or ''), 'в окне — GUI того самого dsh'
-    assert pgrep('fakedsh.py'), 'ручной dsh жив'
+    assert 'FAKE DSH terminal' in (gui.eval('document.body.innerText') or ''), 'the window shows the GUI of that dsh'
+    assert pgrep('fakedsh.py'), 'the manual dsh is alive'
 
-    # закрытие: чужой dsh не убиваем
-    assert launcher.term() is not None, 'лаунчер штатно завершился'
-    assert pgrep('fakedsh.py') and wait_port(1), 'dsh, запущенный не лаунчером, остался работать'
+    # closing: a foreign dsh is not killed
+    assert launcher.term() is not None, 'the launcher exited normally'
+    assert pgrep('fakedsh.py') and wait_port(1), 'a dsh not started by the launcher kept running'

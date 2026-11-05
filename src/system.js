@@ -1,6 +1,6 @@
 'use strict';
-// Процессы и файлы: окружение запуска, права на запись, группы процессов,
-// кто слушает порт, какие процессы останавливать.
+// Processes and files: the launch environment, write permissions, process
+// groups, who is listening on the port, which processes to stop.
 const fs = require('fs');
 const path = require('path');
 
@@ -8,12 +8,12 @@ function envWithBinDir(bin, extra) {
   return { ...process.env, PATH: path.dirname(bin) + path.delimiter + (process.env.PATH || ''), ...extra };
 }
 
-// Переменные, которые systemd задаёт главному процессу своей службы. Лаунчеру
-// они достаются по наследству от сеанса рабочего стола (GNOME запускает
-// приложения с INVOCATION_ID и JOURNAL_STREAM своей службы), но dsh — не
-// служба systemd. dshmarket по ним и по родителю-systemd (после своего
-// перезапуска dsh усыновляет systemd --user) решает, что перезапуском
-// владеет systemd, и отвечает «self-restart is disabled for this host».
+// Variables that systemd sets on the main process of its service. The
+// launcher inherits them from the desktop session (GNOME starts apps with
+// the INVOCATION_ID and JOURNAL_STREAM of its service), but dsh is not a
+// systemd service. dshmarket, by these and by a systemd parent (after its
+// own restart dsh adopts systemd --user), concludes that systemd owns the
+// restart and answers "self-restart is disabled for this host".
 const SYSTEMD_UNIT_ENV = ['INVOCATION_ID', 'JOURNAL_STREAM', 'NOTIFY_SOCKET', 'SYSTEMD_EXEC_PID', 'MANAGERPID',
   'WATCHDOG_PID', 'WATCHDOG_USEC', 'LISTEN_PID', 'LISTEN_FDS', 'LISTEN_FDNAMES'];
 
@@ -64,8 +64,9 @@ function portListenerPid(port) {
   return null;
 }
 
-/* Ссылка входа из вывода dsh: последняя строка «dsh web: <url>?token=…» с тем
-   же адресом, что plainUrl (другой порт или хост — не наша). Нет — null. */
+/* The login link from dsh's output: the last «dsh web: <url>?token=…» line
+   with the same address as plainUrl (another port or host — not ours).
+   If absent — null. */
 function authUrlFromOutput(text, plainUrl) {
   const origin = new URL(plainUrl).origin;
   let found = null;
@@ -73,15 +74,16 @@ function authUrlFromOutput(text, plainUrl) {
     try {
       const u = new URL(m[1]);
       if (u.origin === origin && u.searchParams.get('token')) found = m[1];
-    } catch { /* обрывок строки */ }
+    } catch { /* fragment of a line */ }
   }
   return found;
 }
 
-// dsh, перезапущенный не лаунчером (кнопкой перезапуска маркета), печатает
-// ссылку входа не нам, а в свой файл (/tmp/dsh-market-restart-*.out.log).
-// Берём её из stdout процесса на порту: только обычный файл своего
-// пользователя и только хвост. Не вышло — null (будет страница вставки).
+// A dsh restarted by anyone other than the launcher (the market restart
+// button) prints the login link not to us but to its own file
+// (/tmp/dsh-market-restart-*.out.log). We take it from the stdout of the
+// process on the port: only a regular file of our own user, and only the
+// tail. If it fails — null (the paste page will be shown).
 const OUTPUT_TAIL = 64 * 1024;
 
 function listenerAuthUrl(port, plainUrl) {
@@ -111,13 +113,14 @@ function pgidOf(pid) {
   } catch { return null; }
 }
 
-/* portPid — процесс на порту (или null), portPgid — его группа (или null),
-   selfPgid — группа лаунчера, oldPgid — группа исходного dsh (или null). */
+/* portPid — the process on the port (or null), portPgid — its group (or
+   null), selfPgid — the launcher's group, oldPgid — the original dsh's
+   group (or null). */
 function pickKillTargets(portPid, portPgid, selfPgid, oldPgid) {
   const targets = [];
   if (portPid) {
     if (portPgid && portPgid !== selfPgid) targets.push({ id: portPgid, groupOnly: true });
-    else targets.push({ id: portPid, groupOnly: false }); // группа наша/неизвестна — только сам процесс
+    else targets.push({ id: portPid, groupOnly: false }); // the group is ours/unknown — the process itself only
   }
   if (oldPgid && oldPgid !== selfPgid && !targets.some((t) => t.id === oldPgid)) {
     targets.push({ id: oldPgid, groupOnly: true });

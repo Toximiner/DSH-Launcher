@@ -1,8 +1,9 @@
 'use strict';
-// «Справка → Вернуть предыдущую версию…»: список прошлых релизов лаунчера
-// (GitHub) и откат — перезапуск, новый экземпляр сразу ставит выбранную
-// версию тем же путём, что обновление (скачивание, sha256, pkexec), с
-// разрешением понижения; самая новая версия — «не спрашивать больше».
+// «Справка → Вернуть предыдущую версию…» (Help → Roll back to a previous
+// version…): list of past launcher releases (GitHub) and rollback —
+// a restart, and the new instance immediately installs the chosen version
+// through the same path as an update (download, sha256, pkexec), with
+// downgrade allowed; the newest version is "don't ask again".
 const state = require('./state');
 const { tr } = require('./i18n');
 const { esc, timedCheck } = require('./util');
@@ -53,7 +54,7 @@ async function showRollbackDialog() {
   });
 }
 
-// Кнопка «Вернуть»: только версия из показанного списка.
+// The «Вернуть» (Roll back) button: only a version from the shown list.
 function rollbackTo(version) {
   if (!candidates.some((c) => c.version === version)) return;
   process.env.DSH_LAUNCHER_UPDATE_NOW = 'launcher';
@@ -61,4 +62,4 @@ function rollbackTo(version) {
   settingsWindow.relaunchLauncher(`чтобы вернуть версию ${version}`);
 }
 
-Object.assign(module.exports, { showRollbackDialog, rollbackTo }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { showRollbackDialog, rollbackTo }); // extend rather than replace: the modules require each other in a circle

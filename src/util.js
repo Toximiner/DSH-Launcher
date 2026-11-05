@@ -1,11 +1,11 @@
 'use strict';
-// Мелкие чистые функции: разбор аргументов, экранирование HTML, маршруты,
-// ошибки, таймауты, скрытие секретов в логах.
+// Small pure functions: argument parsing, HTML escaping, routes, errors,
+// timeouts, hiding secrets in logs.
 
 function splitArgs(str) {
   const out = [];
   let cur = '';
-  let has = false; // был ли токен (в т.ч. пустой '' / "")
+  let has = false; // was there a token (including an empty '' / "")
   let quote = null;
   for (let i = 0; i < str.length; i++) {
     const c = str[i];
@@ -27,9 +27,10 @@ function splitArgs(str) {
   return out;
 }
 
-/* Строка с самой ошибкой полезнее хвоста стектрейса («at …», «Node.js vX»):
-   первая строка с «error»/«ERR_», не начинающаяся с «at », иначе — последние
-   3 строки; в любом случае не длиннее 300 символов. */
+/* The line with the actual error is more useful than the tail of the
+   stack trace ("at …", "Node.js vX"): the first line with "error"/"ERR_"
+   that doesn't start with "at ", otherwise the last 3 lines; either way
+   no longer than 300 characters. */
 function firstErrLine(stderr) {
   const lines = String(stderr || '').trim().split('\n').map((l) => l.trim()).filter(Boolean);
   const errLine = lines.find((l) => !l.startsWith('at ') && /error|ERR_/i.test(l));
@@ -58,19 +59,20 @@ function timedCheck(promise, ms) {
   });
 }
 
-// Маршрут запроса dshlauncher://…: у нестандартной схемы первый сегмент
-// (retry, install, paste, market) URL-парсер кладёт в host, а не в pathname —
-// склеиваем обратно: dshlauncher://install/run/ -> '/install/run/'.
+// The route of a dshlauncher://… request: for a non-standard scheme the
+// first segment (retry, install, paste, market) the URL parser puts into
+// host, not pathname — we glue it back: dshlauncher://install/run/ ->
+// '/install/run/'.
 function launcherRoute(url) {
   const u = new URL(url);
   return '/' + u.host + u.pathname;
 }
 
-// Ключ маршрутов: команды dshlauncher://… принимаются только со страниц самого
-// лаунчера. Каждый запуск — свой случайный ключ (env.js, ROUTE_KEY); страницы
-// лаунчера получают его в каждой ссылке (withRouteKey: dshlauncher://<ключ>/…),
-// а GUI dsh, плагины и внешние сайты в окне его не знают — их запросы
-// stripRouteKey отбрасывает (null).
+// The route key: dshlauncher://… commands are only accepted from the
+// launcher's own pages. Each start — its own random key (env.js, ROUTE_KEY);
+// the launcher pages get it in every link (withRouteKey:
+// dshlauncher://<key>/…), and the dsh GUI, plugins and external sites in the
+// window don't know it — their requests stripRouteKey drops (null).
 function withRouteKey(html, key) {
   return String(html).split('dshlauncher://').join(`dshlauncher://${key}/`);
 }
@@ -86,8 +88,8 @@ function validRouteKey(key) {
 
 function redactLog(text) {
   return String(text || '')
-    // eslint-disable-next-line no-control-regex -- ESC: убираем цветовые коды терминала
-    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '') // ANSI-цвета
+    // eslint-disable-next-line no-control-regex -- ESC: strip the terminal color codes
+    .replace(/\x1b\[[0-9;?]*[A-Za-z]/g, '') // ANSI colors
     .replace(/([?&](?:token|access_token|key|api_key)=)[^\s&#"'<>]+/gi, '$1***')
     .replace(/(\bBearer\s+)[A-Za-z0-9._~+/=-]{8,}/g, '$1***')
     .replace(/\b(sk|pk|rk)-[A-Za-z0-9_-]{16,}/g, '$1-***')
@@ -95,9 +97,10 @@ function redactLog(text) {
     .replace(/((?:api[_-]?key|apikey|secret|password|passwd|access[_-]?token|auth[_-]?token)["']?\s*[:=]\s*["']?)[^\s"'&,;]+/gi, '$1***');
 }
 
-// CSP служебных data:-страниц: внешних ресурсов нет (защита в глубину
-// вместе с esc() — при инъекции в логи), разрешены только inline-
-// скрипты и стили (кнопки и стили страниц их используют) и data:-изображения.
+// The CSP of the utility data: pages: no external resources (defense in
+// depth together with esc() — in case of an injection into the logs), only
+// inline scripts and styles (the pages' buttons and styles use them) and
+// data: images are allowed.
 const CSP_META = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;">`;
 
 module.exports = { splitArgs, firstErrLine, esc, profileFromArgs, timedCheck, launcherRoute, withRouteKey, stripRouteKey, validRouteKey, redactLog, CSP_META };

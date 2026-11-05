@@ -1,6 +1,6 @@
-"""Масштаб окна между запусками: сохранённый zoom-level.json применяется
-(лог), Ctrl+= увеличивает и записывает новое значение. Клавиши — реальными
-X-событиями (xdotool), как в test_keyboard: CDP-доставка непредсказуема."""
+"""The window zoom between runs: the saved zoom-level.json is applied (log),
+Ctrl+= zooms in and writes the new value. The keys are sent as real X
+events (xdotool), as in test_keyboard: CDP delivery is unpredictable."""
 import os
 import subprocess
 
@@ -19,7 +19,7 @@ def zoom_file():
 def key(name):
     win = subprocess.run(['xdotool', 'search', '--onlyvisible', '--name', 'DeepSeek Harness'],
                          capture_output=True, text=True, env={**X, 'PATH': '/usr/bin:/bin'}).stdout.split()
-    assert win, 'окно лаунчера для X-клавиш не найдено'
+    assert win, 'launcher window for X keys not found'
     subprocess.run(['xdotool', 'windowfocus', '--sync', win[0]], env=X)
     subprocess.run(['xdotool', 'key', name], env=X)
 
@@ -31,11 +31,11 @@ def test_zoom_restore(start, gui):
     assert launcher.wait_log('восстановлен масштаб: 2', 60), launcher.log()[-2000:]
     gui.wait()
 
-    # Ctrl+= — увеличение: значение записывается в zoom-level.json (через 400 мс).
+    # Ctrl+= — zoom in: the value is written to zoom-level.json (after 400 ms).
     key('ctrl+equal')
-    assert wait_for(lambda: '"zoomLevel":2.5' in zoom_file(), 10), f'новое значение: {zoom_file()!r}'
+    assert wait_for(lambda: '"zoomLevel":2.5' in zoom_file(), 10), f'new value: {zoom_file()!r}'
 
     gui.close()
-    assert launcher.wait_exit(15) is not None, 'лаунчер завершился'
-    assert os.path.exists(ZOOM), 'файл масштаба на месте'
+    assert launcher.wait_exit(15) is not None, 'launcher exited'
+    assert os.path.exists(ZOOM), 'zoom file in place'
     os.remove(ZOOM)

@@ -1,5 +1,5 @@
 'use strict';
-// Обновления во время работы: проверка раз в 12 часов, плашка, пункт меню, «Обновить сейчас».
+// Runtime updates: a check every 12 hours, a banner, a menu item, «Обновить сейчас» (Update now).
 const { WebContentsView, shell } = require('electron');
 const fs = require('fs');
 const { guardNavigation } = require('./guard');
@@ -20,31 +20,31 @@ const settingsWindow = require('./settings-window');
 const updates = require('./updates');
 const view = require('./view');
 const whatsNew = require('./whats-new');
-const { noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
+const { noContentResponse } = require('./respond'); // pure module — direct require, no registry
 
-/* ---------------- обновления во время работы ---------------- */
+/* ---------------- runtime updates ---------------- */
 
-// Пока лаунчер работает — раз в 12 часов та же проверка, что при запуске.
-// Ставить обновление посреди работы нельзя без спроса (перезапуск оборвёт
-// ответ агента): только плашка в окне и пункт «Обновить … до X…» в «Справке»;
-// его окно — «Что нового» и «Обновить сейчас» (перезапуск с UPDATE_NOW).
+// While the launcher is running — the same check as at startup, every 12 hours.
+// An update cannot be installed mid-work without asking (a restart would cut
+// off the agent's reply): only a banner in the window and a «Обновить … до X…»
+// (Update … to X…) item in «Справка» (Help); its window — «Что нового» (What's new) and «Обновить сейчас» (restart with UPDATE_NOW).
 const UPDATE_POLL_MS = updatePollMs(process.env);
 
-const notifiedUpdates = {};     // kind → версия, о которой уже уведомили
+const notifiedUpdates = {};     // kind → version already notified about
 
 const updateName = (kind) => (kind === 'launcher' ? 'DeepSeek Harness Launcher' : 'dsh');
 
-// checks — ответы проверки при запуске (updateChecks), иначе — запросить заново.
+// checks — the responses of the startup check (updateChecks), otherwise — request anew.
 async function findUpdates(checks) {
   const [l, d] = await Promise.all(checks ? [checks.launcher, checks.dsh] : [
     timedCheck(updates.fetchLauncherLatest(), updates.UPDATE_CHECK_TIMEOUT),
     timedCheck(updates.fetchDshLatest(), updates.UPDATE_CHECK_TIMEOUT),
   ]);
   const found = {};
-  // Список релизов получен — если «Что нового» не смогло показать себя при
-  // запуске (GitHub не ответил), показываем пропущенные изменения сейчас.
+  // The release list was received — if «Что нового» (What's new) could not
+  // show itself at startup (GitHub did not answer), show the missed changes now.
   if (l && l.releases) whatsNew.retryWhatsNew(l);
-  // Локальные проверки независимы — параллельно, не друг за другом.
+  // The local checks are independent — in parallel, not one after another.
   const lInstP = updates.launcherInstalledVersion();
   const probeP = state.dshInstalledVersion ? null : probeDsh(state.dshBin);
   const lInst = await lInstP;
@@ -61,7 +61,7 @@ async function findUpdates(checks) {
   return found;
 }
 
-// Найденное → пункты меню; notify — ещё и плашка в окне.
+// Found → menu items; notify — also a banner in the window.
 function setAvailableUpdates(found, notify) {
   const versions = { launcher: found.launcher && found.launcher.version, dsh: found.dsh && found.dsh.version };
   const a = announceUpdates(versions, updates.updatePrefs(), notifiedUpdates);
@@ -77,15 +77,15 @@ function setAvailableUpdates(found, notify) {
   if (notify && a.notify.length) showUpdateToast(a.notify);
 }
 
-// После вопросов при старте: отложенное («Не сейчас») — пунктом в меню, без
-// уведомления (о нём только что спросили).
+// After the startup questions: the deferred one («Не сейчас»/Not now) — a menu item,
+// without a notification (it was just asked about).
 async function refreshAvailableUpdates() {
   if (updates.NO_UPDATE_CHECK) return;
   try { setAvailableUpdates(await findUpdates(state.updateChecks), false); }
   catch (e) { console.error('[launcher] проверка обновлений:', e.message); }
 }
 
-// Таймер периодической проверки: галочка в «Настройках» действует сразу.
+// The timer of the periodic check: the checkbox in «Настройки» (Settings) takes effect immediately.
 let pollTimer = null;
 
 function setUpdatePolling(on) {
@@ -110,15 +110,16 @@ async function pollUpdates() {
   }
 }
 
-// Плашка «Доступна … X» в правом верхнем углу окна, поверх страницы dsh (как
-// панель поиска — WebContentsView; под ней, если поиск открыт). Висит, пока
-// не закроют: пользователь мог отойти. «Подробнее…» — окно «Обновить … до X…».
+// A «Доступна … X» (… is available) banner in the top-right corner of the window,
+// over the dsh page (like the search panel — WebContentsView; under it if the
+// search is open). It stays until closed: the user may have stepped away.
+// «Подробнее…» (Details…) — the «Обновить … до X…» (Update … to X…) window.
 const TOAST_W = 520;
 const TOAST_H = 58;
 let toastView = null;
 let toastResizeHooked = false;
 
-// Плашка: заголовок, строка пояснения, кнопки (переходы dshlauncher://…) и ×.
+// Banner: title, an explanatory line, buttons (dshlauncher://… navigations) and ×.
 function toastPageUrl({ title, sub, buttons }) {
   const css = `html,body{margin:0;height:100%;background:#151a23;color:#d7dce3;overflow:hidden;
     font:13px system-ui,'Segoe UI',Roboto,Ubuntu,sans-serif}
@@ -180,7 +181,7 @@ function closeUpdateToast() {
   const v = toastView;
   toastView = null;
   if (state.win && !state.win.isDestroyed()) state.win.contentView.removeChildView(v);
-  try { v.webContents.close(); } catch { /* уже закрыта */ }
+  try { v.webContents.close(); } catch { /* already closed */ }
 }
 
 function onToastRequest(route, url) {
@@ -201,12 +202,12 @@ function onToastRequest(route, url) {
     void diagnostics.saveReport();
   } else if (route.startsWith('/toast/rollback/')) {
     closeUpdateToast();
-    void rollback.showRollbackDialog(); // тост «прошлый запуск упал после обновления»
+    void rollback.showRollbackDialog(); // toast «прошлый запуск упал после обновления» (the previous run crashed after an update)
   }
   return noContentResponse();
 }
 
-// Окно «Обновить … до X…»: что нового и предупреждение о перезапуске.
+// «Обновить … до X…» (Update … to X…) window: what's new and a warning about the restart.
 function showUpdateNowDialog(kind) {
   const u = state.availableUpdates[kind];
   if (!u) return;
@@ -229,8 +230,8 @@ function showUpdateNowDialog(kind) {
 
 function updateNow(kind) {
   if (!state.availableUpdates[kind]) return;
-  process.env.DSH_LAUNCHER_UPDATE_NOW = kind; // новый экземпляр — сразу к установке
+  process.env.DSH_LAUNCHER_UPDATE_NOW = kind; // a new instance — straight to installation
   settingsWindow.relaunchLauncher(`чтобы обновить ${updateName(kind)} до ${state.availableUpdates[kind].version}`);
 }
 
-Object.assign(module.exports, { setAvailableUpdates, refreshAvailableUpdates, setUpdatePolling, toastPageUrl, placeToast, showToast, onToastRequest, showUpdateNowDialog, updateNow }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { setAvailableUpdates, refreshAvailableUpdates, setUpdatePolling, toastPageUrl, placeToast, showToast, onToastRequest, showUpdateNowDialog, updateNow }); // we extend, not replace: the modules require each other in a cycle

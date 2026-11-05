@@ -1,5 +1,5 @@
-"""Установленный лаунчер (/usr/bin/dsh-launcher) от пользователя tester с CDP
-на порту 9222."""
+"""The installed launcher (/usr/bin/dsh-launcher) as user tester with CDP
+on port 9222."""
 import subprocess
 import urllib.request
 
@@ -8,9 +8,9 @@ from .procs import alive, sh, wait_exit, wait_for
 
 
 def launcher_pids():
-    """Главные процессы лаунчера (без --type= — это не служебные процессы Chromium)."""
-    # по пути к программе: порядок аргументов у перезапущенного экземпляра другой
-    # («electron --remote-debugging-port=… /opt/dsh-launcher»)
+    """The launcher's main processes (no --type= — those are not Chromium helper processes)."""
+    # by the program path: the argument order of a restarted instance is different
+    # (“electron --remote-debugging-port=… /opt/dsh-launcher”)
     out = subprocess.run(['pgrep', '-u', 'tester', '-f', '^/opt/dsh-launcher/electron/electron '],
                          capture_output=True, text=True).stdout
     pids = []
@@ -21,9 +21,9 @@ def launcher_pids():
                     pids.append(int(p))
         except OSError:
             pass
-    # Лаунчер запускает дочерние процессы через fork → exec: до exec у потомка
-    # та же командная строка, что у лаунчера. Главный — тот, чей родитель сам
-    # не процесс лаунчера.
+    # The launcher spawns child processes via fork → exec: before the exec the
+    # child has the same command line as the launcher. The main one is the one
+    # whose parent is not itself a launcher process.
     return [p for p in pids if _ppid(p) not in pids]
 
 
@@ -47,20 +47,20 @@ class Launcher:
     def __init__(self, env):
         base = {'HOME': HOME, 'USER': 'tester', 'LANG': 'C.UTF-8', 'DISPLAY': ':99',
                 'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
-                'DSH_LAUNCHER_GITHUB_API': GITHUB_API,  # None — настоящий GitHub
+                'DSH_LAUNCHER_GITHUB_API': GITHUB_API,  # None — the real GitHub
                 'DSH_LAUNCHER_ROUTE_KEY': ROUTE_KEY,
-                # «Последний» dsh — пин из env.py: живому npm-реестру в тестах
-                # не доверяем (0.2.1-rc.2 уронил сценарии без правок кода).
+                # The “latest” dsh — a pin from env.py: we do not trust the live
+                # npm registry in tests (0.2.1-rc.2 broke the scenarios without code changes).
                 'DSH_LAUNCHER_FAKE_DSH_LATEST': DSH_LATEST,
                 'NODE_V8_COVERAGE': V8_COVERAGE}
         if GITHUB_TOKEN:
             base['DSH_LAUNCHER_GITHUB_TOKEN'] = GITHUB_TOKEN
         base.update(env)
-        base = {k: v for k, v in base.items() if v is not None}  # None — переменной нет (например, DISPLAY)
-        # Окружение — целиком своё (env=base), а не аргументами `env -i A=B`:
-        # командную строку любого процесса видно в /proc/*/cmdline.
-        # От tester средствами Python (pytest в контейнере — root): окружение
-        # процесса — ровно base, без добавок runuser/PAM.
+        base = {k: v for k, v in base.items() if v is not None}  # None — the variable is absent (e.g. DISPLAY)
+        # The environment — fully our own (env=base), not `env -i A=B` arguments:
+        # any process's command line is visible in /proc/*/cmdline.
+        # As tester via Python (pytest in the container is root): the process
+        # environment is exactly base, with no runuser/PAM additions.
         with open(LAUNCHER_OUT, 'w') as out:
             subprocess.Popen(['/usr/bin/dsh-launcher', '--remote-debugging-port=9222'], cwd=HOME,
                              user='tester', group='tester', extra_groups=[],
@@ -78,7 +78,7 @@ class Launcher:
             self.pid = pids[0]
             return True
 
-        assert wait_for(ready, 30), 'лаунчер не стартовал:\n' + '\n'.join(launcher_log().splitlines()[-20:])
+        assert wait_for(ready, 30), 'the launcher did not start:\n' + '\n'.join(launcher_log().splitlines()[-20:])
 
     @property
     def alive(self):
@@ -88,15 +88,15 @@ class Launcher:
         return launcher_log()
 
     def wait_log(self, text, timeout):
-        """Дождаться строки в логе лаунчера."""
+        """Wait for a line in the launcher log."""
         return wait_for(lambda: text in launcher_log(), timeout)
 
     def wait_log_count(self, text, count, timeout):
-        """Дождаться, что строка встретилась в логе не меньше count раз."""
+        """Wait for the line to appear in the log at least count times."""
         return wait_for(lambda: launcher_log().count(text) >= count, timeout)
 
     def term(self, timeout=15):
-        """SIGTERM → секунды до выхода (None — не вышел)."""
+        """SIGTERM → seconds until exit (None — did not exit)."""
         sh(f'kill -TERM {self.pid}')
         return wait_exit(self.pid, timeout)
 
@@ -104,10 +104,10 @@ class Launcher:
         return wait_exit(self.pid, timeout)
 
     def successor(self, timeout=20):
-        """Новый экземпляр после перезапуска (другой pid) или None. Каждый опрос —
-        заново и только живые: прежний экземпляр, пока завершается, ещё виден
-        в списке процессов. Набор должен совпасть два опроса подряд; из
-        нескольких — самый новый (наибольший pid)."""
+        """The new instance after a restart (a different pid), or None. Each poll —
+        fresh and only live ones: the old instance, while it is finishing, is still
+        visible in the process list. The set must match two polls in a row; of
+        several — the newest (the largest pid)."""
         last = []
         found = []
 
@@ -123,7 +123,7 @@ class Launcher:
         return found[-1] if found else None
 
     def last_context_menu(self):
-        """Последняя строка «контекстное меню: …» из лога (что показали по правому клику)."""
+        """The last “контекстное меню: …” line from the log (what was shown on a right click)."""
         lines = [s for s in launcher_log().splitlines() if 'контекстное меню:' in s]
         return lines[-1].split('контекстное меню: ', 1)[1] if lines else None
 

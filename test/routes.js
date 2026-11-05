@@ -1,6 +1,6 @@
 'use strict';
-// Юнит-тест matchRoute (main.js): таблица маршрутов dshlauncher:// —
-// каждый префикс → своё имя, порядок (приоритеты) сохранён, чужое → null.
+// Unit test for matchRoute (main.js): the dshlauncher:// route table —
+// each prefix → its name, order (priorities) preserved, foreign → null.
 const assert = require('assert');
 const { extract } = require('./_extract');
 
@@ -54,11 +54,11 @@ for (const [prefix, name] of expected) {
   assert.strictEqual(matchRoute(prefix + 'x'), name, prefix);
 }
 
-// приоритеты: /menu/rollback/ раньше /rollback/ (иначе откат кликал бы диалог)
+// priorities: /menu/rollback/ before /rollback/ (otherwise a rollback click would hit the dialog)
 assert.strictEqual(matchRoute('/menu/rollback/v1.0.0'), 'menu/rollback');
 assert.strictEqual(matchRoute('/rollback/v1.0.0'), 'rollback');
 
-// чужие/неизвестные маршруты → null (дальше — onPasteRequest)
+// foreign/unknown routes → null (then onPasteRequest)
 assert.strictEqual(matchRoute('/paste/https%3A%2F%2Fexample.com/'), null);
 assert.strictEqual(matchRoute('/unknown/x/'), null);
 assert.strictEqual(matchRoute('/'), null);

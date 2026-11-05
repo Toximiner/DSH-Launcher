@@ -1,7 +1,7 @@
 'use strict';
-// Обновления — список релизов (GitHub API) и «последняя» версия dsh
-// (npm-реестр): кэш релизов по ETag, выбор последней опубликованной,
-// подставные версии для разработки и тестов.
+// Updates — the release list (GitHub API) and the "latest" dsh version
+// (npm registry): ETag cache of releases, picking the latest published,
+// and stub versions for development and tests.
 const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -13,23 +13,25 @@ const { releasesCacheMode, releasesCacheFresh, parseRelease } = require('./updat
 const DSH_NPM_PKG = '@deepseek-ai/dsh';
 const UPDATE_GITHUB_REPO = 'Toximiner/DSH-Launcher';
 
-// Кэш списка релизов: без метки ETag — не спрашивать GitHub чаще раза в час;
-// GitHub не ответил — список из кэша, если он не старше часа.
+// Release list cache: without an ETag — do not ask GitHub more than once
+// an hour; if GitHub did not answer — the list from the cache, if it is
+// no older than an hour.
 const RELEASES_MAX_AGE_MS = 60 * 60 * 1000;
 const releasesCacheFile = () => path.join(app.getPath('userData'), 'releases-cache.json');
 
-// Список релизов GitHub (репозиторий repo, кэш в cacheFile) с учётом кэша
-// (см. releasesCacheMode). 100 — максимум GitHub API: «Вернуть предыдущую
-// версию…» и «Что нового» видят и старые релизы (с 20 они выпадали из списка);
-// ответ кэшируется по ETag.
+// GitHub release list (repo, cache in cacheFile) with the cache taken into
+// account (see releasesCacheMode). 100 — the GitHub API maximum: «Вернуть
+// предыдущую версию…» (Roll back to a previous version…) and «Что нового»
+// (What's new) see old releases too (with 20 they dropped out of the list);
+// the response is cached by ETag.
 async function githubReleasesList(repo, cacheFile, { force = false } = {}) {
   let entry = null;
-  try { entry = JSON.parse(fs.readFileSync(cacheFile(), 'utf8')); } catch { /* кэша нет */ }
+  try { entry = JSON.parse(fs.readFileSync(cacheFile(), 'utf8')); } catch { /* no cache */ }
   const mode = releasesCacheMode(entry, Date.now(), RELEASES_MAX_AGE_MS, force);
   if (mode === 'cache') return entry.list;
   const headers = { 'User-Agent': 'dsh-launcher', 'Accept': 'application/vnd.github+json' };
   if (mode === 'revalidate') headers['If-None-Match'] = entry.etag;
-  if (GITHUB_TOKEN && GITHUB_API === 'https://api.github.com') headers.Authorization = `Bearer ${GITHUB_TOKEN}`; // только настоящему GitHub
+  if (GITHUB_TOKEN && GITHUB_API === 'https://api.github.com') headers.Authorization = `Bearer ${GITHUB_TOKEN}`; // only to the real GitHub
   let res;
   let body = '';
   try {
@@ -38,7 +40,7 @@ async function githubReleasesList(repo, cacheFile, { force = false } = {}) {
     for await (const c of res) body += c;
     if (res.statusCode !== 200 && !(res.statusCode === 304 && entry)) throw new Error(`GitHub API: HTTP ${res.statusCode}`);
   } catch (e) {
-    // нет сети, лимит, сбой GitHub — недавний список лучше никакого
+    // no network, a limit, a GitHub failure — a recent list is better than none
     if (!force && releasesCacheFresh(entry, Date.now(), RELEASES_MAX_AGE_MS)) {
       console.log(`[launcher] релизы GitHub: ${e.message} — список из кэша`);
       return entry.list;
@@ -56,18 +58,19 @@ async function githubReleasesList(repo, cacheFile, { force = false } = {}) {
   try {
     fs.mkdirSync(path.dirname(cacheFile()), { recursive: true });
     fs.writeFileSync(cacheFile(), JSON.stringify({ ...entry, fetchedAt: Date.now() }));
-  } catch { /* кэш — не обязателен */ }
+  } catch { /* the cache is optional */ }
   return list;
 }
 
-// Список релизов лаунчера (см. githubReleasesList).
+// The launcher's release list (see githubReleasesList).
 async function githubReleases({ force = false } = {}) {
   return githubReleasesList(UPDATE_GITHUB_REPO, releasesCacheFile, { force });
 }
 
-// Список релизов (одним запросом): последний — наибольшая версия среди
-// опубликованных (не черновик, не prerelease); описания остальных — для
-// «Что нового» (изменения между установленной и новой версией).
+// Release list (in one request): the latest — the highest version among
+// the published ones (not a draft, not a prerelease); the descriptions of
+// the rest — for «Что нового» (What's new) (the changes between the
+// installed and the new version).
 async function fetchLauncherLatest({ force = false } = {}) {
   const list = await githubReleases({ force });
   const rels = (Array.isArray(list) ? list : []).filter((r) => r && !r.draft && !r.prerelease && r.tag_name);
@@ -81,24 +84,25 @@ async function fetchLauncherLatest({ force = false } = {}) {
     assetUrl,
     assetSha256,
     releases: rels.map((r) => ({ version: ver(r), body: String(r.body || '') })),
-    all: rels.map(parseRelease), // для «Вернуть предыдущую версию…»
+    all: rels.map(parseRelease), // for «Вернуть предыдущую версию…» (Roll back to a previous version…)
   };
-  const fake = fakeLatest('DSH_LAUNCHER_FAKE_LAUNCHER_LATEST'); // разработка/тесты
+  const fake = fakeLatest('DSH_LAUNCHER_FAKE_LAUNCHER_LATEST'); // development/tests
   if (fake) meta.version = fake;
   return meta;
 }
 
-// Подставная «последняя» версия (разработка/тесты): значение переменной или,
-// если это путь, — содержимое файла (читается при каждой проверке).
+// A stub "latest" version (development/tests): the value of the variable or,
+// if it is a path, the contents of the file (read on every check).
 function fakeLatest(name) {
   const v = process.env[name];
   if (!v || !v.startsWith('/')) return v || null;
   try { return fs.readFileSync(v, 'utf8').trim() || null; } catch { return null; }
 }
 
-// Релизы dsh — из GitHub-репозитория проекта (deepseek-harness): npm-реестр
-// описаний версий не отдаёт, а в релизах GitHub они есть (тег dsh-v<версия>).
-// Свой ETag-кэш — отдельный от релизов лаунчера: репозиторий другой.
+// dsh releases — from the project's GitHub repository (deepseek-harness):
+// the npm registry does not serve version descriptions, while the GitHub
+// releases have them (tag dsh-v<version>). Its own ETag cache — separate
+// from the launcher's releases: a different repository.
 const DSH_GITHUB_REPO = 'deepseek-ai/deepseek-harness';
 const dshReleasesCacheFile = () => path.join(app.getPath('userData'), 'dsh-releases-cache.json');
 
@@ -106,9 +110,10 @@ async function fetchDshReleases({ force = false } = {}) {
   return githubReleasesList(DSH_GITHUB_REPO, dshReleasesCacheFile, { force });
 }
 
-// Последняя версия dsh — из npm-реестра (не с локального npm: без установки и
-// без доступа к глобальному prefix). Описания релизов («Что нового») — из
-// GitHub; их сбой не ломает предложение обновления — описания просто пустые.
+// The latest dsh version — from the npm registry (not from the local npm:
+// without an install and without access to the global prefix). The release
+// descriptions («Что нового»/What's new) — from GitHub; their failure does
+// not break the update offer — the descriptions are simply empty.
 async function fetchDshLatest() {
   const j = await httpJson(`https://registry.npmjs.org/${DSH_NPM_PKG}/latest`,
     { 'User-Agent': 'dsh-launcher' }, 'npm registry');
@@ -123,11 +128,11 @@ async function fetchDshLatest() {
   } catch (e) {
     console.log(`[launcher] описания релизов dsh: ${e.message} — без «Что нового»`);
   }
-  const fake = fakeLatest('DSH_LAUNCHER_FAKE_DSH_LATEST'); // разработка/тесты
+  const fake = fakeLatest('DSH_LAUNCHER_FAKE_DSH_LATEST'); // development/tests
   if (fake) meta.version = fake;
   return meta;
 }
 
-// RELEASES_MAX_AGE_MS / releasesCacheFile / fakeLatest — только внутри модуля
-// (кэш релизов, подставные версии dev/тестов) — не экспортируются.
+// RELEASES_MAX_AGE_MS / releasesCacheFile / fakeLatest — internal to the
+// module (release cache, stub dev/test versions) — not exported.
 module.exports = { DSH_NPM_PKG, UPDATE_GITHUB_REPO, githubReleases, fetchLauncherLatest, fetchDshLatest };

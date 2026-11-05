@@ -15,6 +15,10 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 - Roll-back offer: if a freshly updated launcher version crashed, the crash toast gains a “Roll back to the previous version…” button that opens the roll-back dialog.
 - “What’s new” in the dsh update prompt: dsh release notes are fetched from GitHub (deepseek-harness); the part in the UI language is shown.
 
+### Changed
+
+- Code comments and test assert messages are now in English across the whole code base (main.js, src/, test/, test/docker/, *.sh, Dockerfile, .github/). Russian is kept only in the readme, the changelog (release notes) and user-facing strings (UI, logs, tray, packaging). The conventions are recorded in CONTRIBUTING.md (same file: commit messages and PRs in English).
+
 ### Fixed
 
 - “Install” dsh button: the command now installs `@latest` instead of bare `npm install -g @deepseek-ai/dsh` — npm 10.x (Node 22) failed with ETARGET when `latest` is a prerelease.

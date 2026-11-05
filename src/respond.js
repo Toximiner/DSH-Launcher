@@ -1,7 +1,7 @@
 'use strict';
-// Ответы схемы dshlauncher:// — чистый модуль (без electron), прямой require.
-// blankResponse: навигация произошла, контента нет (пустая тёмная страница);
-// noContentResponse: навигация не происходит — страница остаётся как была.
+// dshlauncher:// scheme responses — pure module (no electron), direct require.
+// blankResponse: navigation happened, no content (empty dark page);
+// noContentResponse: no navigation — the page stays as it was.
 
 function blankResponse() {
   return new Response('<!doctype html><html><body style="background:#0f1115;margin:0"></body></html>',

@@ -1,5 +1,5 @@
 'use strict';
-// Процесс dsh: запуск (журнал, захват адреса с токеном), выход и самовозрождение.
+// dsh process: launch (log, capture of the URL with token), exit and self-revival.
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -10,20 +10,20 @@ const { tr } = i18n;
 const { DSH_ARGS, CWD, LOG_DIR, LOG_FILE } = require('./env');
 const { rotateLog, openDshLog } = require('./log');
 const { dshEnv } = require('./dsh-install');
-const { sleep, pushErr, portOpen } = require('./port'); // чистый модуль — прямой require, без реестра
+const { sleep, pushErr, portOpen } = require('./port'); // pure module — direct require, no registry
 const launch = require('./launch');
 const pages = require('./pages');
 const updatesLive = require('./updates-live');
-const launcher = require('./launcher'); // общий реестр (наполняет main.js)
+const launcher = require('./launcher'); // shared registry (populated by main.js)
 
-/* ---------------- запуск процесса dsh ---------------- */
+/* ---------------- launch of the dsh process ---------------- */
 
-// Chromium держит часть своих дескрипторов (разделяемая память, сокеты,
-// icudtl.dat, порт отладки…) без «закрыть при exec» — дочерний процесс
-// получал бы их все. Поэтому долгоживущие процессы (dsh, новый экземпляр
-// лаунчера) запускаются через bash, который закрывает всё, кроме 0–2, и
-// делает exec (pid — тот же). bash, а не sh: dash не закрывает дескрипторы с
-// номером больше 9.
+// Chromium keeps some of its descriptors (shared memory, sockets,
+// icudtl.dat, debug port…) without "close on exec" — the child process
+// would inherit all of them. So long-running processes (dsh, a new
+// launcher instance) are spawned through bash, which closes everything
+// except 0–2 and then execs (the pid stays the same). bash, not sh:
+// dash does not close descriptors numbered above 9.
 const CLOSE_INHERITED_FDS = 'for f in /proc/$$/fd/*; do n=${f##*/}; if [ "$n" -gt 2 ] 2>/dev/null; then eval "exec $n>&-" 2>/dev/null; fi; done; ';
 
 function spawnClean(cmd, args, opts) {
@@ -31,26 +31,26 @@ function spawnClean(cmd, args, opts) {
 }
 
 function startDsh() {
-  // dsh.log пишет только startDsh (stdout dsh) — ротируем перед открытием потока.
+  // dsh.log is written only by startDsh (dsh stdout) — rotate before opening the stream.
   const rotated = rotateLog(LOG_FILE);
   if (rotated) console.log(`[launcher] лог прокручен: dsh.log (${rotated} Б) -> dsh.log.1`);
   fs.mkdirSync(LOG_DIR, { recursive: true });
   const logStream = openDshLog(LOG_FILE);
-  state.authUrl = null; // токен прошлого процесса недействителен — ждём новый
+  state.authUrl = null; // token of the previous process is no longer valid — waiting for a new one
   console.log(`[launcher] starting: ${state.dshBin} ${DSH_ARGS.join(' ')} (cwd=${CWD}, log=${LOG_FILE})`);
   const opts = {
     cwd: CWD,
     env: dshEnv({ DSH_STARTED_BY: 'dsh-launcher' }),
     stdio: ['ignore', 'pipe', 'pipe'],
-    detached: true, // dsh становится лидером своей процесс-группы — можно убить всё дерево
+    detached: true, // dsh becomes the leader of its own process group — the whole tree can be killed
   };
-  // Через bash (spawnClean) ошибку «нет такой программы» spawn не вернёт —
-  // такую (и команду без пути, из PATH) запускаем напрямую: 'error' как раньше.
+  // Via bash (spawnClean) spawn would not return a "no such program" error —
+  // such a binary (and a bare command from PATH) is launched directly: 'error' as before.
   let direct = false;
   try { fs.accessSync(state.dshBin, fs.constants.X_OK); } catch { direct = true; }
   state.dshProc = direct || !path.isAbsolute(state.dshBin) ? spawn(state.dshBin, DSH_ARGS, opts) : spawnClean(state.dshBin, DSH_ARGS, opts);
   state.weStartedDsh = true;
-  state.adoptedDsh = false; // снова собственный процесс — «усыновлённого» больше нет
+  state.adoptedDsh = false; // our own process again — no "adopted" one left
   state.adoptedOldPgid = null;
   state.dshFatal = false;
   state.dshProc.stdout.on('data', (d) => {
@@ -79,7 +79,7 @@ function startDsh() {
   const proc = state.dshProc;
   state.dshProc.on('exit', (code, signal) => {
     try { logStream.end(); } catch { /* noop */ }
-    if (proc !== state.dshProc || state.restartingDsh) { // остановлен «Перезапустить dsh» — это не сбой
+    if (proc !== state.dshProc || state.restartingDsh) { // stopped by "Restart dsh" — that is not a crash
       console.log('[launcher] прежний процесс dsh завершился (перезапуск):', { code, signal });
       return;
     }
@@ -87,18 +87,18 @@ function startDsh() {
   });
 }
 
-/* ---------------- самовозрождение dsh (self-restart) ----------------
- * Менеджер плагинов dsh перезапускает сам процесс (после обновления плагина
- * уведомляет «изменения вступят в силу при следующем старте», и при
- * подтверждении дш поднимает новый процесс, а старый спокойно выходит с
- * code=0). Порт при этом может не закрываться вовсе (новый процесс
- * подхватывает его до выхода старого) — watchdog такой переход не видит.
- * Поэтому по exit нашего дочернего процесса проверяем порт: если он жив
- * или оживает — не показываем ошибку, а «усыновляем» запущенный dsh
- * (дальше работаем с ним как с подключением, но при закрытии окна всё
- * равно останавливаем — pid ищется по порту) и обновляем окно. Куки при
- * этом живы — секрет подписи хранится в ~/.dsh/.credentials.yaml и
- * переживает перезапуск.
+/* ---------------- dsh self-revival (self-restart) ----------------
+ * dsh's plugin manager restarts the process itself (after a plugin update
+ * it reports "the changes take effect on the next start", and on
+ * confirmation dsh brings up a new process while the old one exits calmly with
+ * code=0). The port may not close at all in this case (the new process
+ * grabs it before the old one exits) — the watchdog cannot see such a handover.
+ * So on the exit of our child process we check the port: if it is
+ * alive or comes up — we do not show an error, but "adopt" the running dsh
+ * (from then on we work with it as a connection, but on window close we
+ * still stop it — the pid is found via the port) and update the window. The
+ * cookies are still alive then — the signing secret is stored in ~/.dsh/.credentials.yaml and
+ * survives the restart.
  */
 let adoptionCheck = false;
 
@@ -106,7 +106,7 @@ async function handleDshExit(code, signal) {
   console.log('[launcher] dsh process exited:', { code, signal });
   if (state.stopping) return;
   pushErr(tr(`dsh остановился (code=${code}, signal=${signal})`, `dsh stopped (code=${code}, signal=${signal})`));
-  if (adoptionCheck) return; // на всякий случай: один цикл проверки
+  if (adoptionCheck) return; // just in case: only one check cycle
   adoptionCheck = true;
   try {
     pages.showPage(() => pages.showStatus(tr('dsh перезапускается…', 'dsh is restarting…'), tr(
@@ -119,31 +119,31 @@ async function handleDshExit(code, signal) {
     while (!up && Date.now() < deadline) { await sleep(500); up = await portOpen(); }
     if (up && !state.stopping && state.win && !state.win.isDestroyed()) {
       console.log('[launcher] порт снова открыт — dsh перезапустился сам, перехожу в режим подключения');
-      state.weStartedDsh = false; // новый процесс — не наш дочерний (ручки на него нет)
-      state.adoptedDsh = true;    // но это тот же dsh сессии — при закрытии окна остановим
+      state.weStartedDsh = false; // the new process is not our child (we hold no handles on it)
+      state.adoptedDsh = true;    // but it is the same dsh of this session — we will stop it on window close
       if (state.dshProc && state.dshProc.pid !== undefined) state.adoptedOldPgid = state.dshProc.pid;
       state.dshProc = null;
       state.dshFatal = false;
-      state.portState = 'up';     // синхронизация со watchdog — не давать лишней перезагрузки
+      state.portState = 'up';     // sync with the watchdog — do not allow an extra restart
       await launcher.recoverWindow(true);
       return;
     }
   } finally {
     adoptionCheck = false;
   }
-  // Сам не поднялся. Упал (не штатный выход) — перезапускаем, но не по кругу.
+  // It did not come back up on its own. It crashed (not a normal exit) — restart, but not in a loop.
   const d = crashRestart(crashHistory, Date.now(), code, signal);
   crashHistory = d.history;
   if (d.restart && !state.stopping && state.win && !state.win.isDestroyed()) {
     console.log(`[launcher] dsh упал (code=${code}, signal=${signal}) — перезапускаю (${crashHistory.length} за 10 минут)`);
     state.dshCrashNotice = { code, signal };
-    state.launching = true; // слежение за портом не вмешивается — окно до GUI доведёт запуск
+    state.launching = true; // the port watcher does not interfere — the launch drives the window to the GUI
     try { await launch.launchDshInner(); } finally { state.launching = false; }
     return;
   }
   const repeated = code !== 0 || Boolean(signal);
   if (repeated) console.log('[launcher] dsh падает снова и снова — авто-перезапуск остановлен');
-  if (repeated) state.dshFatal = true; // dsh остановлен и больше не перезапускается (статус у значка)
+  if (repeated) state.dshFatal = true; // dsh is stopped and will no longer be restarted (status on the tray icon)
   if (state.win && !state.win.isDestroyed() && !state.stopping) {
     pages.showPage(() => pages.showStatus(tr('dsh остановился', 'dsh has stopped'), (repeated ? tr(
       `<p>Процесс DeepSeek Harness падает снова и снова — лаунчер перезапускал его
@@ -159,9 +159,9 @@ async function handleDshExit(code, signal) {
   }
 }
 
-let crashHistory = []; // времена авто-перезапусков после сбоя
+let crashHistory = []; // times of auto-restarts after a crash
 
-// Плашка «dsh перезапущен после сбоя» — когда GUI снова загрузился.
+// "dsh was restarted after a crash" toast — shown once the GUI has loaded again.
 function maybeShowDshCrashNotice() {
   const c = state.dshCrashNotice;
   if (!c) return;
@@ -174,10 +174,10 @@ function maybeShowDshCrashNotice() {
   }));
 }
 
-/* ===== retryButton (тест test/pages.js) ===== */
+/* ===== retryButton (test test/pages.js) ===== */
 function retryButton() {
   return `<button onclick="location.href='dshlauncher://retry/'" style="margin-bottom:16px">${tr('Проверить снова', 'Check again')}</button>`;
 }
 /* ===== end retryButton ===== */
 
-Object.assign(module.exports, { CLOSE_INHERITED_FDS, startDsh, retryButton, maybeShowDshCrashNotice }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { CLOSE_INHERITED_FDS, startDsh, retryButton, maybeShowDshCrashNotice }); // we extend, not replace: the modules require each other cyclically

@@ -1,15 +1,15 @@
-"""Подставной GitHub (fakes/github.py): список релизов лаунчера и .deb к ним.
+"""The fake GitHub (fakes/github.py): the launcher release list and their .deb files.
 
-Список устроен как настоящий (новые первыми):
-  - черновик и prerelease — лаунчер их пропускает;
-  - LATEST (2.0.0, с .deb) — последний, на него обновляются;
-  - 1.1.1 и 1.1.0 — без .deb, для «Что нового»;
-  - 25 релизов 1.0.x без .deb;
-  - ROLLBACK (1.0.0-14, с .deb) — на 31-м месте: виден, только если лаунчер
-    просит больше 30 на страницу (с per_page=20 и по умолчанию он выпадал);
+The list is structured like the real one (newest first):
+  - a draft and a prerelease — the launcher skips them;
+  - LATEST (2.0.0, with a .deb) — the latest, what updates go to;
+  - 1.1.1 and 1.1.0 — no .deb, for “What’s new”;
+  - 25 releases of 1.0.x without a .deb;
+  - ROLLBACK (1.0.0-14, with a .deb) — 31st in the list: visible only if the launcher
+    asks for more than 30 per page (with per_page=20 and the default it fell out);
   - 1.0.0-1.
-.deb (из текущего кода, с этими номерами версий) собирает run.sh и
-подключает в контейнер каталогом DEBS.
+The .deb files (from the current code, with these version numbers) are built by run.sh
+and mounted into the container as the DEBS directory.
 """
 import hashlib
 import json
@@ -19,9 +19,9 @@ from .env import GITHUB_API, LATEST, LATEST_DEB, ROLLBACK, T
 
 DEBS = '/opt/github'
 RELEASES = '/tmp/github-releases.json'
-# Релизы dsh (deepseek-ai/deepseek-harness): отдельный файл подставного GitHub
-# (4-й аргумент fakes/github.py). Создаёт сценарий, которому нужны описания
-# dsh («Что нового»); без файла dsh-запросы идут в основной список.
+# dsh releases (deepseek-ai/deepseek-harness): a separate file of the fake GitHub
+# (4th argument of fakes/github.py). Created by a scenario that needs the
+# dsh descriptions (“What’s new”); without the file, dsh requests go to the main list.
 DSH_RELEASES = '/tmp/github-dsh-releases.json'
 GITHUB_LOG = '/tmp/github.log'
 SERVER = f'{T}/fakes/github.py'
@@ -47,7 +47,7 @@ def _release(tag, deb=None, draft=False, prerelease=False, digest=None):
 
 
 def releases(latest_digest=None):
-    """Список релизов; latest_digest — свой digest у .deb последнего релиза."""
+    """The release list; latest_digest — a custom digest for the latest release's .deb."""
     return ([_release('3.0.0', draft=True), _release('2.1.0-rc.1', prerelease=True),
              _release(LATEST, LATEST_DEB, digest=latest_digest),
              _release('1.1.1'), _release('1.1.0')] +
@@ -62,7 +62,7 @@ def write_releases(lst):
 
 
 def write_dsh_releases(lst):
-    """Список релизов dsh (deepseek-ai/deepseek-harness) — теги dsh-v<версия>."""
+    """The dsh release list (deepseek-ai/deepseek-harness) — tags dsh-v<version>."""
     with open(DSH_RELEASES, 'w') as f:
         json.dump(lst, f)
     os.chmod(DSH_RELEASES, 0o644)
