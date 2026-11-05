@@ -58,4 +58,13 @@ function guardNavigation(wc, { gui = false } = {}) {
   });
 }
 
-module.exports = { navAction, restrictPermissions, guardNavigation, ALLOWED_PERMISSIONS };
+// Окно-слой (диалог, плашка, панель поиска): новые вкладки запрещены,
+// http(s) — в системном браузере. Одна политика для всех таких слоёв.
+function denyExternalOpen(wc) {
+  wc.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/i.test(url)) shell.openExternal(url).catch(() => {});
+    return { action: 'deny' };
+  });
+}
+
+module.exports = { navAction, restrictPermissions, guardNavigation, ALLOWED_PERMISSIONS, denyExternalOpen };

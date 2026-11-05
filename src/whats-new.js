@@ -8,6 +8,7 @@ const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc, timedCheck } = require('./util');
 const { tagToPackageVersion, shouldShowWhatsNew, notesBetween } = require('./versions');
+const { IS_PKG_INSTALL } = require('./env');
 const dialogs = require('./dialogs');
 const menus = require('./menus');
 const updates = require('./updates');
@@ -47,7 +48,7 @@ async function maybeShowWhatsNew(freshLatest) {
     if (!current) { whatsNewChecked = true; return; }
     let last = null;
     try { last = JSON.parse(fs.readFileSync(lastVersionFile(), 'utf8')).version || null; } catch { /* первый запуск */ }
-    const scheme = process.execPath.startsWith('/opt/dsh-launcher/') ? 'deb' : 'semver';
+    const scheme = IS_PKG_INSTALL ? 'deb' : 'semver';
     if (!shouldShowWhatsNew(last, current, scheme)) { saveLastVersion(current); whatsNewChecked = true; return; }
     if (updates.NO_UPDATE_CHECK) { saveLastVersion(current); whatsNewChecked = true; return; } // в сеть ходить нельзя — молча
     let latest = freshLatest || await state.updateChecks.launcher;

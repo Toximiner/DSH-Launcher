@@ -133,13 +133,13 @@ function runMarketInstall(cmd, args, env) {
   console.log(`[launcher] установка: ${marketState.cmdLine}`);
   marketState.running = true;
   showMarketPage();
-  return runWithLiveLog(marketState, cmd, args, { cwd: CWD, env, redraw: () => {
+  return runWithLiveLog(marketState, cmd, args, {
+    cwd: CWD,
+    env,
     // running — иначе страница уже переключилась (успех/ошибка/новый вопрос),
     // и доп. перерисовка затёрла бы её note (тик мог разрешиться позже).
-    pages.liveLogTick(marketState).then((ok) => {
-      if (!ok && marketState.running) showMarketPage();
-    });
-  } });
+    redraw: pages.liveRedraw(marketState, () => marketState.running, showMarketPage),
+  });
 }
 
 async function offerMarketIfMissing() {

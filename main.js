@@ -23,13 +23,13 @@
  * сигналы и жёсткая остановка dsh.
  */
 
-const { app, BrowserWindow, crashReporter, protocol, screen, shell } = require('electron');
+const { app, BrowserWindow, crashReporter, protocol, screen } = require('electron');
 const fs = require('fs');
 
 const state = require('./src/state'); // общее состояние (окно, процесс dsh, флаги)
 const i18n = require('./src/i18n');
 const { tr } = i18n;
-const { guardNavigation, restrictPermissions } = require('./src/guard');
+const { guardNavigation, restrictPermissions, denyExternalOpen } = require('./src/guard');
 const { WIN_MIN, keyAction, isAltKey, windowSize } = require('./src/ui');
 
 // Параметры запуска и журнал лаунчера — первыми: env.js убирает токен CI из
@@ -78,7 +78,7 @@ Object.defineProperties(launcher, {
 // найденный путь запоминается
 state.dshBin = CONFIG.dshBin || DSH_BIN_DEFAULT;
 
-i18n.setLang(LANG_FORCED || (/^ru/i.test(process.env.LC_ALL || process.env.LC_MESSAGES || process.env.LANG || '') ? 'ru' : 'en'));
+i18n.setLang(LANG_FORCED || i18n.systemLang());
 
 /* ============================================================== */
 
@@ -101,14 +101,8 @@ gpu.apply(app);
 // Две и более смерти GPU-процесса за сессию = драйвер сломан: маркер
 gpu.onChildProcessGone(app, restartLauncher);
 
-state.win = null;
-state.dshProc = null;
-state.weStartedDsh = false;
-state.adoptedDsh = false; // dsh «усыновлён» после самовозрождения — тоже останавливаем при закрытии
-state.adoptedOldPgid = null; // группа исходного dsh до самовозрождения (могли остаться потомки)
-state.dshFatal = false;
-state.stopping = false;
-state.authUrl = null; // URL с токеном, напечатанный dsh
+// Начальные значения state — дефолты src/state.js (до onReady поля никто
+// не меняет; dshBin присвоен выше).
 
 /* ---------------- основной поток ---------------- */
 
@@ -160,10 +154,7 @@ async function onReady() {
   state.win.on('close', onMainWindowClose);
   state.win.on('focus', () => { state.win.flashFrame(false); setTrayAttention(false); clearAgentNotification(); });
   initSpellcheck();
-  state.win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/i.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
+  denyExternalOpen(state.win.webContents);
   guardNavigation(state.win.webContents, { gui: true }); // чужие сайты — в браузере
   // Правый клик — контекстное меню (копировать / вставить …): своего у
   // Electron нет. И в GUI dsh, и на служебных страницах лаунчера.

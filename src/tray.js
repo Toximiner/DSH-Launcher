@@ -19,9 +19,9 @@ const fileHelp = require('./file-help');
 
 let trayIcons = null;
 
-const closeToTrayOn = () => (loadSettings() || {}).closeToTray === true;
-const attentionOn = () => (loadSettings() || {}).attention !== false;
-const attentionSoundOn = () => (loadSettings() || {}).attentionSound === true;
+const closeToTrayOn = () => loadSettings().closeToTray === true;
+const attentionOn = () => loadSettings().attention !== false;
+const attentionSoundOn = () => loadSettings().attentionSound === true;
 
 // Значок трея и он же с оранжевой точкой («агент закончил»).
 function makeTrayIcons() {

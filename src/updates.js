@@ -9,7 +9,7 @@ const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc, timedCheck } = require('./util');
 const { envWithBinDir } = require('./system');
-const { runWithLiveLog, LOG_MAX_LINES } = require('./proc-log');
+const { runWithLiveLog, LOG_MAX_LINES, REDRAW_MS } = require('./proc-log');
 const { prefFile, readPref, writePref } = require('./prefs');
 const { compareDebianVer, compareSemVer, tagToPackageVersion, dpkgStatusVersion, notesBetween } = require('./versions');
 const { releaseNotesLang, mdToHtml } = require('./notes');
@@ -20,6 +20,11 @@ const { DSH_NPM_PKG, UPDATE_GITHUB_REPO, fetchLauncherLatest, fetchDshLatest } =
 const pages = require('./pages');
 const settingsWindow = require('./settings-window');
 const { blankResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
+
+const MB = 1024 * 1024;
+const DOWNLOAD_PROGRESS_MS = REDRAW_MS; // тик прогресса скачивания — как тик установки
+const RESTART_AFTER_UPDATE_MS = 1500; // «Обновление установлено» → авто-перезапуск
+const RESTART_SPAWN_GRACE_MS = 200; // ожидание spawn 'error' перед закрытием старого
 
 /* ---------------- проверка обновлений (лаунчер и dsh) ----------------
  * При старте (в onReady, параллельно со всем остальным) проверяем:
@@ -268,17 +273,16 @@ function runUpdateStep(cmd, args, env) {
   updateState.cmdLine = [cmd, ...args].join(' ');
   console.log(`[launcher] шаг обновления: ${updateState.cmdLine}`);
   showUpdatePage();
-  return runWithLiveLog(updateState, cmd, args, { env, redraw: () => {
+  return runWithLiveLog(updateState, cmd, args, {
+    env,
     // mode === 'running' — иначе уже показана другая страница (ошибка/успех),
     // и доп. перерисовка затёрла бы её note (тик мог успеть разрешиться позже).
-    pages.liveLogTick(updateState).then((ok) => {
-      if (!ok && updateState.mode === 'running') showUpdatePage();
-    });
-  } });
+    redraw: pages.liveRedraw(updateState, () => updateState.mode === 'running', showUpdatePage),
+  });
 }
 
 // Скачивание .deb из релиза в userData/updates/. Прогресс — в логе на
-// странице (те же 800 мс, что и установки). sha256 считается по байтам из
+// странице (те же тики, что и установки). sha256 считается по байтам из
 // сети (а не по файлу на диске) и, если GitHub его знает, сверяется с digest.
 async function downloadDeb(url, expectedSha256) {
   updateState.running = true;
@@ -300,24 +304,20 @@ async function downloadDeb(url, expectedSha256) {
     const total = Number(res.headers['content-length'] || 0);
     const name = url.split('/').pop() || 'dsh-launcher.deb';
     const dest = path.join(dir, name);
-    updateState.log.push(total ? `${name} (${(total / 1048576).toFixed(1)} МБ)` : name);
+    updateState.log.push(total ? `${name} (${(total / MB).toFixed(1)} МБ)` : name);
     updateState.logSeq++;
-    pages.liveLogTick(updateState).then((ok) => {
-      if (!ok && updateState.mode === 'running') showUpdatePage();
-    });
+    pages.liveRedraw(updateState, () => updateState.mode === 'running', showUpdatePage)();
     const out = fs.createWriteStream(dest);
     const hash = crypto.createHash('sha256');
     let got = 0;
     updateState.timer = setInterval(() => {
       updateState.log.push(total
-        ? `${(got / 1048576).toFixed(1)} / ${(total / 1048576).toFixed(1)} МБ (${Math.round((100 * got) / total)}%)`
-        : `${(got / 1048576).toFixed(1)} МБ`);
+        ? `${(got / MB).toFixed(1)} / ${(total / MB).toFixed(1)} МБ (${Math.round((100 * got) / total)}%)`
+        : `${(got / MB).toFixed(1)} МБ`);
       if (updateState.log.length > LOG_MAX_LINES) updateState.log.shift();
       updateState.logSeq++;
-      pages.liveLogTick(updateState).then((ok) => {
-        if (!ok && updateState.mode === 'running') showUpdatePage();
-      });
-    }, 800);
+      pages.liveRedraw(updateState, () => updateState.mode === 'running', showUpdatePage)();
+    }, DOWNLOAD_PROGRESS_MS);
     try {
       await new Promise((resolve, reject) => {
         const body = res;
@@ -384,7 +384,7 @@ function restartLauncher() {
     if (!started) return;
     console.log(`[launcher] запущена новая версия (${exe}), закрываю старую`);
     app.quit();
-  }, 200);
+  }, RESTART_SPAWN_GRACE_MS);
 }
 
 // Лаунчер обновлён на диске, а работает ещё старый: apt заменил файлы
@@ -401,7 +401,7 @@ function showUpdateSuccess() {
   showUpdatePage();
   // ~1.5 с, чтобы страница успела показаться; если окно закроют раньше —
   // before-quit очистит таймер.
-  updateState.restartTimer = setTimeout(() => restartLauncher(), 1500);
+  updateState.restartTimer = setTimeout(() => restartLauncher(), RESTART_AFTER_UPDATE_MS);
 }
 
 // Установка .deb от root (через pkexec). pkexec чистит окружение, поэтому
@@ -418,6 +418,50 @@ const ROOT_INSTALL_SH = [
   // --allow-downgrades: «Вернуть предыдущую версию…» ставит версию старше установленной
   'DEBIAN_FRONTEND=noninteractive apt-get install -y --allow-downgrades "$d/update.deb"',
 ].join('; ');
+
+// Общее начало страницы обновления — одинаковый набор полей у обоих.
+function beginUpdate({ kind, version, installed, notes, htmlUrl, logLine }) {
+  console.log(logLine);
+  updateState.kind = kind;
+  updateState.latest = version;
+  updateState.installed = installed;
+  updateState.htmlUrl = htmlUrl;
+  updateState.notes = notes;
+  updateState.mode = 'ask';
+  updateState.debPath = null;
+  updateState.manualCmd = null;
+}
+
+// «Поставить в терминале»: команда для копирования и заметка-ошибка.
+const manual = (manualCmd, note) => {
+  updateState.mode = 'manual';
+  if (manualCmd) updateState.manualCmd = manualCmd;
+  return { note, noteIsError: true };
+};
+// Хендлеру выбора («recheck»/«install») так говорят «стоп, с результатом».
+const done = (value) => ({ return: value });
+
+// Цикл обновления (общий для лаунчера и dsh): вопрос; «никогда» — не
+// спрашивать про эту версию, «позже» — выход; «проверить ещё раз» /
+// «установить» — installStep(choice). { note, noteIsError } — снова вопрос
+// с заметкой; done(...) — выход (значение — результат функции: true —
+// лаунчер обновлён и сейчас перезапустится, dsh поднимет новый экземпляр).
+async function offerUpdateFlow({ kind, version, laterLog, installStep }) {
+  let note = null;
+  let noteIsError = false;
+  let auto = UPDATE_NOW === kind; // «Обновить сейчас» — первый раз без вопроса
+  for (;;) {
+    const choice = auto ? 'install' : await askUpdate(note, noteIsError);
+    auto = false;
+    if (state.stopping) return;
+    if (choice === 'never') { updateDismiss(kind, version); return; }
+    if (choice === 'later') { console.log(laterLog); return; }
+    const r = await installStep(choice);
+    if ('return' in r) return r.return;
+    note = r.note;
+    noteIsError = r.noteIsError;
+  }
+}
 
 // true — лаунчер обновлён и сейчас перезапустится: dsh этим экземпляром не
 // запускаем (его поднимет новый).
@@ -439,90 +483,68 @@ async function offerLauncherUpdate() {
     console.log(`[launcher] обновление до ${latest.version} отклонено — не спрашиваю`);
     return;
   }
-  console.log(`[launcher] новый dsh-launcher: ${latest.version} (установлен ${installed})`);
-  updateState.kind = 'launcher';
-  updateState.latest = latest.version;
-  updateState.installed = installed;
-  updateState.htmlUrl = latest.htmlUrl;
-  updateState.notes = notesBetween(latest.releases, installed, latest.version, 'deb');
-  updateState.mode = 'ask';
-  updateState.debPath = null;
-  updateState.manualCmd = null;
-  let note = null;
-  let noteIsError = false;
-  let auto = UPDATE_NOW === 'launcher'; // «Обновить сейчас» — первый раз без вопроса
-  for (;;) {
-    const choice = auto ? 'install' : await askUpdate(note, noteIsError);
-    auto = false;
-    if (state.stopping) return;
-    if (choice === 'never') {
-      updateDismiss('launcher', latest.version);
-      return;
-    }
-    if (choice === 'later') {
-      console.log('[launcher] обновление лаунчера отложено (не сейчас)');
-      return;
-    }
-    if (choice === 'recheck') {
-      // Пользователь поставил .deb сам, в терминале.
-      const now = await launcherInstalledVersion();
-      if (now && compareDebianVer(latestPkg, now) <= 0) {
-        updateState.installed = now;
-        console.log(`[launcher] dsh-launcher обновлён до ${now} (вручную)`);
-        showUpdateSuccess();
-        return true;
+  beginUpdate({
+    kind: 'launcher',
+    version: latest.version,
+    installed,
+    htmlUrl: latest.htmlUrl,
+    notes: notesBetween(latest.releases, installed, latest.version, 'deb'),
+    logLine: `[launcher] новый dsh-launcher: ${latest.version} (установлен ${installed})`,
+  });
+  return offerUpdateFlow({
+    kind: 'launcher',
+    version: latest.version,
+    laterLog: '[launcher] обновление лаунчера отложено (не сейчас)',
+    installStep: async (choice) => {
+      if (choice === 'recheck') {
+        // Пользователь поставил .deb сам, в терминале.
+        const now = await launcherInstalledVersion();
+        if (now && compareDebianVer(latestPkg, now) <= 0) {
+          updateState.installed = now;
+          console.log(`[launcher] dsh-launcher обновлён до ${now} (вручную)`);
+          showUpdateSuccess();
+          return done(true);
+        }
+        return manual(null,
+          tr(`Установлена версия ${now || 'неизвестно'}. Поставьте пакет и нажмите «Проверить ещё раз».`,
+             `Installed version is ${now || 'unknown'}. Install the package and click "Check again".`));
       }
-      updateState.mode = 'manual';
-      note = tr(`Установлена версия ${now || 'неизвестно'}. Поставьте пакет и нажмите «Проверить ещё раз».`,
-                `Installed version is ${now || 'unknown'}. Install the package and click "Check again".`);
-      noteIsError = true;
-      continue;
-    }
-    // choice === 'install'
-    if (!latest.assetUrl) {
-      updateState.mode = 'manual';
-      note = tr('В этом релизе нет файла .deb — скачайте его со страницы релиза.',
-                'This release has no .deb file — download it from the release page.');
-      noteIsError = true;
-      continue;
-    }
-    const dl = await downloadDeb(latest.assetUrl, latest.assetSha256);
-    if (state.stopping) return;
-    if (!dl.ok) {
-      updateState.mode = 'manual';
-      updateState.manualCmd = `curl -L -o dsh-launcher.deb ${latest.assetUrl} && sudo apt install -y ./dsh-launcher.deb`;
-      note = tr(`Скачивание не удалось: ${dl.err}. Выполните команду выше в терминале и нажмите «Проверить ещё раз».`,
-                `Download failed: ${dl.err}. Run the command above in a terminal and click "Check again".`);
-      noteIsError = true;
-      continue;
-    }
-    const pkexec = findBin('pkexec');
-    if (!pkexec) {
-      updateState.mode = 'manual';
-      updateState.manualCmd = `sudo apt install -y ${dl.path}`;
-      note = tr('pkexec в системе не найден — поставьте скачанный пакет командой выше.',
-                'pkexec was not found on the system — install the downloaded package with the command above.');
-      noteIsError = true;
-      continue;
-    }
-    const code = await runUpdateStep(pkexec, ['/bin/sh', '-c', ROOT_INSTALL_SH, 'sh', dl.path, dl.sha256]);
-    if (state.stopping) return;
-    if (code === 0) {
-      console.log(`[launcher] dsh-launcher ${latest.version} установлен`);
-      // после отката не предлагать сразу вернуть самую новую
-      if (target && newest.version !== target.version) updateDismiss('launcher', newest.version);
-      showUpdateSuccess();
-      return true;
-    }
-    // Отказ от ввода пароля polkit — тоже ненулевой код: команда для
-    // терминала ссылается на уже скачанный пакет.
-    console.error(`[launcher] pkexec apt-get завершился с кодом ${code} — даю команду вручную`);
-    updateState.mode = 'manual';
-    updateState.manualCmd = `sudo apt install -y ${dl.path}`;
-    note = tr(`Установка не удалась (код ${code}). Если вы отменили ввод пароля — попробуйте ещё раз.`,
-              `Installation failed (code ${code}). If you cancelled the password prompt — try again.`);
-    noteIsError = true;
-  }
+      // choice === 'install'
+      if (!latest.assetUrl) {
+        return manual(null,
+          tr('В этом релизе нет файла .deb — скачайте его со страницы релиза.',
+             'This release has no .deb file — download it from the release page.'));
+      }
+      const dl = await downloadDeb(latest.assetUrl, latest.assetSha256);
+      if (state.stopping) return done(undefined);
+      if (!dl.ok) {
+        return manual(`curl -L -o dsh-launcher.deb ${latest.assetUrl} && sudo apt install -y ./dsh-launcher.deb`,
+          tr(`Скачивание не удалось: ${dl.err}. Выполните команду выше в терминале и нажмите «Проверить ещё раз».`,
+             `Download failed: ${dl.err}. Run the command above in a terminal and click "Check again".`));
+      }
+      const pkexec = findBin('pkexec');
+      if (!pkexec) {
+        return manual(`sudo apt install -y ${dl.path}`,
+          tr('pkexec в системе не найден — поставьте скачанный пакет командой выше.',
+             'pkexec was not found on the system — install the downloaded package with the command above.'));
+      }
+      const code = await runUpdateStep(pkexec, ['/bin/sh', '-c', ROOT_INSTALL_SH, 'sh', dl.path, dl.sha256]);
+      if (state.stopping) return done(undefined);
+      if (code === 0) {
+        console.log(`[launcher] dsh-launcher ${latest.version} установлен`);
+        // после отката не предлагать сразу вернуть самую новую
+        if (target && newest.version !== target.version) updateDismiss('launcher', newest.version);
+        showUpdateSuccess();
+        return done(true);
+      }
+      // Отказ от ввода пароля polkit — тоже ненулевой код: команда для
+      // терминала ссылается на уже скачанный пакет.
+      console.error(`[launcher] pkexec apt-get завершился с кодом ${code} — даю команду вручную`);
+      return manual(`sudo apt install -y ${dl.path}`,
+        tr(`Установка не удалась (код ${code}). Если вы отменили ввод пароля — попробуйте ещё раз.`,
+           `Installation failed (code ${code}). If you cancelled the password prompt — try again.`));
+    },
+  });
 }
 
 async function offerDshUpdate() {
@@ -538,106 +560,86 @@ async function offerDshUpdate() {
     console.log(`[launcher] обновление dsh до ${latest.version} отклонено — не спрашиваю`);
     return;
   }
-  console.log(`[launcher] новый ${DSH_NPM_PKG}: ${latest.version} (установлен ${state.dshInstalledVersion})`);
-  updateState.kind = 'dsh';
-  updateState.notes = []; // у npm нет описаний версий — только ссылка на пакет
-  updateState.latest = latest.version;
-  updateState.installed = state.dshInstalledVersion;
-  updateState.htmlUrl = latest.htmlUrl;
-  updateState.mode = 'ask';
-  updateState.debPath = null;
-  updateState.manualCmd = null;
+  beginUpdate({
+    kind: 'dsh',
+    version: latest.version,
+    installed: state.dshInstalledVersion,
+    htmlUrl: latest.htmlUrl,
+    notes: [], // у npm нет описаний версий — только ссылка на пакет
+    logLine: `[launcher] новый ${DSH_NPM_PKG}: ${latest.version} (установлен ${state.dshInstalledVersion})`,
+  });
   const cmdAuto = `npm install -g ${DSH_NPM_PKG}@${latest.version}`;
-  let note = null;
-  let noteIsError = false;
-  let auto = UPDATE_NOW === 'dsh'; // «Обновить сейчас» — первый раз без вопроса
-  for (;;) {
-    const choice = auto ? 'install' : await askUpdate(note, noteIsError);
-    auto = false;
-    if (state.stopping) return;
-    if (choice === 'never') {
-      updateDismiss('dsh', latest.version);
-      return;
-    }
-    if (choice === 'later') {
-      console.log('[launcher] обновление dsh отложено (не сейчас)');
-      return;
-    }
-    if (choice === 'recheck') {
-      const r = await probeDsh(state.dshBin);
-      if (r.ok && compareSemVer(r.version, latest.version) >= 0) {
-        state.dshInstalledVersion = r.version;
-        console.log(`[launcher] dsh обновлён до ${r.version} (в терминале)`);
-        return;
+  // prefix доступен без sudo (canAuto) — sudo с nvm только навредит;
+  // системный prefix — команда с sudo (авто-установка там идёт через pkexec).
+  const manualCmd = (npmInfo) => (npmInfo && npmInfo.canAuto ? cmdAuto : `sudo ${cmdAuto}`);
+  return offerUpdateFlow({
+    kind: 'dsh',
+    version: latest.version,
+    laterLog: '[launcher] обновление dsh отложено (не сейчас)',
+    installStep: async (choice) => {
+      if (choice === 'recheck') {
+        const r = await probeDsh(state.dshBin);
+        if (r.ok && compareSemVer(r.version, latest.version) >= 0) {
+          state.dshInstalledVersion = r.version;
+          console.log(`[launcher] dsh обновлён до ${r.version} (в терминале)`);
+          return done(undefined);
+        }
+        // Команда — по тем же правилам, что и установка: системный prefix
+        // требует sudo, пользовательский (nvm) — нет.
+        const info = await npmInstallInfo();
+        return manual(info.hasNpm && !info.canAuto ? `sudo ${cmdAuto}` : cmdAuto,
+          tr(`Всё ещё версия ${r.ok ? r.version : 'неизвестно'}. Поставьте новую и нажмите «Проверить ещё раз».`,
+             `Still version ${r.ok ? r.version : 'unknown'}. Install the new one and click "Check again".`));
       }
-      // Команда — по тем же правилам, что и установка: системный prefix
-      // требует sudo, пользовательский (nvm) — нет.
-      const info = await npmInstallInfo();
-      updateState.mode = 'manual';
-      updateState.manualCmd = info.hasNpm && !info.canAuto ? `sudo ${cmdAuto}` : cmdAuto;
-      note = tr(`Всё ещё версия ${r.ok ? r.version : 'неизвестно'}. Поставьте новую и нажмите «Проверить ещё раз».`,
-                `Still version ${r.ok ? r.version : 'unknown'}. Install the new one and click "Check again".`);
-      noteIsError = true;
-      continue;
-    }
-    // choice === 'install'
-    const npmInfo = await npmInstallInfo();
-    if (state.stopping) return;
-    if (!npmInfo.hasNpm || (!npmInfo.canAuto && npmInfo.rootMode !== 'pkexec')) {
-      // Глобальный prefix недоступен без sudo (или npm нет) — команда для
-      // терминала. Если prefix системный (root), но pkexec нет — тоже сюда.
-      updateState.mode = 'manual';
-      updateState.manualCmd = npmInfo.hasNpm ? `sudo ${cmdAuto}` : cmdAuto;
-      if (npmInfo.nodeOld) {
-        note = tr(`Node.js ${npmInfo.nodeVersion} слишком стар для dsh (нужен ${MIN_NODE_MAJOR}+). Сначала обновите Node.js, затем поставьте dsh командой выше.`,
-                  `Node.js ${npmInfo.nodeVersion} is too old for dsh (${MIN_NODE_MAJOR}+ required). Upgrade Node.js first, then install dsh with the command above.`);
-      } else if (!npmInfo.hasNpm) {
-        note = tr('npm не найден — сначала установите Node.js (22+) с npm.',
-                  'npm not found — install Node.js (22+) with npm first.');
-      } else {
-        note = tr('Эта команда требует sudo — выполните её в терминале и нажмите «Проверить ещё раз».',
-                  'This command needs sudo — run it in a terminal and click "Check again".');
+      // choice === 'install'
+      const npmInfo = await npmInstallInfo();
+      if (state.stopping) return done(undefined);
+      if (!npmInfo.hasNpm || (!npmInfo.canAuto && npmInfo.rootMode !== 'pkexec')) {
+        // Глобальный prefix недоступен без sudo (или npm нет) — команда для
+        // терминала. Если prefix системный (root), но pkexec нет — тоже сюда.
+        let note;
+        if (npmInfo.nodeOld) {
+          note = tr(`Node.js ${npmInfo.nodeVersion} слишком стар для dsh (нужен ${MIN_NODE_MAJOR}+). Сначала обновите Node.js, затем поставьте dsh командой выше.`,
+                    `Node.js ${npmInfo.nodeVersion} is too old for dsh (${MIN_NODE_MAJOR}+ required). Upgrade Node.js first, then install dsh with the command above.`);
+        } else if (!npmInfo.hasNpm) {
+          note = tr('npm не найден — сначала установите Node.js (22+) с npm.',
+                    'npm not found — install Node.js (22+) with npm first.');
+        } else {
+          note = tr('Эта команда требует sudo — выполните её в терминале и нажмите «Проверить ещё раз».',
+                    'This command needs sudo — run it in a terminal and click "Check again".');
+        }
+        return manual(npmInfo.hasNpm ? `sudo ${cmdAuto}` : cmdAuto, note);
       }
-      noteIsError = true;
-      continue;
-    }
-    const code = npmInfo.canAuto
-      ? await runUpdateStep(npmInfo.npm, ['install', '-g', `${DSH_NPM_PKG}@${latest.version}`], envWithBinDir(npmInfo.npm))
-      // Системный prefix: npm под pkexec — polkit спросит пароль системным
-      // диалогом, как при обновлении лаунчера. Свой пользовательский prefix
-      // (nvm, ~/.npm-global) так не трогаем — там root оставил бы файлы,
-      // которые пользователь потом не обновит (rootInstallMode).
-      : await runUpdateStep(npmInfo.pkexec, pkexecNpmArgs(npmInfo.npm, ['install', '-g', `${DSH_NPM_PKG}@${latest.version}`]));
-    if (state.stopping) return;
-    if (code === 0) {
-      const r = await probeDsh(state.dshBin);
-      if (r.ok) state.dshInstalledVersion = r.version;
-      if (r.ok && compareSemVer(r.version, latest.version) >= 0) {
-        console.log(`[launcher] ${DSH_NPM_PKG} обновлён → ${r.version}; dsh стартует с новой версией`);
-        return;
+      const code = npmInfo.canAuto
+        ? await runUpdateStep(npmInfo.npm, ['install', '-g', `${DSH_NPM_PKG}@${latest.version}`], envWithBinDir(npmInfo.npm))
+        // Системный prefix: npm под pkexec — polkit спросит пароль системным
+        // диалогом, как при обновлении лаунчера. Свой пользовательский prefix
+        // (nvm, ~/.npm-global) так не трогаем — там root оставил бы файлы,
+        // которые пользователь потом не обновит (rootInstallMode).
+        : await runUpdateStep(npmInfo.pkexec, pkexecNpmArgs(npmInfo.npm, ['install', '-g', `${DSH_NPM_PKG}@${latest.version}`]));
+      if (state.stopping) return done(undefined);
+      if (code === 0) {
+        const r = await probeDsh(state.dshBin);
+        if (r.ok) state.dshInstalledVersion = r.version;
+        if (r.ok && compareSemVer(r.version, latest.version) >= 0) {
+          console.log(`[launcher] ${DSH_NPM_PKG} обновлён → ${r.version}; dsh стартует с новой версией`);
+          return done(undefined);
+        }
+        // npm отработал, но запускаемый dsh — прежний: npm ставит в другой
+        // prefix (например, dsh из nvm, а npm — системный).
+        console.error(`[launcher] npm install прошёл, но ${state.dshBin} — ${r.ok ? r.version : 'не запускается'} (prefix npm: ${npmInfo.prefix})`);
+        return manual(manualCmd(npmInfo),
+          tr(`npm поставил пакет в ${npmInfo.prefix || 'свой prefix'}, но лаунчер запускает ${state.dshBin} (версия ${r.ok ? r.version : 'неизвестна'}). Обновите dsh тем npm, которым он был установлен, и нажмите «Проверить ещё раз».`,
+             `npm installed the package into ${npmInfo.prefix || 'its prefix'}, but the launcher runs ${state.dshBin} (version ${r.ok ? r.version : 'unknown'}). Update dsh with the npm it was installed with and click "Check again".`));
       }
-      // npm отработал, но запускаемый dsh — прежний: npm ставит в другой
-      // prefix (например, dsh из nvm, а npm — системный).
-      console.error(`[launcher] npm install прошёл, но ${state.dshBin} — ${r.ok ? r.version : 'не запускается'} (prefix npm: ${npmInfo.prefix})`);
-      updateState.mode = 'manual';
-      updateState.manualCmd = npmInfo.canAuto ? cmdAuto : `sudo ${cmdAuto}`;
-      note = tr(`npm поставил пакет в ${npmInfo.prefix || 'свой prefix'}, но лаунчер запускает ${state.dshBin} (версия ${r.ok ? r.version : 'неизвестна'}). Обновите dsh тем npm, которым он был установлен, и нажмите «Проверить ещё раз».`,
-                `npm installed the package into ${npmInfo.prefix || 'its prefix'}, but the launcher runs ${state.dshBin} (version ${r.ok ? r.version : 'unknown'}). Update dsh with the npm it was installed with and click "Check again".`);
-      noteIsError = true;
-      continue;
-    }
-    console.error(`[launcher] обновление dsh не удалось (код ${code})`);
-    updateState.mode = 'manual';
-    // prefix доступен без sudo (canAuto) — sudo с nvm только навредит;
-    // системный prefix ставим через pkexec — та же команда, но без sudo.
-    updateState.manualCmd = npmInfo.canAuto ? cmdAuto : `sudo ${cmdAuto}`;
-    note = code === 126 || code === 127
-      ? tr('Ввод пароля отменён. Попробуйте ещё раз или выполните команду выше в терминале.',
-           'The password prompt was cancelled. Try again or run the command above in a terminal.')
-      : tr(`Установка не удалась (код ${code}). Повторите, либо выполните команду выше в терминале и нажмите «Проверить ещё раз».`,
-           `Installation failed (code ${code}). Retry, or run the command above in a terminal and click "Check again".`);
-    noteIsError = true;
-  }
+      console.error(`[launcher] обновление dsh не удалось (код ${code})`);
+      return manual(manualCmd(npmInfo), code === 126 || code === 127
+        ? tr('Ввод пароля отменён. Попробуйте ещё раз или выполните команду выше в терминале.',
+             'The password prompt was cancelled. Try again or run the command above in a terminal.')
+        : tr(`Установка не удалась (код ${code}). Повторите, либо выполните команду выше в терминале и нажмите «Проверить ещё раз».`,
+             `Installation failed (code ${code}). Retry, or run the command above in a terminal and click "Check again".`));
+    },
+  });
 }
 
 Object.assign(module.exports, { DSH_NPM_PKG, UPDATE_GITHUB_REPO, UPDATE_CHECK_TIMEOUT, NO_UPDATE_CHECK, launcherInstalledVersion, fetchLauncherLatest, notesBlockHtml, fetchDshLatest, startUpdateChecks, updateState, updatePrefFile, updatePrefs, onUpdateChoice, restartLauncher, offerLauncherUpdate, offerDshUpdate }); // дополняем, а не заменяем: модули подключают друг друга по кругу

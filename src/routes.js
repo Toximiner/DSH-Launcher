@@ -12,12 +12,13 @@ const { esc } = require('./util');
 const { PORT, PLAIN_URL, DSH_ARGS, ROUTE_KEY } = require('./env');
 const { sleep, portOpen } = require('./port');
 const { launcherRoute, stripRouteKey } = require('./util');
-const { loadInWin, showPastePage, showPage, showStatus, liveLogTick, onLangSwitch } = require('./pages');
+const { loadInWin, showPastePage, showPage, showStatus, liveRedraw, onLangSwitch } = require('./pages');
 const { envWithBinDir, listenerAuthUrl } = require('./system');
 const { blankResponse, noContentResponse } = require('./respond'); // чистый модуль — прямой require, без реестра
 const { pushInputHistory } = require('./input-history'); // история введённого (↑/↓ в поле dsh); тексты в журнал не пишутся
 const { runWithLiveLog } = require('./proc-log');
 const { dshInstallCheck, pkexecNpmArgs } = require('./dsh-install');
+const { DSH_NPM_PKG } = require('./updates-github');
 const { retryButton } = require('./dsh-process');
 const { launchDsh } = require('./launch');
 const { installState, refreshInstallState, showInstallPage } = require('./install-page');
@@ -31,6 +32,8 @@ const { showLogDialog } = require('./dsh-log');
 const { onSettingsSet, onSettingsPick, onSettingsResetUpdates, relaunchLauncher, SETTINGS_SECTIONS, showSettingsDialog } = require('./settings-window');
 const { onDialogClose, onDialogCopy, showAboutDialog, showUpdateCheckDialog } = require('./dialogs');
 const { showRollbackDialog, rollbackTo } = require('./rollback');
+
+const PLAIN_PROBE_TIMEOUT_MS = 1500; // сколько ждать ответа HTTP dsh (см. plainUrlResponds)
 
 async function plainUrlIsAuthed() {
   try {
@@ -47,7 +50,7 @@ async function plainUrlIsAuthed() {
 // Таймаут: сокет открыт, но сервер ещё не отвечает (бут) — считаем «нет».
 async function plainUrlResponds() {
   try {
-    const res = await electronNet.fetch(PLAIN_URL, { redirect: 'manual', signal: AbortSignal.timeout(1500) });
+    const res = await electronNet.fetch(PLAIN_URL, { redirect: 'manual', signal: AbortSignal.timeout(PLAIN_PROBE_TIMEOUT_MS) });
     return res.status > 0;
   } catch {
     return false;
@@ -187,17 +190,16 @@ async function onInstallRun() {
     console.log(`[launcher] установка dsh из окна: ${npmInfo.command}`);
     installState.running = true; // страница «выполняется» — сразу, до первой строки
     showInstallPage();
-    const args = ['install', '-g', '@deepseek-ai/dsh'];
+    const args = ['install', '-g', DSH_NPM_PKG];
     const code = await runWithLiveLog(installState,
       viaPkexec ? npmInfo.pkexec : npmInfo.npm,
       viaPkexec ? pkexecNpmArgs(npmInfo.npm, args) : args,
-      { env: viaPkexec ? undefined : envWithBinDir(npmInfo.npm), redraw: () => {
+      {
+        env: viaPkexec ? undefined : envWithBinDir(npmInfo.npm),
         // running — иначе установка закончилась и страница уже переключилась
         // (успех/ошибка), и доп. перерисовка затёрла бы её note.
-        liveLogTick(installState).then((ok) => {
-          if (!ok && installState.running) showInstallPage();
-        });
-      } });
+        redraw: liveRedraw(installState, () => installState.running, showInstallPage),
+      });
     if (code === 0) {
       console.log('[launcher] dsh установлен — продолжаю запуск');
       // Если prefix не /usr, бинарник лёг не в /usr/bin — находим и запоминаем фактический путь.

@@ -161,4 +161,4 @@ function pickCrashDumps(files, now, maxAgeDays = 30, max = 3, maxBytes = 25 * 10
 }
 /* ===== end pickCrashDumps ===== */
 
-module.exports = { pickCrashDumps, crashRestart, agentEvent, WIN_DEFAULT, WIN_MIN, contextMenuItems, keyAction, isAltKey, windowSize, gpuStatus, reportFileName, reportInfoText };
+module.exports = { pickCrashDumps, crashRestart, agentEvent, WIN_MIN, contextMenuItems, keyAction, isAltKey, windowSize, gpuStatus, reportFileName, reportInfoText };

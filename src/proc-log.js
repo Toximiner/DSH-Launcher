@@ -49,4 +49,4 @@ async function runWithLiveLog(st, cmd, args, { env, cwd, redraw } = {}) {
   }
 }
 
-module.exports = { runWithLiveLog, LOG_MAX_LINES };
+module.exports = { runWithLiveLog, LOG_MAX_LINES, REDRAW_MS };
