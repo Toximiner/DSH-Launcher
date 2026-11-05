@@ -190,7 +190,9 @@ async function onInstallRun() {
     console.log(`[launcher] установка dsh из окна: ${npmInfo.command}`);
     installState.running = true; // страница «выполняется» — сразу, до первой строки
     showInstallPage();
-    const args = ['install', '-g', DSH_NPM_PKG];
+    // @latest — явно: bare-спецификатор npm 10.x (Node 22) при latest-пререлизе
+    // резолвится как * и падает ETARGET (см. INSTALL_CMD в dsh-install.js).
+    const args = ['install', '-g', `${DSH_NPM_PKG}@latest`];
     const code = await runWithLiveLog(installState,
       viaPkexec ? npmInfo.pkexec : npmInfo.npm,
       viaPkexec ? pkexecNpmArgs(npmInfo.npm, args) : args,

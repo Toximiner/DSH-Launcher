@@ -62,6 +62,23 @@ function clearRunMarker() {
   try { fs.unlinkSync(runMarkerFile()); } catch { /* noop */ }
 }
 
+/* ===== rollbackSuggested (чистая функция, тест test/diagnostics.js) =====
+   Предлагать ли откат к предыдущей версии: прошлый аварийный запуск —
+   обновлённая версия (update.to) и стартовала в пределах ROLLBACK_WINDOW_MS
+   после обновления (update.at). m — метка running.json (version, startedAt).
+   Всё, чего не хватает (файлов нет, битые даты) — «не предлагаем». */
+const ROLLBACK_WINDOW_MS = 30 * 60 * 1000; // окно «сбой связан с обновлением»
+function rollbackSuggested(m, update, now) {
+  if (!m || !update) return false;
+  if (String(m.version || '') !== String(update.to || '')) return false;
+  const startedAt = Date.parse(m.startedAt);
+  const at = Date.parse(update.at);
+  if (Number.isNaN(startedAt) || Number.isNaN(at)) return false;
+  const dt = now - at;
+  return dt >= 0 && dt <= ROLLBACK_WINDOW_MS && startedAt >= at;
+}
+/* ===== end rollbackSuggested ===== */
+
 function maybeShowCrashNotice() {
   if (!previousCrash) return;
   const m = previousCrash;
@@ -69,10 +86,14 @@ function maybeShowCrashNotice() {
   console.log('[launcher] уведомление: прошлый запуск завершился аварийно');
   let when = '';
   try { when = new Date(m.startedAt).toLocaleString(i18n.getLang() === 'ru' ? 'ru-RU' : 'en-US'); } catch { /* noop */ }
+  const update = updates.readLastUpdate();
+  const suggestRollback = rollbackSuggested(m, update, Date.now());
+  if (suggestRollback) console.log(`[launcher] прошлый запуск — версия ${m.version}, установленная ${update.at} — предлагаю откат`);
   updatesLive.showToast(updatesLive.toastPageUrl({
     title: tr('В прошлый раз лаунчер завершился аварийно', 'The launcher closed unexpectedly last time'),
     sub: when ? tr(`запуск от ${when}`, `started ${when}`) : '',
     buttons: [
+      ...(suggestRollback ? [{ label: tr('Вернуть предыдущую версию…', 'Roll back to the previous version…'), href: 'dshlauncher://toast/rollback/' }] : []),
       { label: tr('Журнал…', 'Log…'), href: 'dshlauncher://toast/crash-log/' },
       { label: tr('Сохранить отчёт…', 'Save report…'), href: 'dshlauncher://toast/report/' },
     ],
@@ -199,4 +220,4 @@ function showReportDialog(error) {
        </div>`));
 }
 
-Object.assign(module.exports, { checkPreviousRun, clearRunMarker, maybeShowCrashNotice, saveReport }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { checkPreviousRun, clearRunMarker, maybeShowCrashNotice, saveReport, rollbackSuggested }); // дополняем, а не заменяем: модули подключают друг друга по кругу

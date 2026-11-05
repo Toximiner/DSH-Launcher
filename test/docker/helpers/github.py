@@ -19,6 +19,10 @@ from .env import GITHUB_API, LATEST, LATEST_DEB, ROLLBACK, T
 
 DEBS = '/opt/github'
 RELEASES = '/tmp/github-releases.json'
+# Релизы dsh (deepseek-ai/deepseek-harness): отдельный файл подставного GitHub
+# (4-й аргумент fakes/github.py). Создаёт сценарий, которому нужны описания
+# dsh («Что нового»); без файла dsh-запросы идут в основной список.
+DSH_RELEASES = '/tmp/github-dsh-releases.json'
 GITHUB_LOG = '/tmp/github.log'
 SERVER = f'{T}/fakes/github.py'
 PORT = int(GITHUB_API.rsplit(':', 1)[1])
@@ -55,6 +59,13 @@ def write_releases(lst):
     with open(RELEASES, 'w') as f:
         json.dump(lst, f)
     os.chmod(RELEASES, 0o644)
+
+
+def write_dsh_releases(lst):
+    """Список релизов dsh (deepseek-ai/deepseek-harness) — теги dsh-v<версия>."""
+    with open(DSH_RELEASES, 'w') as f:
+        json.dump(lst, f)
+    os.chmod(DSH_RELEASES, 0o644)
 
 
 def github_log():

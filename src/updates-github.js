@@ -18,10 +18,13 @@ const UPDATE_GITHUB_REPO = 'Toximiner/DSH-Launcher';
 const RELEASES_MAX_AGE_MS = 60 * 60 * 1000;
 const releasesCacheFile = () => path.join(app.getPath('userData'), 'releases-cache.json');
 
-// Список релизов GitHub с учётом кэша (см. releasesCacheMode).
-async function githubReleases({ force = false } = {}) {
+// Список релизов GitHub (репозиторий repo, кэш в cacheFile) с учётом кэша
+// (см. releasesCacheMode). 100 — максимум GitHub API: «Вернуть предыдущую
+// версию…» и «Что нового» видят и старые релизы (с 20 они выпадали из списка);
+// ответ кэшируется по ETag.
+async function githubReleasesList(repo, cacheFile, { force = false } = {}) {
   let entry = null;
-  try { entry = JSON.parse(fs.readFileSync(releasesCacheFile(), 'utf8')); } catch { /* кэша нет */ }
+  try { entry = JSON.parse(fs.readFileSync(cacheFile(), 'utf8')); } catch { /* кэша нет */ }
   const mode = releasesCacheMode(entry, Date.now(), RELEASES_MAX_AGE_MS, force);
   if (mode === 'cache') return entry.list;
   const headers = { 'User-Agent': 'dsh-launcher', 'Accept': 'application/vnd.github+json' };
@@ -30,9 +33,7 @@ async function githubReleases({ force = false } = {}) {
   let res;
   let body = '';
   try {
-  // 100 — максимум GitHub API: «Вернуть предыдущую версию…» и «Что нового» видят
-  // и старые релизы (с 20 они выпадали из списка); ответ кэшируется по ETag
-    res = await httpGet(`${GITHUB_API}/repos/${UPDATE_GITHUB_REPO}/releases?per_page=100`, { headers });
+    res = await httpGet(`${GITHUB_API}/repos/${repo}/releases?per_page=100`, { headers });
     res.setEncoding('utf8');
     for await (const c of res) body += c;
     if (res.statusCode !== 200 && !(res.statusCode === 304 && entry)) throw new Error(`GitHub API: HTTP ${res.statusCode}`);
@@ -53,10 +54,15 @@ async function githubReleases({ force = false } = {}) {
     entry = { etag: res.headers.etag || null, list };
   }
   try {
-    fs.mkdirSync(path.dirname(releasesCacheFile()), { recursive: true });
-    fs.writeFileSync(releasesCacheFile(), JSON.stringify({ ...entry, fetchedAt: Date.now() }));
+    fs.mkdirSync(path.dirname(cacheFile()), { recursive: true });
+    fs.writeFileSync(cacheFile(), JSON.stringify({ ...entry, fetchedAt: Date.now() }));
   } catch { /* кэш — не обязателен */ }
   return list;
+}
+
+// Список релизов лаунчера (см. githubReleasesList).
+async function githubReleases({ force = false } = {}) {
+  return githubReleasesList(UPDATE_GITHUB_REPO, releasesCacheFile, { force });
 }
 
 // Список релизов (одним запросом): последний — наибольшая версия среди
@@ -90,14 +96,33 @@ function fakeLatest(name) {
   try { return fs.readFileSync(v, 'utf8').trim() || null; } catch { return null; }
 }
 
+// Релизы dsh — из GitHub-репозитория проекта (deepseek-harness): npm-реестр
+// описаний версий не отдаёт, а в релизах GitHub они есть (тег dsh-v<версия>).
+// Свой ETag-кэш — отдельный от релизов лаунчера: репозиторий другой.
+const DSH_GITHUB_REPO = 'deepseek-ai/deepseek-harness';
+const dshReleasesCacheFile = () => path.join(app.getPath('userData'), 'dsh-releases-cache.json');
+
+async function fetchDshReleases({ force = false } = {}) {
+  return githubReleasesList(DSH_GITHUB_REPO, dshReleasesCacheFile, { force });
+}
+
 // Последняя версия dsh — из npm-реестра (не с локального npm: без установки и
-// без доступа к глобальному prefix).
+// без доступа к глобальному prefix). Описания релизов («Что нового») — из
+// GitHub; их сбой не ломает предложение обновления — описания просто пустые.
 async function fetchDshLatest() {
   const j = await httpJson(`https://registry.npmjs.org/${DSH_NPM_PKG}/latest`,
     { 'User-Agent': 'dsh-launcher' }, 'npm registry');
   const version = String(j.version || '');
   if (!version) throw new Error('нет версии в ответе npm');
-  const meta = { version, htmlUrl: `https://www.npmjs.com/package/${DSH_NPM_PKG}` };
+  const meta = { version, htmlUrl: `https://www.npmjs.com/package/${DSH_NPM_PKG}`, releases: [] };
+  try {
+    const list = await fetchDshReleases();
+    meta.releases = (Array.isArray(list) ? list : [])
+      .filter((r) => r && !r.draft && String(r.tag_name || '').startsWith('dsh-v'))
+      .map((r) => ({ version: String(r.tag_name).replace(/^dsh-v/, ''), body: String(r.body || '') }));
+  } catch (e) {
+    console.log(`[launcher] описания релизов dsh: ${e.message} — без «Что нового»`);
+  }
   const fake = fakeLatest('DSH_LAUNCHER_FAKE_DSH_LATEST'); // разработка/тесты
   if (fake) meta.version = fake;
   return meta;

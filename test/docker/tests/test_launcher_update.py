@@ -44,6 +44,9 @@ def test_launcher_update(start, prompt):
     assert launcher.wait_log(f'dsh-launcher {LATEST} установлен', 400), 'скачано и установлено через pkexec'
     assert 'совпадает с релизом' in launcher.log(), 'sha256 совпал с digest релиза'
     assert dpkg_version() == LATEST_PKG, f'dpkg: установлен {LATEST_PKG}'
+    # метка об обновлении (для «Вернуть предыдущую версию…» при сбое новой версии)
+    upd = json.load(open(f'{CONF}/last-update.json'))
+    assert upd['from'] == INSTALLED and upd['to'] == LATEST_PKG and upd.get('at'), upd
     _check_new_instance(launcher)
     assert not [f for f in os.listdir(UPD) if f.endswith('.deb')], 'скачанный .deb удалён'
 

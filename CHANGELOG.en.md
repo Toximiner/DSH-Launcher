@@ -9,6 +9,16 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+### Added
+
+- dsh status in the tray icon tooltip: “dsh is running”, “dsh is not running”, or “dsh has stopped (auto-restart halted)”.
+- Roll-back offer: if a freshly updated launcher version crashed, the crash toast gains a “Roll back to the previous version…” button that opens the roll-back dialog.
+- “What’s new” in the dsh update prompt: dsh release notes are fetched from GitHub (deepseek-harness); the part in the UI language is shown.
+
+### Fixed
+
+- “Install” dsh button: the command now installs `@latest` instead of bare `npm install -g @deepseek-ai/dsh` — npm 10.x (Node 22) failed with ETARGET when `latest` is a prerelease.
+
 ## [1.17.4] — 2026-11-05
 
 ### Changed

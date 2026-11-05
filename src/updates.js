@@ -12,7 +12,7 @@ const { envWithBinDir } = require('./system');
 const { runWithLiveLog, LOG_MAX_LINES, REDRAW_MS } = require('./proc-log');
 const { prefFile, readPref, writePref } = require('./prefs');
 const { compareDebianVer, compareSemVer, tagToPackageVersion, dpkgStatusVersion, notesBetween } = require('./versions');
-const { releaseNotesLang, mdToHtml } = require('./notes');
+const { releaseNotesLang, mdToHtml, dshNotesPart } = require('./notes');
 const { GITHUB_TOKEN, UPDATE_NOW, INSTALL_VERSION, CONFIG } = require('./env');
 const { probeDsh, findBin, MIN_NODE_MAJOR, npmInstallInfo, pkexecNpmArgs } = require('./dsh-install');
 const { httpGet } = require('./updates-http');
@@ -223,7 +223,7 @@ function showUpdatePage(note, noteIsError = false) {
       <p>${tr(
         `Доступна версия <code>${esc(updateState.latest)}</code> (установлена: <code>${esc(updateState.installed)}</code>). Обновиться?`,
         `Version <code>${esc(updateState.latest)}</code> is available (installed: <code>${esc(updateState.installed)}</code>). Update?`)}</p>
-      ${kind === 'launcher' ? notesBlockHtml(updateState.notes) : ''}
+      ${notesBlockHtml(updateState.notes)}
       <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap">
         <button onclick="location.href='dshlauncher://update/install/'">${tr('Обновить', 'Update')}</button>
         <button onclick="location.href='dshlauncher://update/later/'">${tr('Не сейчас', 'Not now')}</button>
@@ -387,12 +387,23 @@ function restartLauncher() {
   }, RESTART_SPAWN_GRACE_MS);
 }
 
+// Когда и куда лаунчер обновили (last-update.json): следующий запуск, если
+// обновлённая версия падает, по нему понимает «сбой связан с обновлением»
+// и предлагает откат (diagnostics.rollbackSuggested).
+const readLastUpdate = () => {
+  const u = readPref('last-update.json');
+  return u && typeof u === 'object' ? u : null;
+};
+const writeLastUpdate = () =>
+  writePref('last-update.json', { from: updateState.installed, to: tagToPackageVersion(updateState.latest), at: new Date().toISOString() });
+
 // Лаунчер обновлён на диске, а работает ещё старый: apt заменил файлы
 // /opt/dsh-launcher под нами. Уже открытые файлы живут (старые inode), но
 // новые процессы Chromium (GPU, утилиты) запустились бы из нового бинарника —
 // поэтому перезапускаемся быстро, а при падении любого процесса — сразу.
 function showUpdateSuccess() {
   state.launcherUpdatedOnDisk = true;
+  writeLastUpdate();
   if (updateState.debPath) {
     try { fs.unlinkSync(updateState.debPath); } catch { /* noop */ }
     updateState.debPath = null;
@@ -565,7 +576,10 @@ async function offerDshUpdate() {
     version: latest.version,
     installed: state.dshInstalledVersion,
     htmlUrl: latest.htmlUrl,
-    notes: [], // у npm нет описаний версий — только ссылка на пакет
+    notes: (latest.releases || []).length
+      ? notesBetween(latest.releases, state.dshInstalledVersion, latest.version, 'semver')
+          .map((r) => ({ version: r.version, body: dshNotesPart(r.body) }))
+      : [], // описания релизов dsh — из GitHub (fetchDshLatest); их нет — блок не покажем
     logLine: `[launcher] новый ${DSH_NPM_PKG}: ${latest.version} (установлен ${state.dshInstalledVersion})`,
   });
   const cmdAuto = `npm install -g ${DSH_NPM_PKG}@${latest.version}`;
@@ -642,4 +656,4 @@ async function offerDshUpdate() {
   });
 }
 
-Object.assign(module.exports, { DSH_NPM_PKG, UPDATE_GITHUB_REPO, UPDATE_CHECK_TIMEOUT, NO_UPDATE_CHECK, launcherInstalledVersion, fetchLauncherLatest, notesBlockHtml, fetchDshLatest, startUpdateChecks, updateState, updatePrefFile, updatePrefs, onUpdateChoice, restartLauncher, offerLauncherUpdate, offerDshUpdate }); // дополняем, а не заменяем: модули подключают друг друга по кругу
+Object.assign(module.exports, { DSH_NPM_PKG, UPDATE_GITHUB_REPO, UPDATE_CHECK_TIMEOUT, NO_UPDATE_CHECK, launcherInstalledVersion, fetchLauncherLatest, notesBlockHtml, fetchDshLatest, startUpdateChecks, updateState, updatePrefFile, updatePrefs, onUpdateChoice, restartLauncher, offerLauncherUpdate, offerDshUpdate, readLastUpdate }); // дополняем, а не заменяем: модули подключают друг друга по кругу

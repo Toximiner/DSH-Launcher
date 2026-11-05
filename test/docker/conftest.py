@@ -18,7 +18,7 @@ import pytest
 
 from helpers.cdp import Driver
 from helpers.env import FAKEDSH_LOG, STATE, V8_COVERAGE
-from helpers.github import DEBS, PORT, RELEASES, SERVER, github_log, releases, write_releases
+from helpers.github import DSH_RELEASES, DEBS, PORT, RELEASES, SERVER, github_log, releases, write_releases
 from helpers.launcher import Launcher, launcher_log, launcher_pids
 from helpers.procs import as_tester, fakedsh_events, pgrep, sh, wait_for
 from helpers.windows import Gui, UpdatePrompt
@@ -74,7 +74,7 @@ def container_env(request):
         os.remove(FAKEDSH_LOG)
     # Подставной GitHub: список релизов и .deb (сценарий может подменить список).
     write_releases(releases())
-    subprocess.Popen(f'runuser -u tester -- python3 {SERVER} {PORT} {RELEASES} {DEBS} >/tmp/github.out 2>&1', shell=True)
+    subprocess.Popen(f'runuser -u tester -- python3 {SERVER} {PORT} {RELEASES} {DEBS} {DSH_RELEASES} >/tmp/github.out 2>&1', shell=True)
     assert wait_for(lambda: 'listening' in github_log(), 5, 0.1), 'подставной GitHub не запустился'
     as_tester(f'mkdir -p {V8_COVERAGE}')
     yield
@@ -145,6 +145,17 @@ def wayland():
 def drv():
     """Драйвер окон (CDP)."""
     return Driver()
+
+
+@pytest.fixture(autouse=True)
+def _dsh_releases():
+    """Релизы dsh (описания «Что нового») — только в сценарии, который их
+    создал: после теста файл убираем, остальные сценарии не видят."""
+    yield
+    try:
+        os.remove(DSH_RELEASES)
+    except OSError:
+        pass
 
 
 @pytest.fixture

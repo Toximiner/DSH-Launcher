@@ -48,4 +48,21 @@ function mdToHtml(md) {
   return out.join('');
 }
 
-module.exports = { releaseNotesLang, mdToHtml };
+/* dsh-релизы (GitHub, deepseek-harness) двуязычные: [中文] | [English], части
+   отделяет заголовок <h3 id="en-…">…</h3>. Русской части нет — показываем
+   EN-часть (с её заголовком, превращённым в ## — mdToHtml знает только
+   markdown, HTML экранируется). Якоря нет — описание целиком. Строка
+   «Full Changelog: …» отбрасывается. */
+function dshNotesPart(body) {
+  const lines = String(body || '').replace(/\r\n/g, '\n').split('\n');
+  const at = lines.findIndex((l) => /^<h3 id="en-[^"]*"/.test(l));
+  return (at === -1 ? lines : lines.slice(at))
+    .map((l) => l.replace(/^<h3 id="[^"]*">([^<]*)<\/h3>\s*$/, '## $1'))
+    .join('\n')
+    .replace(/^Full Changelog:.*$/gm, '')
+    .replace(/^\*\*Full Changelog\*\*.*$/gm, '')
+    .replace(/^---\s*$/gm, '')
+    .trim();
+}
+
+module.exports = { releaseNotesLang, mdToHtml, dshNotesPart };

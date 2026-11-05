@@ -1,11 +1,13 @@
 #!/usr/bin/python3
 """Подставной GitHub для сценариев обновления и отката лаунчера: лаунчер
 ходит сюда вместо api.github.com (DSH_LAUNCHER_GITHUB_API).
-  github.py <порт> <файл со списком релизов> <каталог с .deb>
+  github.py <порт> <файл со списком релизов> <каталог с .deb> [файл релизов dsh]
 
   GET /repos/<владелец>/<репо>/releases?per_page=N&page=P — список релизов из
       файла (читается при каждом запросе — сценарий может его подменить);
       по умолчанию 30 на страницу, как у GitHub; ETag / If-None-Match → 304;
+      deepseek-ai/deepseek-harness (релизы dsh) — из 4-го файла, если он
+      есть (сценарий может создать), иначе из основного;
   GET /download/<файл> — 302 на /files/<файл> (ассеты GitHub тоже отдаются
       через перенаправление);
   GET /files/<файл> — .deb из каталога.
@@ -21,6 +23,8 @@ import urllib.parse
 
 LOG = '/tmp/github.log'
 PORT, RELEASES, DEBS = int(sys.argv[1]), sys.argv[2], sys.argv[3]
+DSH_RELEASES = sys.argv[4] if len(sys.argv) > 4 else None  # релизы dsh (отдельный репозиторий)
+DSH_REPO = ('deepseek-ai', 'deepseek-harness')
 
 
 def log(msg):
@@ -43,7 +47,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         q = urllib.parse.parse_qs(u.query)
         parts = u.path.strip('/').split('/')
         if len(parts) == 4 and parts[0] == 'repos' and parts[3] == 'releases':
-            with open(RELEASES) as f:
+            src = RELEASES
+            if (parts[1], parts[2]) == DSH_REPO and DSH_RELEASES and os.path.isfile(DSH_RELEASES):
+                src = DSH_RELEASES
+            with open(src) as f:
                 releases = json.load(f)
             per_page = min(int(q.get('per_page', ['30'])[0]), 100)
             page = int(q.get('page', ['1'])[0])

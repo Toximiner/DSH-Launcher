@@ -137,8 +137,8 @@ assert.strictEqual(proxyUrlFromRule('proxy p:1'), 'http://p:1', 'регистр 
     .map((f) => require('fs').readFileSync(require('path').join(srcDir, f), 'utf8'))].join('\n');
   const uses = allSrc.match(/Bearer \$\{GITHUB_TOKEN\}/g) || [];
   assert.strictEqual(uses.length, 1, 'токен подставляется в одном месте');
-  const fn = allSrc.slice(allSrc.indexOf('async function githubReleases('), allSrc.indexOf('async function fetchLauncherLatest('));
-  assert.ok(fn.includes('Bearer ${GITHUB_TOKEN}'), '— и это запрос списка релизов (api.github.com)');
+  const fn = allSrc.slice(allSrc.indexOf('async function githubReleasesList('), allSrc.indexOf('async function githubReleases('));
+  assert.ok(fn.includes('Bearer ${GITHUB_TOKEN}'), '— и это заголовок общих запросов к GitHub (api.github.com)');
   assert.ok(!/console\.(log|error)\([^)]*\$\{GITHUB_TOKEN\}/.test(allSrc), 'значение токена не печатается');
 }
 
