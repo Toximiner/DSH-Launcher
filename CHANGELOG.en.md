@@ -9,6 +9,14 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+## [1.17.4] — 2026-11-05
+
+### Changed
+
+- **Electron 45.2.1** (was 45.0.0) — patch releases of the 45 line:
+  fixes in Chromium 156 / Node 24 / V8; no launcher code changes.
+- **ESLint 10.14.0** (was 10.13.0) — dev dependency, CI linting only.
+
 ## [1.17.3] — 2026-10-29
 
 ### Changed
