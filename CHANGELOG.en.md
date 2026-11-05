@@ -7,6 +7,10 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+<!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
+
+## [1.17.4] — 2026-11-05
+
 ### Changed
 
 - **Electron 45.2.1** (was 45.0.0) — patch releases of the 45 line:
