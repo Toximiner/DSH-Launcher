@@ -18,6 +18,7 @@ from terminal import Terminal, wait_for
 parser = argparse.ArgumentParser()
 parser.add_argument('--binary', required=True)
 parser.add_argument('--dsh', required=True, help='Installed dsh 0.2.2-rc.1; Node 24.9+ must be in PATH')
+parser.add_argument('--capture-queue-edit', help='Optional terminal-cell JSON of an actual queue editor')
 parser.add_argument('--capture-queue-remove', help='Optional terminal-cell JSON of the queue removal confirmation')
 parser.add_argument('--capture-queue', help='Optional terminal-cell JSON of real queued follow-up tasks')
 parser.add_argument('--capture-question', help='Optional terminal-cell JSON of an actual question form')
@@ -26,7 +27,7 @@ parser.add_argument('--capture-tools', help='Optional terminal-cell JSON of actu
 parser.add_argument('--capture-cells', help='Optional terminal-cell JSON for an actual UI screenshot')
 args = parser.parse_args()
 model_calls = []
-queue_turns = {17: threading.Event(), 18: threading.Event(), 20: threading.Event()}
+queue_turns = {17: threading.Event(), 18: threading.Event(), 20: threading.Event(), 22: threading.Event()}
 
 
 class Model(BaseHTTPRequestHandler):
@@ -432,6 +433,65 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         assert len(model_calls) == 21, 'Removed task executed or a retained task was lost'
         assert not any('REMOVE THIS PENDING TASK' in json.dumps(message) for message in model_calls[20]['messages']), 'Removed prompt leaked into model history'
         assert any('KEEP THIS PENDING TASK' in json.dumps(message) for message in model_calls[20]['messages']), 'Remaining queued task was not executed'
+        app.command('EDIT TEST ACTIVE')
+        app.wait('Ответ 22: ', timeout=20)
+        app.command('EDIT ORIGINAL TASK')
+        app.wait('ОЧЕРЕДЬ DSH · 1', timeout=15)
+        app.command('EDIT KEEP NEXT TASK')
+        app.wait('ОЧЕРЕДЬ DSH · 2', timeout=15)
+        app.send('\x1b[20~')
+        app.wait('Очередь заданий dsh')
+        app.send('\x1bOR')
+        app.wait('Изменить задание в очереди')
+        app.wait('EDIT ORIGINAL TASK')
+        app.send('\x15')
+        app.send('UNSAVED EDIT')
+        app.wait('UNSAVED EDIT')
+        app.send('\x1b')
+        app.wait('Изменения не сохранены.')
+        app.wait('EDIT ORIGINAL TASK')
+        app.send('\x1bOR')
+        app.wait('Изменить задание в очереди')
+        app.send('\x15')
+        app.send('EDIT CHANGED TASK\rsecond line kept')
+        app.wait('second line kept')
+        app.resize(44, 18)
+        app.wait('Изменить задание в очереди')
+        app.wait('[ Сохранить F5 ]')
+        app.resize(120, 42)
+        def editor_resized():
+            app.pump()
+            return '[ Сохранить F5 ]' in app.screen.display[30]
+        wait_for(editor_resized)
+        app.wait('second line kept')
+        if args.capture_queue_edit:
+            capture_cells(app, args.capture_queue_edit)
+        app.send('\x1b[15~')
+        app.wait('Задание изменено.', timeout=15)
+        app.wait('EDIT CHANGED TASK', timeout=15)
+        app.send('\x1b')
+        app.wait('ОЧЕРЕДЬ DSH · 2')
+        assert len(model_calls) == 22, 'Queue editing interrupted the active turn'
+        previous_app, app = app, None
+        previous_app.close(root / 'after-queue-edit.ansi')
+        app = Terminal(str(Path(args.binary).resolve()), ['--session', session_id], {**env, 'DSH_TUI_URL': login})
+        app.resize(120, 42)
+        app.wait('ОЧЕРЕДЬ DSH · 2', timeout=20)
+        app.wait('EDIT CHANGED TASK')
+        app.wait('second line kept')
+        assert 'EDIT ORIGINAL TASK' not in app.text and 'UNSAVED EDIT' not in app.text, 'Queue edit was lost or a discarded draft was saved'
+        queue_turns[22].set()
+        app.wait('Ответ 24: проверка транспорта настоящего dsh.', timeout=25)
+        wait_for(queue_drained)
+        app.send('\x1b[5~' * 20)
+        app.wait('Агент: не выполняется', timeout=20)
+        assert len(model_calls) == 24, 'Editing duplicated or lost a queued turn'
+        changed = [message for message in model_calls[22]['messages'] if message.get('role') == 'user'][-1]
+        retained = [message for message in model_calls[23]['messages'] if message.get('role') == 'user'][-1]
+        assert 'EDIT CHANGED TASK' in json.dumps(changed) and 'second line kept' in json.dumps(changed), 'Model did not receive the saved multiline edit'
+        assert 'EDIT KEEP NEXT TASK' in json.dumps(retained), 'Editing changed FIFO order or another task'
+        assert not any('EDIT ORIGINAL TASK' in json.dumps(message) or 'UNSAVED EDIT' in json.dumps(message) for message in model_calls[22]['messages']), 'Original or discarded text entered model history'
+        print('Actual dsh queue edit: discard, multiline save, minimum layout, reconnect, changed model input and retained FIFO order OK')
         print('Actual dsh queue removal: explicit confirmation, cancellation preserves active turn and other item, reconnect and minimum layout OK')
         print('Actual dsh queue: two follow-ups while streaming, server queue confirmation, individual FIFO turns, no duplicates OK')
         print('Actual dsh questions: single/multi-select, multiline custom answer, draft preservation, timed hold, continued reply, cancellation OK')

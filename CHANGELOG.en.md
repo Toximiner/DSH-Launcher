@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- Go preview 0.2.0-preview.15 adds multiline editing of pending tasks via F9 → F3. Enter inserts a line, F5 saves through the dsh API, and Esc discards the edit while preserving the chat draft. Observed conflicts, already admitted items, and stale state block saving; failed saves retain the draft without automatic retries. Actual dsh with a controlled provider verifies edited model input, FIFO order, reconnect, and the minimum 44×18 layout.
+
 - Go preview 0.2.0-preview.14 adds a queue dialog via F9, `/queue`, or the inline heading. Individual removal requires explicit confirmation and uses dsh item identity, preserving the active turn and remaining work. Uncertain mutations never retry automatically; stale state disables removal. Actual dsh with a controlled provider verifies retained work, reconnect, mouse handling, and the minimum 44×18 layout.
 
 ### Changed

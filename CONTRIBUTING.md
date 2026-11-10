@@ -41,7 +41,8 @@ approval service: grants, refusals, cancellation, and pending-request recovery.
 Agent-question checks exercise actual ask_user_question, structured batches,
 multiline text, timed holds, continued replies, and cancellation. Queue checks
 verify two waiting follow-ups, reconnection, three individual FIFO turns, and confirmed removal of one pending
-task while preserving the active turn and other work.
+task while preserving the active turn and other work. Queue editing checks cover
+discarding a draft, saving multiline text, model input, and retained FIFO order.
 The test-only approval probe is never enabled by the live deployment. See `apps/tui-go/web/README.md`.
 The legacy JavaScript terminal app and its npm/Debian packaging are removed.
 

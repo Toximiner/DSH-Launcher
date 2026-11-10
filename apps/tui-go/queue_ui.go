@@ -12,6 +12,7 @@ import (
 )
 
 type queueDialog struct {
+	edit        *queueEditDraft
 	visible     bool
 	selected    string
 	confirm     string
@@ -144,6 +145,17 @@ func (m *model) queueKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if !s.visible {
 		return nil, false
 	}
+	if s.edit != nil {
+		if !msg.Paste {
+			switch msg.Type {
+			case tea.KeyCtrlC, tea.KeyCtrlD:
+				return tea.Quit, true
+			case tea.KeyF8:
+				return m.cancelChat(), true
+			}
+		}
+		return m.queueEditKey(msg), true
+	}
 	if msg.Paste {
 		return nil, true
 	}
@@ -175,6 +187,8 @@ func (m *model) queueKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		if s.confirm != "" && !s.busy {
 			s.remove = !s.remove
 		}
+	case tea.KeyF3:
+		return m.editQueuedItem(), true
 	case tea.KeyEnter:
 		if s.confirm == "" {
 			m.requestQueueRemoval()
@@ -195,6 +209,9 @@ func (m *model) queueDialogView(base string) string {
 	s := &m.queueDialog
 	if !s.visible || m.width < 44 || m.height < 18 {
 		return base
+	}
+	if s.edit != nil {
+		return m.queueEditView(base)
 	}
 	box := m.queueBox()
 	inner := box.width - 4
@@ -244,7 +261,7 @@ func (m *model) queueDialogView(base string) string {
 		}
 		lines = append(lines, muted.Render(text))
 	}
-	buttons := "[ Удалить выбранное ]"
+	buttons := "[ Удалить выбранное ] [ Изменить F3 ]"
 	if s.confirm != "" {
 		left := inner / 2
 		buttons = lipgloss.NewStyle().Width(left).Render(selectedRow("[ Назад ]", !s.remove, left)) + selectedRow("[ Удалить ]", s.remove, inner-left)
@@ -252,7 +269,7 @@ func (m *model) queueDialogView(base string) string {
 	if s.busy {
 		buttons = "Ожидание подтверждения dsh…"
 	}
-	hint := "↑/↓ выбор · Enter действие · Esc назад"
+	hint := "↑/↓ выбор · F3 правка · Enter удалить"
 	if s.confirm != "" {
 		hint = "←/→ выбор · Enter ответ · Esc назад"
 	}
@@ -265,6 +282,9 @@ func (m *model) queueDialogView(base string) string {
 func (m *model) queueMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 	if !m.queueDialog.visible {
 		return nil, false
+	}
+	if m.queueDialog.edit != nil {
+		return m.queueEditMouse(msg), true
 	}
 	if msg.Action != tea.MouseActionPress {
 		return nil, true
@@ -295,6 +315,9 @@ func (m *model) queueMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 		}
 	}
 	if msg.Y == box.y+box.height-3 {
+		if m.queueDialog.confirm == "" && msg.X >= box.x+2+len([]rune("[ Удалить выбранное ] ")) {
+			return m.editQueuedItem(), true
+		}
 		if m.queueDialog.confirm != "" {
 			m.queueDialog.remove = msg.X >= box.x+2+inner/2
 		}

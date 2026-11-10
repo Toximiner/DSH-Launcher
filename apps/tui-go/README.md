@@ -143,6 +143,26 @@ items optimistically from cached server state. Session changes discard the dialo
 and late responses from old stream epochs cannot change the new dialog.
 Actual-dsh checks verify cancellation, retained work, reconnect, and 44×18 sizing.
 
+F3 or the Edit button opens a multiline editor for the selected queue item.
+Enter inserts a newline; F5 or Save sends `session/updateQueue` with action=edit;
+Escape returns to the list without saving. F9 hides/reopens the draft in the same
+client session. The private browser toolbar exposes Edit F3 and Apply F5.
+The chat composer draft stays intact. Only plain text up to 64 KiB is supported;
+attachments, controls, or source text that the editor would transform/truncate
+are refused. Empty text cannot be saved. Saving retains the original item ID,
+placement, and queue order; no new prompt is submitted.
+
+A task admitted into execution cannot be edited. If a refreshed queue sample
+shows another edit, saving is blocked and the local draft remains available.
+The dsh API offers no conditional revision write: this catches observed conflicts,
+but cannot guarantee atomic conflict protection against concurrent clients.
+Rejected/uncertain saves retain the editor, refresh state, and never retry
+automatically. Explicit F5 recovery requires a sample begun after the failed
+receipt; if it already contains the desired text, the editor closes without a
+second mutation. Drafts are local to this client process/session and are discarded
+when switching sessions or exiting. Actual-dsh tests verify discarded edits,
+multiline model input, reconnect after saving, and retained FIFO work.
+
 The client signs in through `/connect` and reads `/api/settings/describe`.
 It never calls settings write endpoints or loads the settings document from disk.
 Open **Настройки dsh** with the mouse or sidebar keyboard navigation. Left/Right switches
@@ -160,8 +180,7 @@ Use `--url` / `DSH_TUI_URL` with `--new` or `--session ID`, or run `/new` after
 attaching. Wait for chat readiness, then press Enter to send. Text entered before
 readiness or during a session switch stays in the composer. While generation is
 running, Enter queues a follow-up through session/prompt with mode=queue. The
-composer hint changes to explain this. Queue editing and submission as steering
-remain subsequent increments.
+composer hint changes to explain this. Submission as steering remains a subsequent increment.
 
 The client signs in through `/connect`, sends `session/prompt` with a unique
 requestId, and subscribes to `session/follow` through `/api/remote.mux` with
@@ -302,8 +321,8 @@ and milestone order. Milestone 1 is complete: TUI preferences live in the top me
 while dsh settings remain separate. Streamed text chat is implemented in preview.9; validation with an actual cloud
 model remains pending working provider access. Tool-result cards are implemented in preview.10. Agent questions are implemented in preview.12, including timed waits and continued
 answers. Queue submission and observation are implemented in preview.13; individual
-queue removal is implemented in preview.14. The next functional checkpoint is
-editing and steering controls. Permission dialogs
+queue removal is implemented in preview.14 and multiline editing in preview.15.
+The next functional checkpoint is steering controls. Permission dialogs
 are implemented in preview.11 and tested through the actual dsh approval service. Settings editing, workspace features,
 additional plugin support, and launcher lifecycle remain planned. No
 full-parity claim is made by this preview. The legacy JS client and its packaging
