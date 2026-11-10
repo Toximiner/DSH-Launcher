@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func enter(m *model, value string) tea.Cmd {
@@ -81,5 +82,45 @@ func TestCLIWithoutTerminal(t *testing.T) {
 	}
 	if err := run([]string{"--unknown"}, &out); err == nil {
 		t.Fatal("unknown option was accepted")
+	}
+}
+
+func TestNavigationPreservesDraft(t *testing.T) {
+	m := newModel()
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.input.SetValue("Мой черновик")
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if m.page != 1 || !strings.Contains(clean(m.View()), "Сессии dsh недоступны") {
+		t.Fatal("sessions view did not open")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if !strings.Contains(clean(m.View()), "Данные этого окна") {
+		t.Fatal("settings view did not open")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.page != 0 || m.navFocused || m.input.Value() != "Мой черновик" {
+		t.Fatal("navigation lost the draft or input focus")
+	}
+}
+
+func TestPanelsFitTerminal(t *testing.T) {
+	m := newModel()
+	enter(m, "Длинное сообщение с русским текстом и 世界, которое должно переноситься внутри панели разговора.")
+	for _, size := range []tea.WindowSizeMsg{{Width: 100, Height: 30}, {Width: 80, Height: 24}, {Width: 60, Height: 20}, {Width: 44, Height: 18}} {
+		m.Update(size)
+		for page := range pages {
+			m.page = page
+			m.resize()
+			view := m.View()
+			if lipgloss.Height(view) > size.Height {
+				t.Fatalf("page %d: height %d exceeds %d", page, lipgloss.Height(view), size.Height)
+			}
+			for _, line := range strings.Split(view, "\n") {
+				if lipgloss.Width(line) > size.Width {
+					t.Fatalf("page %d: width %d exceeds %d", page, lipgloss.Width(line), size.Width)
+				}
+			}
+		}
 	}
 }

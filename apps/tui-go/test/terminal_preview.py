@@ -20,7 +20,7 @@ class TerminalPreview(unittest.TestCase):
         env.pop('DISPLAY', None)
         env.pop('WAYLAND_DISPLAY', None)
         self.app = Terminal(BINARY, [], env)
-        self.app.wait('Терминальный прототип')
+        self.app.wait('Новый разговор')
 
     def tearDown(self):
         self.app.close(Path(self.temp.name) / 'terminal.log')
@@ -28,7 +28,7 @@ class TerminalPreview(unittest.TestCase):
 
     def test_input_history_and_local_commands(self):
         self.app.command('Привет 世界')
-        self.app.wait('Введено: Привет 世界')
+        self.app.wait('ВЫ · ЛОКАЛЬНЫЙ ЧЕРНОВИК')
         self.app.send('\x1b[A')
         self.app.wait('> Привет 世界')
         self.app.send('\x15')
@@ -36,8 +36,8 @@ class TerminalPreview(unittest.TestCase):
         self.app.wait('/clear — очистить экран')
         self.app.command('/clear')
         self.app.command('После очистки')
-        self.app.wait('Введено: После очистки')
-        self.assertNotIn('Введено: Привет 世界', self.app.text)
+        self.app.wait('После очистки')
+        self.assertNotIn('Привет 世界', self.app.text)
         self.app.command('/exit')
         self.app.exited()
 
@@ -55,6 +55,15 @@ class TerminalPreview(unittest.TestCase):
     def test_signal_restores_terminal(self):
         self.app.proc.send_signal(signal.SIGTERM)
         self.app.exited()
+
+    def test_navigation_preserves_draft(self):
+        self.app.send('Несохранённый черновик')
+        self.app.send('\t\x1b[B')
+        self.app.wait('Сессии dsh недоступны')
+        self.app.send('\x1b[B')
+        self.app.wait('Данные этого окна')
+        self.app.send('\x1b')
+        self.app.wait('> Несохранённый черновик')
 
 
 if __name__ == '__main__':
