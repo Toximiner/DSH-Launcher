@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const chatTextLimit = 1 << 20
@@ -93,6 +94,7 @@ type chatUpdate struct {
 type chatMessage struct {
 	seq        int
 	role, text string
+	tool       *chatTool
 }
 type pendingPrompt struct{ ID, Text, Status string }
 type chatState struct {
@@ -110,6 +112,8 @@ type chatState struct {
 	note           string
 	streamError    string
 	clearedThrough int
+	expandedTools  map[string]bool
+	selectedTool   string
 }
 type promptResult struct {
 	sessionID, requestID string
@@ -134,6 +138,8 @@ func (m *model) startChat(id string) tea.Cmd {
 		return nil
 	}
 	m.stopChat()
+	m.toolFocused = false
+	m.chatToolHits = nil
 	ctx := m.settingsContext
 	if ctx == nil {
 		ctx = context.Background()
@@ -329,7 +335,7 @@ func contentText(content []struct {
 	for _, part := range content {
 		if part.Type == "text" {
 			parts = append(parts, part.Text)
-		} else if part.Type == "reasoning" {
+		} else if part.Type == "reasoning" || part.Type == "tool-call" {
 			continue
 		} else {
 			parts = append(parts, "[Нетекстовое содержимое]")
@@ -389,6 +395,12 @@ func (a *chatAttempt) restore() string {
 
 func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	var data struct {
+		CallID    string `json:"callId"`
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+		Error     *struct {
+			Code string `json:"code"`
+		} `json:"error"`
 		Turn    int `json:"turn"`
 		Step    int `json:"step"`
 		Content []struct {
@@ -400,6 +412,11 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 			Kind  string `json:"kind"`
 		} `json:"source"`
 		Message struct {
+			ToolCallID string `json:"toolCallId"`
+			Source     struct {
+				CallID string `json:"callId"`
+			} `json:"source"`
+			IsError bool `json:"isError"`
 			Content []struct {
 				Type string `json:"type"`
 				Text string `json:"text"`
@@ -414,12 +431,13 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 		} `json:"reason"`
 	}
 	switch event.Type {
-	case "user/message", "assistant/message", "assistant/attempt", "turn/start", "turn/end":
+	case "user/message", "assistant/message", "assistant/attempt", "turn/start", "turn/end", "tool/call", "tool/result":
 		if err := json.Unmarshal(event.Data, &data); err != nil {
 			return errors.New("неподдерживаемые данные истории")
 		}
 	}
 	text, role := "", ""
+	var tool *chatTool
 	switch event.Type {
 	case "user/message":
 		if data.Source.Kind == "user" || data.Source.Kind == "" {
@@ -442,12 +460,55 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 		}
 		role = "АГЕНТ · НЕЗАВЕРШЁННЫЙ ОТВЕТ"
 		text = a.text()
+	case "tool/call":
+		if data.CallID == "" {
+			return errors.New("вызов инструмента без идентификатора")
+		}
+		tool = &chatTool{ID: data.CallID, Name: boundedToolText(data.Name, 256), Arguments: boundedToolText(data.Arguments, toolArgumentsLimit), State: "running", Turn: data.Turn}
+	case "tool/result":
+		id := data.Message.Source.CallID
+		if id == "" {
+			id = data.Message.ToolCallID
+		}
+		if id == "" {
+			return errors.New("результат инструмента без идентификатора")
+		}
+		tool = &chatTool{ID: id, State: "done", Turn: data.Turn}
+		for _, previous := range s.messages {
+			if previous.tool != nil && previous.tool.ID == id {
+				*tool = *previous.tool
+				break
+			}
+		}
+		tool.State = "done"
+		tool.Result = boundedToolText(contentText(data.Message.Content), chatTextLimit)
+		if data.Message.IsError || data.Error != nil {
+			tool.State = "error"
+			if data.Error != nil {
+				tool.ErrorCode = boundedToolText(data.Error.Code, 128)
+				if data.Error.Code == "ABORTED" {
+					tool.State = "stopped"
+				}
+			}
+		}
 	case "turn/start":
 		if m.session != nil && m.session.ID == s.id {
 			m.session.Running = true
 		}
 		s.note = ""
 	case "turn/end":
+		for i := range s.messages {
+			previous := s.messages[i].tool
+			if previous == nil || previous.Turn != data.Turn || previous.State != "running" {
+				continue
+			}
+			next := *previous
+			next.State = "unknown"
+			if data.Reason.Kind == "aborted" {
+				next.State = "stopped"
+			}
+			s.messages[i].tool = &next
+		}
 		if m.session != nil && m.session.ID == s.id {
 			m.session.Running = false
 		}
@@ -487,18 +548,18 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 			removed[seq] = true
 		}
 		s.surface = append(append(append([]int{}, s.surface[:start]...), event.Seq), s.surface[end+1:]...)
-	} else if len(event.SurfaceOp) > 0 || role != "" {
+	} else if len(event.SurfaceOp) > 0 || role != "" || tool != nil {
 		s.surface = append(s.surface, event.Seq)
 	}
 	kept := s.messages[:0]
 	for _, message := range s.messages {
-		if !removed[message.seq] {
+		if !removed[message.seq] && !(tool != nil && message.tool != nil && tool.ID == message.tool.ID) {
 			kept = append(kept, message)
 		}
 	}
 	s.messages = kept
-	if text != "" {
-		message := chatMessage{seq: event.Seq, role: role, text: text}
+	if text != "" || tool != nil {
+		message := chatMessage{seq: event.Seq, role: role, text: text, tool: tool}
 		s.messages = append(s.messages, message)
 	}
 	positions := make(map[int]int, len(s.surface))
@@ -508,10 +569,10 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	sort.SliceStable(s.messages, func(i, j int) bool { return positions[s.messages[i].seq] < positions[s.messages[j].seq] })
 	bytes := 0
 	for _, message := range s.messages {
-		bytes += len(message.text)
+		bytes += message.byteSize()
 	}
 	for len(s.messages) > 100 || bytes > 4*chatTextLimit {
-		bytes -= len(s.messages[0].text)
+		bytes -= s.messages[0].byteSize()
 		s.messages = s.messages[1:]
 		s.hasMore = true
 	}
@@ -649,10 +710,12 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 	default:
 		return errors.New("неподдерживаемый поток чата")
 	}
+	pruneToolExpansion(s)
 	return nil
 }
 
 func (m *model) chatView() string {
+	m.chatToolHits = nil
 	s := m.chat
 	if s == nil {
 		return "Ожидание подключения чата…"
@@ -664,11 +727,24 @@ func (m *model) chatView() string {
 	if s.hasMore {
 		lines = append(lines, muted.Render("Показан последний фрагмент истории; полная навигация появится позже."))
 	}
+	row := strings.Count(ansi.Hardwrap(strings.Join(lines, "\n"), max(1, m.viewport.Width), true), "\n")
 	for _, message := range s.messages {
 		if message.seq <= s.clearedThrough {
 			continue
 		}
-		lines = append(lines, accent.Bold(true).Render(message.role)+"\n"+message.text+"\n")
+		if len(lines) > 0 {
+			row++
+		}
+		part := ""
+		if message.tool != nil {
+			card := m.toolView(message.tool)
+			m.chatToolHits = append(m.chatToolHits, chatToolHit{id: message.tool.ID, row: row, end: row + strings.Count(ansi.Hardwrap(card, max(1, m.viewport.Width), true), "\n") + 1})
+			part = card + "\n"
+		} else {
+			part = accent.Bold(true).Render(message.role) + "\n" + message.text + "\n"
+		}
+		lines = append(lines, part)
+		row += strings.Count(ansi.Hardwrap(part, max(1, m.viewport.Width), true), "\n")
 	}
 	if p := m.prompts[s.id]; p != nil {
 		label := map[string]string{"sending": "ОТПРАВЛЯЕТСЯ", "accepted": "ПРИНЯТО DSH · ОЖИДАНИЕ ИСТОРИИ", "unknown": "РЕЗУЛЬТАТ ОТПРАВКИ НЕИЗВЕСТЕН · /retry-send", "rejected": "НЕ ОТПРАВЛЕНО"}[p.Status]
@@ -708,6 +784,8 @@ func (m *model) handleChatUpdate(msg chatUpdate) tea.Cmd {
 			m.chat.messages = s.messages
 			m.chat.live = s.live
 			m.chat.clearedThrough = s.clearedThrough
+			m.chat.expandedTools = s.expandedTools
+			m.chat.selectedTool = s.selectedTool
 			m.chat.streamError = err.Error()
 			m.rebuild()
 			ctx := m.chat.ctx

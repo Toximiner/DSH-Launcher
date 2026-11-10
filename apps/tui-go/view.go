@@ -60,7 +60,7 @@ func (m *model) sidebar(height int) string {
 	if m.session != nil {
 		connection = "✓ dsh · " + m.modeLabel()
 	}
-	lines = append(lines, muted.Render(connection), muted.Render("Go · "+version))
+	lines = append(lines, muted.Render(connection), muted.Render("v"+version))
 	for i, line := range lines {
 		lines[i] = ansi.Truncate(line, inner, "…")
 	}
@@ -127,6 +127,9 @@ func (m *model) View() string {
 	hints := "F10 меню · Tab разделы · Esc чат"
 	if m.page == dshSettingsPage && m.settingsLogin != "" {
 		hints = "←/→ раздел · r обновить · PgUp/PgDn"
+	}
+	if m.page == chatPage && len(m.toolIDs()) > 0 {
+		hints = "F6 инструменты · Enter раскрыть · Esc ввод"
 	}
 	footer := bar(muted.Render(hints), muted.Render("Ctrl+D выход"), width)
 	return m.chromeView(header + "\n" + body + "\n" + footer)

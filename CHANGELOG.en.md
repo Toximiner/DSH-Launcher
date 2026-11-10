@@ -13,6 +13,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Added
 
+- Go preview 0.2.0-preview.10 adds tool cards with arguments, results, errors, cancellation state, and folded long output. F6 / Shift+F6 selects cards, Enter or click expands them, and Esc restores composer focus without losing the draft. Reconnection restores cards without duplication. Actual dsh integration verifies a real file read and missing-file error using a controlled test provider. Permission and question dialogs remain pending.
+
 - Go preview 0.2.0-preview.9 sends session prompts, streams assistant text over WebSocket, supports F8 / `/stop`, and reconnects read subscriptions. History and partial output reconcile against dsh; service context is not presented as user text. Uncertain submissions are never retried automatically; `/retry-send` retains the original requestId. Adds Go/PTY checks and CI integration against actual dsh with a controlled local model endpoint. No cloud LLM was verified without credentials.
 
 - Go preview 0.2.0-preview.8 adds File/View/Help menus, modal TUI settings with persisted mouse/input-history preferences, shortcut help, and About. F10 opens the menu; F4 / Alt+T opens settings. TUI settings leave the sidebar; dialogs preserve the page, scroll, draft, and focus. Electron-specific controls are excluded. Tests cover minimum dimensions, mouse, save failures, and restart persistence.

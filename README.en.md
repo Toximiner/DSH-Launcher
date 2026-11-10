@@ -28,8 +28,11 @@ streamed text chat: Enter sends, F8 stops. Offline input remains a local draft.
 Actual replies require a configured LLM provider in dsh. The dsh installer and
 tool interaction dialogs remain pending. The legacy JS terminal client is removed.
 
-Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.9/dsh-launcher-tui-go_linux_amd64) ·
-[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.9/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.9/SHA256SUMS).
+Tool cards show execution state and results; F6 selects a card, Enter or click
+expands its details, and Esc restores composer focus. Permission/question dialogs remain pending.
+
+Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.10/dsh-launcher-tui-go_linux_amd64) ·
+[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.10/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.10/SHA256SUMS).
 The Go client runs without Node.js; the dsh backend requires Node.js 24.9+.
 
 ## How it works

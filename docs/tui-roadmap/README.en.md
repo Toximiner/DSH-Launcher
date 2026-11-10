@@ -2,7 +2,7 @@
 
 [Русский](README.md) | **English**
 
-Baseline: November 10, 2026, Go client `0.2.0-preview.9`.
+Baseline: November 10, 2026, Go client `0.2.0-preview.10`.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.
 
@@ -22,6 +22,7 @@ disabled; private Codespaces supports live inspection.
 - File/View/Help menu, modal TUI settings, persisted mouse/input-history preferences.
 - Sidebar navigation, panels, local draft input/history, mouse, and scrolling.
 - dsh attachment and read-only settings with secret masking.
+- Tool cards: state, arguments, result/error, mouse or F6 → Enter expansion, history restoration.
 - Session text chat: submission, streaming, cancellation, read reconnection without automatic resubmission.
 - Session creation/list/attachment, backend-confirmed modes, and goal commands.
 - Starting an installed dsh with `--start`, and offering dshmarket preinstallation.
@@ -40,7 +41,7 @@ an actual cloud model awaits working access. Full tool interaction is milestone 
 |---|---|---|---|
 | Application menu | Top menu and modal client settings | Basic milestone complete; further polish at milestone 14 | 1 ✓ |
 | Chat | Submission, streaming, cancellation, reconnection implemented | Actual cloud model verification awaits access | 2, LLM acceptance pending |
-| Tools and questions | No dedicated views | Execution/results, permissions, user answers | 3 |
+| Tools and questions | Expandable tool call/result cards | Permissions, questions, queue; nested calls and incremental stdout | 3, partial |
 | Sessions and history | Create/list/attach | History, search, rename, fork, supported archive operations | 4 |
 | Message rendering | Plain local records | Markdown, code, tables, folding, copying | 4 |
 | Models and accounts | No configuration UI | Providers, authorization, model and parameter selection | 5 |
@@ -67,7 +68,7 @@ an actual cloud model awaits working access. Full tool interaction is milestone 
 2. **Minimal actual chat — implemented in preview.9; cloud LLM acceptance awaits access.** Session submission, streamed assistant text,
    cancellation, errors, reconnection without resubmitting accepted messages.
    Done: an actual model answers through actual dsh; exit restores the terminal.
-3. **Tools and interaction.** Tool progress/results, permission decisions,
+3. **Tools and interaction — first increment implemented in preview.10.** Tool cards, results/errors, cancellation state, folding, and history restoration; verified with actual dsh file reads. Next: permission decisions,
    structured and free-text questions, basic queue/steering controls.
    Done: the agent completes a tool task; rejection/cancellation reaches dsh,
    and a question answer is not submitted as an ordinary chat message.

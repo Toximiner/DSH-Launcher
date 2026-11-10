@@ -28,8 +28,11 @@
 сохраняется локальный черновик. Для настоящих ответов нужен настроенный провайдер LLM
 в dsh. Установка самого dsh и диалоги инструментов ещё не перенесены. JS-версия TUI удалена.
 
-Готовые Go-сборки: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.9/dsh-launcher-tui-go_linux_amd64) ·
-[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.9/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.9/SHA256SUMS).
+Инструменты отображаются карточками со статусом и результатом; F6 выбирает карточку,
+Enter или клик раскрывает детали, Esc возвращает к вводу. Разрешения и вопросы — следующий шаг.
+
+Готовые Go-сборки: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.10/dsh-launcher-tui-go_linux_amd64) ·
+[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.10/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.10/SHA256SUMS).
 Go-клиенту не нужен Node.js; самому бэкенду dsh нужен Node.js 24.9+.
 
 ## Как работает

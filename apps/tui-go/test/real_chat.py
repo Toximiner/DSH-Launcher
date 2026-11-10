@@ -17,6 +17,7 @@ from terminal import Terminal
 parser = argparse.ArgumentParser()
 parser.add_argument('--binary', required=True)
 parser.add_argument('--dsh', required=True, help='Installed dsh 0.2.2-rc.1; Node 24.9+ must be in PATH')
+parser.add_argument('--capture-tools', help='Optional terminal-cell JSON of actual tool results')
 parser.add_argument('--capture-cells', help='Optional terminal-cell JSON for an actual UI screenshot')
 args = parser.parse_args()
 model_calls = []
@@ -43,6 +44,20 @@ class Model(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         try:
+            if number == 4:
+                names = [entry['function']['name'] for entry in body.get('tools', [])]
+                read_name = next((name for name in names if name == 'read' or name.endswith('__read')), None)
+                assert read_name, f'Read tool not offered: {names}'
+                send({'role': 'assistant', 'tool_calls': [
+                    {'index': 0, 'id': 'read-notes', 'type': 'function',
+                     'function': {'name': read_name, 'arguments': json.dumps({'file_path': str(project / 'notes.txt')})}},
+                    {'index': 1, 'id': 'read-missing', 'type': 'function',
+                     'function': {'name': read_name, 'arguments': json.dumps({'file_path': str(project / 'missing-file.txt')})}},
+                ]})
+                send({}, 'tool_calls')
+                self.wfile.write(b'data: [DONE]\n\n')
+                self.wfile.flush()
+                return
             for text in [f'Ответ {number}: ', 'проверка транспорта ', 'настоящего dsh.']:
                 send({'role': 'assistant', 'content': text})
                 time.sleep(0.7)
@@ -93,6 +108,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
     ]))
     project = root / 'project'
     project.mkdir()
+    (project / 'notes.txt').write_text('\n'.join(f'Tool output line {i:02d}' for i in range(1, 13)) + '\n')
     env = {key: value for key, value in os.environ.items()
            if key not in ('GH_TOKEN', 'GITHUB_TOKEN', 'CODESPACES_GITHUB_TOKEN', 'DSH_TUI_URL')}
     env.pop('NO_COLOR', None)
@@ -145,6 +161,30 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.send('\x1b[19~')
         app.wait('Выполнение остановлено.', timeout=20)
         assert len(model_calls) == 3, 'Unexpected model request retry or missing generation'
+        app.command('Read notes.txt and missing-file.txt using tools.')
+        app.wait('Ответ 5: проверка транспорта настоящего dsh.', timeout=25)
+        app.send('\x1b[5~' * 10)
+        app.wait('Агент: не выполняется', timeout=20)
+        assert len(model_calls) == 5, 'Unexpected tool-turn model request retry'
+        results = [message for message in model_calls[4]['messages'] if message.get('role') == 'tool']
+        assert len(results) == 2, 'Actual dsh did not feed both tool results back to the model'
+        assert any('Tool output line 12' in json.dumps(message) for message in results), 'Actual filesystem read did not return the test file'
+        app.resize(120, 42)
+        app.send('preserved draft')
+        app.send('\x1b[17~')
+        app.wait('> ▸ read ·', timeout=10)
+        if '> ▸ read · ! Ошибка' in app.text:
+            app.send('\x1b[17~')
+        app.wait('> ▸ read · ✓ Готово', timeout=10)
+        app.send('\r')
+        app.wait('Tool output line 12', timeout=10)
+        if args.capture_tools:
+            capture_cells(app, args.capture_tools)
+        app.send('\x1b[17~')
+        app.wait('> ▸ read · ! Ошибка', timeout=10)
+        app.send('\x1b')
+        app.wait('> preserved draft')
+        print('Actual dsh + controlled model: file-read success/failure, result cards, expansion, draft preservation OK')
         print('Actual dsh + controlled model: submission, partial streaming, two turns, cancellation OK')
         print('This verifies protocol integration, not a real cloud LLM response.')
         app.send('\x04')

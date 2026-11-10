@@ -1,4 +1,4 @@
-# Go TUI preview — checkpoint 9
+# Go TUI preview — checkpoint 10
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
@@ -19,6 +19,17 @@ streamed over its authenticated WebSocket API. F8 or `/stop` requests cancellati
 of the current turn. User messages are reconciled with authoritative history;
 service context is not displayed as user-authored text. Without a backend, input
 remains a clearly labeled local draft. The static WASM adapter remains offline.
+
+Tool calls and results appear as correlated cards: running, done, error, stopped,
+or missing result. Folded output previews three wrapped lines; F6 / Shift+F6
+selects cards, Enter or a click toggles their arguments/result, and Esc returns
+to the composer without sending or losing its draft. Arrow keys select cards while
+they have focus; PgUp/PgDn scroll long output. Reconnection restores cards and
+expansion choices without duplicating results. If a call predates the history
+window, the result is explicitly labeled rather than assigned an invented name.
+Arguments are bounded to 64 KiB, result text to 1 MiB, and retained chat to 4 MiB;
+truncation is labeled. Non-text results remain placeholders. Incremental stdout,
+nested PTC/subagent trees, permission dialogs, and question forms are not implemented.
 
 Tab focuses the sidebar, arrows select a page, and Enter focuses its content.
 Esc returns to chat without losing the draft. Sessions supports refresh (`r`),
@@ -221,8 +232,8 @@ Work proceeds in small, reviewable checkpoints with user feedback. The
 [roadmap](../../docs/tui-roadmap/README.en.md) is the maintained capability inventory
 and milestone order. Milestone 1 is complete: TUI preferences live in the top menu,
 while dsh settings remain separate. Streamed text chat is implemented in preview.9; validation with an actual cloud
-model remains pending working provider access. The next functional checkpoint is
-tool results, permissions, and user questions. Settings editing, workspace features,
+model remains pending working provider access. Tool-result cards are implemented in preview.10. The next functional checkpoint is
+permission dialogs, followed by user questions and queue controls. Settings editing, workspace features,
 additional plugin support, and launcher lifecycle remain planned. No
 full-parity claim is made by this preview. The legacy JS client and its packaging
 have been removed; its dsh installation flow remains pending in Go.

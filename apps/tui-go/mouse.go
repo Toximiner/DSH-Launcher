@@ -56,6 +56,7 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 		navigation := area{1, bodyTop + 1 + 4, sidebarWidth - 2, len(navigationPages)}
 		if navigation.contains(msg.X, msg.Y) {
 			m.page = navigationPages[msg.Y-navigation.y]
+			m.toolFocused = false
 			m.navFocused = true
 			m.input.Blur()
 			m.resize()
@@ -70,6 +71,19 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 		draft := area{1, navigation.y + len(navigationPages) + 2, sidebarWidth - 2, 1}
 		if draft.y < bodyTop+bodyHeight-3 && draft.contains(msg.X, msg.Y) {
 			return m.showChat()
+		}
+	}
+	if m.page == chatPage && m.chat != nil && conversation.contains(msg.X, msg.Y) {
+		row := msg.Y - conversation.y + m.viewport.YOffset
+		for _, hit := range m.chatToolHits {
+			if row >= hit.row && row < hit.end {
+				m.toolFocused = true
+				m.navFocused = false
+				m.chat.selectedTool = hit.id
+				m.input.Blur()
+				m.toggleTool(hit.id)
+				return nil
+			}
 		}
 	}
 	if m.page == marketPage && conversation.contains(msg.X, msg.Y) {
@@ -126,6 +140,8 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	}
 	if m.page == 0 && composer.contains(msg.X, msg.Y) {
 		m.navFocused = false
+		m.toolFocused = false
+		m.rebuild()
 		return m.input.Focus()
 	}
 	return nil

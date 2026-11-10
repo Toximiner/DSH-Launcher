@@ -15,8 +15,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const version = "0.2.0-preview.9"
-const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/help — справка\n/clear — очистить экран\n/exit — выйти\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
+const version = "0.2.0-preview.10"
+const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
 	chatPage = iota
@@ -34,6 +34,8 @@ type quitMsg struct{}
 
 type model struct {
 	chat                *chatState
+	chatToolHits        []chatToolHit
+	toolFocused         bool
 	chatEpoch           int
 	prompts             map[string]*pendingPrompt
 	chrome              chromeState
@@ -141,7 +143,13 @@ func (m *model) rebuild() {
 				content = "Ожидание подключения чата. /new — создать сессию.\n/mode default|plan|goal · /goal <описание>"
 			}
 		}
-		content = accent.Render(m.modeDescription()) + "\n\n" + content
+		prefix := accent.Render(m.modeDescription()) + "\n\n"
+		for i := range m.chatToolHits {
+			offset := strings.Count(ansi.Hardwrap(prefix, max(1, m.viewport.Width), true), "\n")
+			m.chatToolHits[i].row += offset
+			m.chatToolHits[i].end += offset
+		}
+		content = prefix + content
 	}
 	switch m.page {
 	case sessionsPage:
@@ -169,6 +177,9 @@ func (m *model) append(line string) {
 }
 
 func (m *model) resize() {
+	if m.page != chatPage {
+		m.toolFocused = false
+	}
 	w, h := m.contentSize()
 	if m.page == 0 {
 		h -= composerHeight + 1
@@ -191,6 +202,7 @@ func (m *model) contentSize() (int, int) {
 func (m *model) showChat() tea.Cmd {
 	m.page = 0
 	m.navFocused = false
+	m.toolFocused = false
 	m.resize()
 	return m.input.Focus()
 }
@@ -362,6 +374,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Type == tea.KeyF8 {
 			return m, m.cancelChat()
 		}
+		if cmd, handled := m.toolKey(msg); handled {
+			return m, cmd
+		}
 		// A burst of ordinary text is not a named control key such as "enter".
 		if msg.Type == tea.KeyRunes && !msg.Alt && len(msg.Runes) > 1 {
 			if m.page == marketPage && !m.navFocused {
@@ -387,6 +402,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if page, ok := map[string]int{"alt+c": chatPage, "alt+s": sessionsPage, "alt+d": dshSettingsPage, "alt+l": logPage, "alt+m": marketPage}[msg.String()]; ok && msg.Alt {
 			m.page = page
+			m.toolFocused = false
 			m.navFocused = false
 			m.marketEditing = false
 			m.marketConfirm = nil
