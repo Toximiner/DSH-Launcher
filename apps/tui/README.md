@@ -11,6 +11,12 @@ The TUI requires Node.js 22+. The protocol adapter targets
 locally; upstream APIs are pre-stable. Use Node.js 24.9+ for both applications
 when the TUI starts dsh on the same machine.
 
+If the client reports that it is running under Node 22, an installed client can
+temporarily be launched under Node 24 without replacing the system runtime:
+`npx --yes --package=node@24 --call 'dsh-launcher-tui'`. Use that command on each
+launch until Node is upgraded normally; dsh still needs the newer runtime after
+its installation.
+
 If `dsh` is missing from PATH, the TUI offers `/install` and `/cancel`.
 `/install` installs the pinned backend for the current user, shows npm output,
 and starts the conversation after success. The installation lives under

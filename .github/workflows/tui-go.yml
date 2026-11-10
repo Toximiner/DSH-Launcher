@@ -1,0 +1,43 @@
+name: tui-go-preview
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['apps/tui-go/**', 'test/docker-tui/terminal.py', '.github/workflows/tui-go.yml']
+  push:
+    branches: [main]
+    paths: ['apps/tui-go/**', 'test/docker-tui/terminal.py', '.github/workflows/tui-go.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  terminal-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: apps/tui-go/go.sum
+      - name: Unit tests and race detector
+        working-directory: apps/tui-go
+        run: go test -race ./...
+      - name: Build Linux binaries without CGO
+        working-directory: apps/tui-go
+        run: |
+          mkdir -p ../../build/tui-go
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o ../../build/tui-go/dsh-launcher-tui-go_linux_amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o ../../build/tui-go/dsh-launcher-tui-go_linux_arm64 .
+      - name: PTY checks without Node in PATH
+        run: |
+          python3 -m venv build/go-pty-env
+          build/go-pty-env/bin/pip install pyte==0.8.2
+          build/go-pty-env/bin/python apps/tui-go/test/terminal_preview.py build/tui-go/dsh-launcher-tui-go_linux_amd64
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dsh-launcher-tui-go-preview
+          path: build/tui-go/dsh-launcher-tui-go_linux_*
+          if-no-files-found: error
