@@ -102,7 +102,7 @@ func (m *model) View() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, m.sidebar(bodyHeight), " ", right)
 	}
 	hints := "Tab разделы · Esc чат · PgUp/PgDn"
-	if m.page == 2 && m.settingsLogin != "" {
+	if m.page == dshSettingsPage && m.settingsLogin != "" {
 		hints = "←/→ раздел · r обновить · PgUp/PgDn"
 	}
 	footer := bar(muted.Render(hints), muted.Render("Ctrl+D выход"), width)

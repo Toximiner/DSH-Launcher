@@ -133,9 +133,8 @@ func (m *model) loadSettings() tea.Cmd {
 }
 
 func (m *model) settingsView() string {
-	local := heading.Render("Данные этого окна") + "\n\nВерсия     " + version + "\nИнтерфейс  Русский · тёмная тема\nТерминал   " + fmt.Sprintf("%d × %d", m.width, m.height) + "\n\nРабочая папка\n" + m.workspace
 	if m.settingsLogin == "" {
-		return local + "\n\n" + muted.Render("Настройки dsh: укажите --url или DSH_TUI_URL.\nНужен URL входа работающего dsh с ?token=.")
+		return heading.Render("Настройки dsh · только чтение") + "\n\n" + muted.Render("Для чтения настроек работающего dsh\nукажите --url или DSH_TUI_URL.\nНужен URL входа с ?token=.")
 	}
 	lines := []string{heading.Render("Настройки dsh · только чтение"), muted.Render("←/→ — раздел · r — обновить · колесо — прокрутка")}
 	if m.settingsLoading {
@@ -224,4 +223,8 @@ func settingsFields(ns settingsNamespace) []string {
 		lines = append(lines, "… Вывод ограничен 1000 строками.")
 	}
 	return lines
+}
+
+func (m *model) tuiSettingsView() string {
+	return heading.Render("Настройки TUI · сведения о клиенте") + "\n\nВерсия     " + version + "\nИнтерфейс  Русский · тёмная тема\nТерминал   " + fmt.Sprintf("%d × %d", m.width, m.height) + "\n\nРабочая папка\n" + m.workspace + "\n\n" + muted.Render("Параметры клиента показаны только для чтения.")
 }

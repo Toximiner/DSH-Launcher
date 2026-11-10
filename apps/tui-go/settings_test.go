@@ -115,7 +115,7 @@ func TestSettingsRefreshPreservesSnapshotAndDraft(t *testing.T) {
 	m := newModel()
 	m.settingsLogin = "http://localhost/?token=private-token"
 	m.settingsContext = context.Background()
-	m.page = 2
+	m.page = dshSettingsPage
 	m.input.SetValue("draft")
 	snapshot := &settingsSnapshot{Namespaces: []settingsNamespace{{NS: "first", Value: map[string]any{"model": "actual-value"}}, {NS: "second", Value: map[string]any{"limit": 10}}}}
 	m.Update(settingsResult{snapshot: snapshot})

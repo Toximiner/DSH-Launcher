@@ -1,4 +1,4 @@
-# Go TUI preview — checkpoint 4
+# Go TUI preview — checkpoint 5
 
 This interactive migration checkpoint adds read-only dsh settings to the panel
 layout next to the working
@@ -16,8 +16,10 @@ It can read settings from an already running dsh 0.2.2-rc.1. Chat does not conne
 to dsh or send messages yet. Submitted text appears as a
 local draft card; it is never represented as an assistant reply. Tab focuses the sidebar, Up/Down selects a page, Enter focuses
 its content, and Esc returns to chat without losing the draft. Sessions shows
-only the local draft; Log shows actual local application information. Without a login URL, Settings
-shows local window information and connection instructions.
+only the local draft; Log shows actual local application information. The sidebar
+separates **Настройки dsh** (read-only backend snapshots and connection instructions)
+from **Настройки TUI** (local client version, interface, terminal size, and workspace).
+Local client information stays available with or without a backend login URL.
 `/help` lists local commands, `/clear` clears the view, and `/exit` or Ctrl+D exits. Node.js and npm
 are not needed to run this preview.
 
@@ -46,7 +48,7 @@ DSH_TUI_URL='http://127.0.0.1:3080/?token=YOUR_TOKEN' ./dsh-launcher-tui-go
 Only loopback HTTP(S) URLs are accepted; remote hosts can use an SSH tunnel.
 The client signs in through `/connect` and reads `/api/settings/describe`.
 It never calls settings write endpoints or loads the settings document from disk.
-Open Settings with the mouse or sidebar keyboard navigation. Left/Right switches
+Open **Настройки dsh** with the mouse or sidebar keyboard navigation. Left/Right switches
 namespaces, `r` refreshes the snapshot, and the wheel or PgUp/PgDn scrolls values.
 Loaded namespaces are sorted by their backend names; fields retain API names.
 Schema-declared secrets show only whether they are set. Neither the schema nor

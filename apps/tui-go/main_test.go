@@ -95,8 +95,12 @@ func TestNavigationPreservesDraft(t *testing.T) {
 		t.Fatal("sessions view did not open")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if !strings.Contains(clean(m.View()), "Данные этого окна") {
-		t.Fatal("settings view did not open")
+	if m.page != dshSettingsPage || !strings.Contains(clean(m.View()), "Для чтения настроек работающего dsh") {
+		t.Fatal("dsh settings view did not open")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if m.page != tuiSettingsPage || !strings.Contains(clean(m.View()), "сведения о клиенте") {
+		t.Fatal("TUI settings view did not open")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if m.page != 0 || m.navFocused || m.input.Value() != "Мой черновик" {

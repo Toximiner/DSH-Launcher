@@ -26,10 +26,10 @@ func TestMouseNavigationAndComposer(t *testing.T) {
 				t.Fatalf("click did not select page %d", page)
 			}
 		}
-		if !strings.Contains(clean(strings.Split(m.View(), "\n")[13]), "Локальный") {
+		if !strings.Contains(clean(strings.Split(m.View(), "\n")[14]), "Локальный") {
 			t.Fatal("draft target is not aligned with the sidebar")
 		}
-		mouse(m, 5, 13, tea.MouseButtonLeft, tea.MouseActionPress)
+		mouse(m, 5, 14, tea.MouseButtonLeft, tea.MouseActionPress)
 		if m.page != 0 || !m.input.Focused() || m.input.Value() != "draft 世界" {
 			t.Fatal("clicking the local draft lost input or failed to focus chat")
 		}
@@ -88,5 +88,16 @@ func TestMouseScrollAndIgnoredEvents(t *testing.T) {
 	mouse(m, 5, 8, tea.MouseButtonLeft, tea.MouseActionPress)
 	if m.page != 0 {
 		t.Fatal("mouse navigated an invisible layout")
+	}
+}
+
+func TestHiddenDraftDoesNotCaptureSidebarStatusClick(t *testing.T) {
+	m := newModel()
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 18})
+	m.page = tuiSettingsPage
+	m.resize()
+	mouse(m, 5, 14, tea.MouseButtonLeft, tea.MouseActionPress)
+	if m.page != tuiSettingsPage {
+		t.Fatal("hidden draft captured a click on sidebar status")
 	}
 }

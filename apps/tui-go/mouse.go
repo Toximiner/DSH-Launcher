@@ -48,7 +48,7 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 		}
 		// A blank row and session heading follow navigation.
 		draft := area{1, navigation.y + len(pages) + 2, sidebarWidth - 2, 1}
-		if draft.contains(msg.X, msg.Y) {
+		if draft.y < bodyTop+bodyHeight-3 && draft.contains(msg.X, msg.Y) {
 			return m.showChat()
 		}
 	}

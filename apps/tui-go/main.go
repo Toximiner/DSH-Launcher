@@ -21,10 +21,18 @@ import (
 	"golang.org/x/term"
 )
 
-const version = "0.2.0-preview.4"
+const version = "0.2.0-preview.5"
 const help = "/help — справка\n/clear — очистить экран\n/exit — выйти\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
-var pages = []string{"Чат", "Сессии", "Настройки", "Журнал"}
+const (
+	chatPage = iota
+	sessionsPage
+	dshSettingsPage
+	tuiSettingsPage
+	logPage
+)
+
+var pages = []string{"Чат", "Сессии", "Настройки dsh", "Настройки TUI", "Журнал"}
 
 type quitMsg struct{}
 
@@ -93,9 +101,11 @@ func (m *model) rebuild() {
 	switch m.page {
 	case 1:
 		content = heading.Render("Локальный черновик") + "\n\nТекст в этом окне сохраняется только в памяти.\n\n" + muted.Render("Сессии dsh недоступны без подключения.") + "\n\nEsc — вернуться в чат"
-	case 2:
+	case dshSettingsPage:
 		content = m.settingsView()
-	case 3:
+	case tuiSettingsPage:
+		content = m.tuiSettingsView()
+	case logPage:
 		content = heading.Render("Журнал клиента · локально") + "\n\n" + strings.Join(m.events, "\n")
 	}
 	m.viewport.SetContent(ansi.Hardwrap(content, max(1, m.viewport.Width), true))
@@ -171,7 +181,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "left", "right":
-			if m.page == 2 && m.settings != nil && len(m.settings.Namespaces) > 0 {
+			if m.page == dshSettingsPage && m.settings != nil && len(m.settings.Namespaces) > 0 {
 				delta := 1
 				if msg.String() == "left" {
 					delta = -1
@@ -182,7 +192,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "r":
-			if m.page == 2 {
+			if m.page == dshSettingsPage {
 				return m, m.loadSettings()
 			}
 		case "ctrl+c", "ctrl+d":
