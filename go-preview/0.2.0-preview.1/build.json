@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0-preview.1",
+  "source_commit": "e41b960",
+  "stage": "terminal shell only; no backend connection",
+  "sha256": {
+    "dsh-launcher-tui-go_linux_amd64": "0ffb30565748ab5b95eaa0f1b86ba064ff9703fe7dc828e43030db516a98852d",
+    "dsh-launcher-tui-go_linux_arm64": "61f5fe10b4c96d77ea09fa9cf58b1b2b8731c748f5fe8028b7d173b673760f2b"
+  }
+}
