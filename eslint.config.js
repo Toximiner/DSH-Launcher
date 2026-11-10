@@ -7,7 +7,7 @@ const js = require('@eslint/js');
 const globals = require('globals');
 
 module.exports = [
-  { ignores: ['node_modules/', 'test/docker/', 'logs/'] },
+  { ignores: ['node_modules/', 'test/docker/', 'logs/', 'build/'] },
   js.configs.recommended,
   {
     files: ['**/*.js'],
@@ -15,6 +15,13 @@ module.exports = [
     rules: {
       'no-unused-vars': ['error', { args: 'none', caughtErrors: 'none', varsIgnorePattern: '^_' }],
       'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
+  {
+    files: ['apps/tui-go/web/preview.js', 'tools/live/terminal.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: { ...globals.browser, Terminal: 'readonly', FitAddon: 'readonly', Go: 'readonly', dshTui: 'readonly' },
     },
   },
 ];

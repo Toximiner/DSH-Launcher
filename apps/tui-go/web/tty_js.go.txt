@@ -1,0 +1,12 @@
+//go:build js && wasm
+
+package tea
+
+import ("os"; "errors")
+
+// Browser preview drives Model.Update/View directly; Program.Run is unavailable.
+const suspendSupported = false
+func (p *Program) initInput() error { return errors.New("native TTY is unavailable in browser preview") }
+func openInputTTY() (*os.File,error) { return nil,errors.New("native TTY is unavailable in browser preview") }
+func suspendProcess() {}
+func (p *Program) listenForResize(done chan struct{}) { close(done) }

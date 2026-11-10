@@ -7,6 +7,9 @@ logs/
 # локальный ярлык для разработки (содержит абсолютные пути машины)
 dsh.desktop
 # test/docker: сборка .deb, tarball Node, логи прогонов
-test/docker/.work/
+test/**/.work/
+.pytest_cache/
 __pycache__/
 coverage/
+
+.live-data/

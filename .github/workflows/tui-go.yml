@@ -1,0 +1,71 @@
+name: tui-go-preview
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['apps/tui-go/**', '.github/workflows/tui-go.yml']
+  push:
+    branches: [main]
+    paths: ['apps/tui-go/**', '.github/workflows/tui-go.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  terminal-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: apps/tui-go/go.sum
+      - name: Unit tests and race detector
+        working-directory: apps/tui-go
+        run: go test -race ./...
+      - name: Build Linux binaries without CGO
+        working-directory: apps/tui-go
+        run: |
+          mkdir -p ../../build/tui-go
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o ../../build/tui-go/dsh-launcher-tui-go_linux_amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o ../../build/tui-go/dsh-launcher-tui-go_linux_arm64 .
+      - name: PTY checks without Node in PATH
+        run: |
+          python3 -m venv build/go-pty-env
+          build/go-pty-env/bin/pip install pyte==0.8.2
+          build/go-pty-env/bin/python apps/tui-go/test/terminal_preview.py build/tui-go/dsh-launcher-tui-go_linux_amd64
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.1'
+      - name: Install pinned dsh for protocol integration
+        run: npm install --prefix build/chat-test-runtime --ignore-scripts --no-audit --no-fund @deepseek-ai/dsh@0.2.2-rc.1
+      - name: Prepare official PTC source bootstrap missing from pinned npm package
+        run: python3 apps/tui-go/test/prepare_ptc.py build/ptc-bootstrap
+      - name: Actual dsh chat with a controlled local model
+        run: |
+          build/go-pty-env/bin/python apps/tui-go/test/real_chat.py \
+            --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
+            --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh" \
+            --ptc-bootstrap "$PWD/build/ptc-bootstrap/process-entry.ts"
+      - name: Build static browser preview
+        run: python3 apps/tui-go/web/build.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dsh-launcher-tui-browser-preview
+          path: |
+            build/tui-go-web/index.html
+            build/tui-go-web/*.js
+            build/tui-go-web/*.css
+            build/tui-go-web/tui.wasm.gz
+            build/tui-go-web/snapshot.json
+            build/tui-go-web/market-demo.json
+            build/tui-go-web/LICENSES.txt
+            build/tui-go-web/SHA256SUMS
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dsh-launcher-tui-go-preview
+          path: build/tui-go/dsh-launcher-tui-go_linux_*
+          if-no-files-found: error

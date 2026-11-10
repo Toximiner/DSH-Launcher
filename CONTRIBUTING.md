@@ -29,6 +29,30 @@ node test/markers.js   # marker-block integrity (also run by npm test)
 npm run coverage  # unit coverage with the gates in package.json
 ```
 
+The terminal app lives in `apps/tui-go` and uses Go/Bubble Tea. Run
+`go test -race ./...` and `go build` from that directory. PTY scenarios use
+`apps/tui-go/test/terminal.py` and run through `test/terminal_preview.py` with
+a built binary; install pyte in a project-local Python environment first.
+The `tui-go-preview` workflow checks amd64/arm64 builds, PTY behavior without Node,
+and the static WebAssembly browser preview. It also runs actual dsh against a
+controlled local model endpoint (`apps/tui-go/test/real_chat.py`), using an isolated
+profile and no paid model calls. This includes actual file reads and the dsh
+approval service: grants, refusals, cancellation, and pending-request recovery.
+Agent-question checks exercise actual ask_user_question, structured batches,
+multiline text, timed holds, continued replies, and cancellation. Queue checks
+verify two waiting follow-ups, reconnection, three individual FIFO turns, and confirmed removal of one pending
+task while preserving the active turn and other work. Queue editing checks cover
+discarding a draft, saving multiline text, model input, and retained FIFO order.
+Steering checks promote a queued item to the next step of the same turn, verify
+actual session journal events, and preserve remaining work across reconnect.
+Nested PTC checks cover real file reads, errors, restart, and bash cancellation.
+Run `python3 apps/tui-go/test/prepare_ptc.py build/ptc-bootstrap` first, then pass
+`--ptc-bootstrap "$PWD/build/ptc-bootstrap/process-entry.ts"` to `real_chat.py`.
+This verified official source worker is needed only because the pinned npm
+package omits its advertised PTC bootstrap; it is not shipped with the client.
+The test-only approval probe is never enabled by the live deployment. See `apps/tui-go/web/README.md`.
+The legacy JavaScript terminal app and its npm/Debian packaging are removed.
+
 ## CI
 
 - **build-deb** — runs on every PR and tag: unit tests, ESLint, coverage,

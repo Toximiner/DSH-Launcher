@@ -7,6 +7,54 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- Go preview 0.2.0-preview.17 groups nested PTC tool cards under their explicit parents with independent states, arguments, results/errors, F6 navigation, expansion, and mouse handling. Missing parents and invalid chains are labeled; reconnect restores the tree. Actual PTC integration uses a pinned official source bootstrap only in the isolated test profile because dsh 0.2.2-rc.1 npm packaging omits its worker file.
+
+- Go preview 0.2.0-preview.16 promotes a pending task to steering via F9 → Ctrl+G with explicit confirmation. dsh consumes it on the next step of the same turn without interrupting the current response; remaining tasks stay queued. Idle/stale state and observed content changes block promotion; uncertain results never retry automatically. Actual dsh with a controlled provider verifies same-turn journal events, retained FIFO work, and reconnect recovery.
+
+- Go preview 0.2.0-preview.15 adds multiline editing of pending tasks via F9 → F3. Enter inserts a line, F5 saves through the dsh API, and Esc discards the edit while preserving the chat draft. Observed conflicts, already admitted items, and stale state block saving; failed saves retain the draft without automatic retries. Actual dsh with a controlled provider verifies edited model input, FIFO order, reconnect, and the minimum 44×18 layout.
+
+- Go preview 0.2.0-preview.14 adds a queue dialog via F9, `/queue`, or the inline heading. Individual removal requires explicit confirmation and uses dsh item identity, preserving the active turn and remaining work. Uncertain mutations never retry automatically; stale state disables removal. Actual dsh with a controlled provider verifies retained work, reconnect, mouse handling, and the minimum 44×18 layout.
+
+### Changed
+
+- Disabled the public GitHub Pages demo by removing its browser runtime and advertised links. The landing page and demo placeholder are also removed. Native Go downloads remain available through direct links; live usage is documented for private Codespaces.
+
+### Added
+
+- Go preview 0.2.0-preview.13 queues follow-up tasks while the agent is running, using the dsh server inbox. Chat shows pending tasks and submission receipts; authoritative history removes admitted items without duplicates. Queue state restores on reconnect and uncertain submissions never retry automatically. F8 retains pending work. Queue cancellation/editing and steering remain subsequent increments. Actual dsh with a controlled provider verifies three individual FIFO turns and client reconnection.
+
+- Go preview 0.2.0-preview.12 adds a dedicated agent-question dialog with single/multiple choice, multiline custom answers, explicit skip, and batch navigation. F5 submits the complete batch through the dsh question channel without changing the chat draft. F7 reopens deferred requests; F8 cancels. Connected clients hold timed questions; continued questions restore from the session projection and use userQuestions/answer. Actual ask_user_question integration with a controlled provider and UI captures are included.
+
+- Go preview 0.2.0-preview.11 adds explicit one-shot permission dialogs with reason, arguments, scrolling, and allow/reject controls. Esc defers, F7 reopens, F8 cancels, and the composer draft survives. Answers use the receiving Peer; disconnected actions are disabled and uncertain answers never retry automatically. Decisions restore from dsh history. Actual dsh integration covers execution only after approval, rejection, cancellation, and reconnection using a controlled test model provider.
+
+- Go preview 0.2.0-preview.10 adds tool cards with arguments, results, errors, cancellation state, and folded long output. F6 / Shift+F6 selects cards, Enter or click expands them, and Esc restores composer focus without losing the draft. Reconnection restores cards without duplication. Actual dsh integration verifies a real file read and missing-file error using a controlled test provider. Permission and question dialogs remain pending.
+
+- Go preview 0.2.0-preview.9 sends session prompts, streams assistant text over WebSocket, supports F8 / `/stop`, and reconnects read subscriptions. History and partial output reconcile against dsh; service context is not presented as user text. Uncertain submissions are never retried automatically; `/retry-send` retains the original requestId. Adds Go/PTY checks and CI integration against actual dsh with a controlled local model endpoint. No cloud LLM was verified without credentials.
+
+- Go preview 0.2.0-preview.8 adds File/View/Help menus, modal TUI settings with persisted mouse/input-history preferences, shortcut help, and About. F10 opens the menu; F4 / Alt+T opens settings. TUI settings leave the sidebar; dialogs preserve the page, scroll, draft, and focus. Electron-specific controls are excluded. Tests cover minimum dimensions, mouse, save failures, and restart persistence.
+
+- Added a private live Codespaces deployment with Node 24, actual dsh and dshmarket, native Go TUI through ttyd, font fitting, and touch navigation.
+
+- Go preview 0.2.0-preview.7 adds a marketplace TUI with catalog search, installed packages, mouse controls, and confirmed install/update/remove actions. State is reread after operations and progress comes from dshmarket. The browser has a clearly labeled sample catalog without backend writes.
+
+- Go preview 0.2.0-preview.6 adds session attachment/creation/selection, backend-confirmed agent modes, pending plan transitions, and goal commands. `--start` offers profile-local dshmarket preinstallation with skip/remember choices and user-local pnpm. Includes API, full PTY, and real dsh checks; chat text remains local.
+
+- Adapted the browser preview for phones with automatic terminal scaling, zoom/Fit buttons, scrolling after manual enlargement, and touch navigation. The terminal adapts when the visual viewport changes, including an on-screen keyboard.
+
+- Removed the legacy JS TUI source, npm/Debian packaging, workflow, and its scenarios. Moved the shared PTY driver into the Go app. Fixed ESLint browser globals for the web adapter and excluded generated builds.
+
+- Added a static WebAssembly browser preview of the shared Go TUI model, with input, navigation, and mouse controls through xterm.js. Requires no external terminal tunnel. dsh settings are explicitly labeled as a demo snapshot; no user backend connection is made.
+
+- Go preview 0.2.0-preview.5 separates dsh and TUI settings in the sidebar. TUI settings display client information regardless of backend connection; dsh snapshot refresh is confined to its own page.
+
+- Go preview 0.2.0-preview.4 reads live dsh settings through `settings/describe`, using a login URL from `DSH_TUI_URL` or `--url`. Includes namespace navigation, scrolling, snapshot refresh, and retaining previous data after an error. Secrets are hidden; editing is unavailable. Validated the protocol, errors, PTY flow, and real dsh 0.2.2-rc.1.
+
+- Go preview 0.2.0-preview.3: click sidebar pages or the local draft, focus the composer, and scroll content under the pointer. `--no-mouse` disables mouse capture. Tests cover hit areas, SGR mouse input, and terminal mode restoration.
+
+- Go preview 0.2.0-preview.2: sidebar navigation, conversation and composer panels, connection status, and local pages. Navigation preserves drafts; narrow terminals hide the sidebar. Backend connection is still pending.
+
+- First standalone Go/Bubble Tea TUI preview: input, history with draft restoration, scrolling, resizing, and clean shutdown. The first checkpoint had no backend connection. Includes Go tests and PTY checks without Node in PATH.
+
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
 ## [1.18.0] — 2026-11-05

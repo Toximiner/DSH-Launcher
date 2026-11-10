@@ -7,6 +7,36 @@
 A small Electron app: a window that opens **DeepSeek Harness**
 (`dsh web`) and manages its process along the way.
 
+Run a private live instance with actual dsh in GitHub Codespaces: [instructions](tools/live/README.md).
+
+## Terminal version (experimental)
+
+GUI parity inventory, implementation milestones, and plugin strategy: [TUI roadmap](docs/tui-roadmap/README.en.md).
+
+The public demo preview is disabled. For a live instance with actual dsh, use
+the [private Codespaces deployment](tools/live/README.md).
+
+The Linux terminal client uses **Go + Bubble Tea** in [apps/tui-go](apps/tui-go/README.md).
+It provides panels, mouse and keyboard navigation, input history, and scrolling.
+TUI preferences open from the top File menu, F4, or Alt+T; mouse/history choices
+are persisted. dsh settings remain a separate section. Pass a running dsh login URL through
+`DSH_TUI_URL` or `--url` to read its settings without editing them.
+Session attachment/creation and agent modes are available. `--start` launches dsh
+and offers dshmarket preinstallation into its profile. The Marketplace page provides
+search and confirmed plugin install/update/remove actions. Attached sessions support
+streamed text chat: Enter sends, F8 stops. Offline input remains a local draft.
+Actual replies require a configured LLM provider in dsh. The dsh installer remains pending. The legacy JS terminal client is removed.
+
+Tool cards show execution state and results; F6 selects a card, Enter or click
+expands its details, and Esc restores composer focus. Permission dialogs support explicit one-shot allow/reject; F7 reopens a deferred request. Agent questions support options, multiple selections, and multiline custom text; F5 submits the batch and F7 reopens deferred requests.
+
+While the agent runs, Enter queues the next task in dsh. Pending tasks appear
+in chat; F8 stops the current task and retains the queue.
+
+Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.17/dsh-launcher-tui-go_linux_amd64) ·
+[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.17/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.17/SHA256SUMS).
+The Go client runs without Node.js; the dsh backend requires Node.js 24.9+.
+
 ## How it works
 
 - **Clicking the “DeepSeek Harness” shortcut**:

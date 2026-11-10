@@ -1,0 +1,96 @@
+{
+  "profile": "demo",
+  "version": "1.73.17",
+  "plugins": [
+    {
+      "name": "dsh-j-space",
+      "npm": "@anonyjcy/dsh-j-space",
+      "url": "https://github.com/AnonyJcy/dsh-j-space",
+      "version": "1.2.5",
+      "description": {
+        "en": "J-Space Cognition Suite SV1 native agent preset and standalone Cordis plugin: 13 modules, persistent controller and decoupled workspace.",
+        "zh": "J-Space Cognition Suite SV1 原生智能体预设与 Cordis 插件：提供 13 大认知工程模块、持久化控制器与状态外化工作区。"
+      }
+    },
+    {
+      "name": "dsh-preset-deep",
+      "npm": "dsh-preset-deep",
+      "url": "https://github.com/anticbv/dsh-preset-deep",
+      "version": "0.1.2",
+      "description": {
+        "en": "A fifth DeepSeek Harness work mode that requires a falsification design (at least two pieces of evidence that could disprove the plan) in every plan and tags each factual claim with its source (\\[文件]/\\[检索]/\\[记忆]) or \\[未知]; evidence grading follows the project's AGENTS.md.",
+        "zh": "给 DeepSeek Harness 增加第五个工作模式：每个计划必须含「证伪设计」（至少两条能推翻方案的证据），每条事实须标来源（\\[文件]/\\[检索]/\\[记忆]）或 \\[未知]；取证分级按项目 AGENTS.md 执行。"
+      }
+    },
+    {
+      "name": "dsh-prompt-polish",
+      "npm": "@benrong/dsh-prompt-polish",
+      "url": "https://github.com/benrong2048-boop/dsh-prompt-polish",
+      "version": "0.2.6",
+      "description": {
+        "en": "Turns a one-line DSH draft into a complete task brief (role / goal / constraints / output format). The engine is a byte-verified port of linshenkx/prompt-optimizer (three modes, 10 templates identical to upstream); history is consent-gated with version chains and structural comparison; every run reports its token usage. Nothing is written back or sent without a click.",
+        "zh": "把 DSH 输入框里的一句话补成完整任务书（角色/目标/约束/输出格式）。引擎是 linshenkx/prompt-optimizer 的逐字节移植：三种优化模式、10 个模板与上游一致；历史为授权制、带版本链与结构对比；每次润色的 token 消耗可见。未经点击不写回、不发送。"
+      }
+    },
+    {
+      "name": "dsh-progress-nudge",
+      "npm": "dsh-progress-nudge",
+      "url": "https://github.com/buaaflyaway/dsh-progress-nudge",
+      "version": "0.2.1",
+      "description": {
+        "en": "Counts the assistant rounds that call tools without writing anything to the user, then inserts a short progress reminder as a visible user message at the next model-request boundary, so a long silent tool loop reports what it has done before continuing. A Settings page adjusts the silence threshold (default 10), the reminder wording, the language (en / zh-CN / zh-TW), whether the reminder repeats every further threshold of silent rounds, whether subagent sessions are counted, and whether Agent Teams nudges the lead only or every member.",
+        "zh": "统计「只调用工具、没有向用户输出文字」的助手轮数，在下一次模型请求的边界把一条简短的过程汇报提醒作为可见的用户消息插入，让长时间沉默的工具循环先汇报已完成的工作再继续。设置页可调整沉默阈值（默认 10）、提醒文案、文案语言（en / zh-CN / zh-TW）、是否每再积累一个阈值就再次提醒、是否统计子代理会话，以及启用智能体团队时只提醒 Lead 还是所有成员。"
+      }
+    },
+    {
+      "name": "dsh-answer-reviewer",
+      "npm": "dsh-answer-reviewer",
+      "url": "https://github.com/bycall/dsh-answer-reviewer",
+      "version": "0.7.6",
+      "description": {
+        "en": "Agentic answer reviewer for DeepSeek Harness: each final assistant turn is re-reviewed by a separate LLM graded 1-100; below-threshold scores steer the agent back with concrete feedback. The score is shown as a chip on the answer's action row (green pass / red needs-work, with retry count and reason on hover). Live gate config from the Reviewer 配置 tab in the conversation view ring above the composer (对话 / 轨迹 / 记忆系统 / Reviewer 配置), from a 127.0.0.1 HTTP server, or from an optional right-sidebar tab via dsh-better-sidebar.",
+        "zh": "智能体回答审查器：每一轮 agent 的最终输出由独立 LLM 重新打分（1-100），低于阈值时携带具体反馈引导 agent 自我修正；评分以角标形式展示在该回答的操作行上（通过=绿、未达标=红，悬停可见重试次数与原因）。闸值配置可从输入框上方视图栏的「Reviewer 配置」标签页（对话 / 轨迹 / 记忆系统 / Reviewer 配置）、本机 127.0.0.1 HTTP 服务或 dsh-better-sidebar 侧栏标签页实时修改。"
+      }
+    },
+    {
+      "name": "clearai-dsh",
+      "npm": "clearai-dsh",
+      "url": "https://github.com/Clearailhc/clearai-dsh",
+      "version": "0.6.0",
+      "description": {
+        "en": "An agent preset for evidence-checked research: every step advances only through system-verified observations, L3+ claims go to an independent evaluator, and the session folds into a replayable ledger that grows into a browsable domain ontology. Requires DSH >=0.1.7-alpha.1.",
+        "zh": "以证据为准的研究用智能体预设：每一步只能靠系统核验过的观测推进，L3 以上的结论交给独立评估者，整场会话折成一份可重放的账本，并长成可浏览的领域本体。需要 DSH >=0.1.7-alpha.1。"
+      }
+    },
+    {
+      "name": "dsh-moa-native",
+      "npm": "dsh-moa-native",
+      "url": "https://github.com/DDL095/dsh-moa-native",
+      "version": "4.5.3",
+      "description": {
+        "en": "Native generation-time Mixture-of-Agents: every turn, reference models run the same session context in parallel as pre-run drafts and one aggregator executes with full tooling; config-as-model recipes, F mirror / R trimmed views, enforced subagent gating (dual-shape session indexing), derived per-recipe vision (vision refs relay image reads to text-only aggregators), tiered cadence with separate steering and patrol rosters plus frozen reuse between beats, degeneration guard dropping degenerate reference output, anonymized model face (failure notices carry no provider identity), and cache-friendly guidance placement (the rehearsal record is pinned where it was produced instead of appended to every request, so the cached prefix covers it and each step pays only for what was added since - on by default across every cadence).",
+        "zh": "原生生成时 MoA：每轮参考模型并行预演同一会话上下文产出草稿，单一聚合模型带完整工具循环执行；配置即模型配方、F 镜像 / R 裁剪双视野、子会话门控（双形态会话目录索引，修复后实效）、按成分派生的配方级视觉（视觉参考路可为纯文本聚合转述图像）、节拍节奏（定调与巡检两套阵容、拍间冻结复用）、退化守卫（剔除退化的参考输出）、模型面匿名（失败提示零供应商身份）、缓存友好化注入（预演记录钉在产出它的那一步而非每步追加到请求末尾，缓存前缀覆盖它、每步只付新增量，缺省开启、全 cadence 档生效）。"
+      }
+    },
+    {
+      "name": "dsh-help-me-to-ask",
+      "npm": "dsh-help-me-to-ask",
+      "url": "https://github.com/DoreiHime/dsh-help-me-to-ask",
+      "version": "1.0.5",
+      "description": {
+        "en": "On the first real work message of each chat window, asks for the missing goal, deliverable, constraints and acceptance criteria, then turns the answers into a short task sheet and injects it into the chat. Pure greetings are ignored.",
+        "zh": "每个聊天窗口的第一段工作内容前，先问清缺失的目标、交付物、限制与验收标准，再把回答整理成简短的任务说明注入聊天；纯寒暄不会触发。"
+      }
+    }
+  ],
+  "installed": {
+    "@anonyjcy/dsh-j-space": "1.2.5"
+  },
+  "status": {
+    "busy": false,
+    "active": false
+  },
+  "present": [
+    "@anonyjcy/dsh-j-space"
+  ]
+}
