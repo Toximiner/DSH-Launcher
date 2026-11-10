@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0-preview.5",
+  "source_commit": "7d7bde0b5d75d56536fa2b32226bac48921c9643",
+  "stage": "separate read-only dsh and local TUI settings; chat remains local",
+  "sha256": {
+    "dsh-launcher-tui-go_linux_amd64": "ca9ec6575e7405f1ad6aa43d4a51bdb9ac997840c271462a3e770308ada44bb8",
+    "dsh-launcher-tui-go_linux_arm64": "c9d99bb10f22cafdb37d230b9e4bbb26d524a7cf8986b4f89c91bef11bfc4d79"
+  }
+}
