@@ -92,9 +92,11 @@ type chatUpdate struct {
 	notice chatNotice
 }
 type chatMessage struct {
-	seq        int
-	role, text string
-	tool       *chatTool
+	seq          int
+	role, text   string
+	tool         *chatTool
+	approvalID   string
+	approvalTool string
 }
 type pendingPrompt struct{ ID, Text, Status string }
 type chatState struct {
@@ -149,7 +151,7 @@ func (m *model) startChat(id string) tea.Cmd {
 	s := &chatState{id: id, epoch: m.chatEpoch, ctx: ctx, cancel: cancel, inbox: make(chan chatNotice, 32), cursor: -1, clearedThrough: -1}
 	m.chat = s
 	login := m.settingsLogin
-	return func() tea.Msg { go followChat(ctx, login, id, s.inbox); return waitChat(s)() }
+	return tea.Batch(func() tea.Msg { go followChat(ctx, login, id, s.inbox); return waitChat(s)() }, m.startApprovals(ctx, id, s.epoch))
 }
 
 func (m *model) stopChat() {
@@ -395,6 +397,9 @@ func (a *chatAttempt) restore() string {
 
 func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	var data struct {
+		ID        string `json:"id"`
+		ToolName  string `json:"toolName"`
+		Outcome   string `json:"outcome"`
 		CallID    string `json:"callId"`
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
@@ -423,20 +428,27 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 			} `json:"content"`
 		} `json:"message"`
 		Stream []compactChatRecord `json:"stream"`
-		Reason struct {
-			Kind  string `json:"kind"`
-			Error struct {
-				Code string `json:"code"`
-			} `json:"error"`
-		} `json:"reason"`
+		Reason json.RawMessage     `json:"reason"`
 	}
 	switch event.Type {
-	case "user/message", "assistant/message", "assistant/attempt", "turn/start", "turn/end", "tool/call", "tool/result":
+	case "user/message", "assistant/message", "assistant/attempt", "turn/start", "turn/end", "tool/call", "tool/result", "approval/asked", "approval/decided":
 		if err := json.Unmarshal(event.Data, &data); err != nil {
 			return errors.New("неподдерживаемые данные истории")
 		}
 	}
+	var reason struct {
+		Kind  string `json:"kind"`
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if event.Type == "turn/end" && len(data.Reason) > 0 {
+		if json.Unmarshal(data.Reason, &reason) != nil {
+			return errors.New("неподдерживаемая причина завершения")
+		}
+	}
 	text, role := "", ""
+	approvalID, approvalTool := "", ""
 	var tool *chatTool
 	switch event.Type {
 	case "user/message":
@@ -491,6 +503,33 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 				}
 			}
 		}
+	case "approval/asked", "approval/decided":
+		if data.ID == "" || len(data.ID) > 256 {
+			return errors.New("разрешение без корректного идентификатора")
+		}
+		approvalID = data.ID
+		approvalTool = boundedToolText(data.ToolName, 256)
+		role = "РАЗРЕШЕНИЕ · ОЖИДАЕТ ОТВЕТА"
+		var detail string
+		if event.Type == "approval/asked" {
+			if len(data.Reason) > 0 && json.Unmarshal(data.Reason, &detail) != nil {
+				return errors.New("неподдерживаемая причина разрешения")
+			}
+			text = approvalTool + "\n" + boundedToolText(detail, toolArgumentsLimit)
+		} else {
+			for _, message := range s.messages {
+				if message.approvalID == approvalID {
+					approvalTool = message.approvalTool
+					break
+				}
+			}
+			if approvalTool == "" {
+				approvalTool = "Запрос вне окна истории"
+			}
+			label := approvalOutcomeLabel(data.Outcome)
+			role = "РАЗРЕШЕНИЕ"
+			text = approvalTool + " · " + label
+		}
 	case "turn/start":
 		if m.session != nil && m.session.ID == s.id {
 			m.session.Running = true
@@ -504,7 +543,7 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 			}
 			next := *previous
 			next.State = "unknown"
-			if data.Reason.Kind == "aborted" {
+			if reason.Kind == "aborted" {
 				next.State = "stopped"
 			}
 			s.messages[i].tool = &next
@@ -512,10 +551,10 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 		if m.session != nil && m.session.ID == s.id {
 			m.session.Running = false
 		}
-		if data.Reason.Kind == "error" {
-			s.note = failureNote(data.Reason.Error.Code)
+		if reason.Kind == "error" {
+			s.note = failureNote(reason.Error.Code)
 		}
-		if data.Reason.Kind == "aborted" {
+		if reason.Kind == "aborted" {
 			s.note = "Выполнение остановлено."
 		}
 	}
@@ -553,13 +592,13 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	}
 	kept := s.messages[:0]
 	for _, message := range s.messages {
-		if !removed[message.seq] && !(tool != nil && message.tool != nil && tool.ID == message.tool.ID) {
+		if !removed[message.seq] && !(tool != nil && message.tool != nil && tool.ID == message.tool.ID) && !(approvalID != "" && message.approvalID == approvalID) {
 			kept = append(kept, message)
 		}
 	}
 	s.messages = kept
 	if text != "" || tool != nil {
-		message := chatMessage{seq: event.Seq, role: role, text: text, tool: tool}
+		message := chatMessage{seq: event.Seq, role: role, text: text, tool: tool, approvalID: approvalID, approvalTool: approvalTool}
 		s.messages = append(s.messages, message)
 	}
 	positions := make(map[int]int, len(s.surface))

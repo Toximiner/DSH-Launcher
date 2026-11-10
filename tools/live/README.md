@@ -19,7 +19,9 @@ Codespaces also consume storage quota until deleted.
 The backend, marketplace, and native chat are live. Enter sends to the attached
 session; F8 or the touch toolbar Stop button requests cancellation. Tool cards
 show arguments, state, and results. F6 or the touch toolbar Tools button selects
-cards; Enter/click expands details and Esc restores composer focus. Model replies need your own provider
+cards; Enter/click expands details and Esc restores composer focus. Permission
+dialogs support Left/Right + Enter or mouse allow/reject. F7 or the Permission
+touch button reopens a deferred request; the toolbar includes arrow controls. Model replies need your own provider
 configuration in dsh; this deployment bundles no provider key. Never commit API keys.
 
 Outside Codespaces, set `DSH_LIVE_PASSWORD` before starting: HTTP Basic auth uses

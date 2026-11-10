@@ -36,7 +36,9 @@ a built binary; install pyte in a project-local Python environment first.
 The `tui-go-preview` workflow checks amd64/arm64 builds, PTY behavior without Node,
 and the static WebAssembly browser preview. It also runs actual dsh against a
 controlled local model endpoint (`apps/tui-go/test/real_chat.py`), using an isolated
-profile and no paid model calls. See `apps/tui-go/web/README.md`.
+profile and no paid model calls. This includes actual file reads and the dsh
+approval service: grants, refusals, cancellation, and pending-request recovery.
+The test-only approval probe is never enabled by the live deployment. See `apps/tui-go/web/README.md`.
 The legacy JavaScript terminal app and its npm/Debian packaging are removed.
 
 ## CI

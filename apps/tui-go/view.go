@@ -131,8 +131,11 @@ func (m *model) View() string {
 	if m.page == chatPage && len(m.toolIDs()) > 0 {
 		hints = "F6 инструменты · Enter раскрыть · Esc ввод"
 	}
+	if m.approvals != nil && len(m.approvals.requests) > 0 {
+		hints = "F7 разрешение · F8 остановить агента"
+	}
 	footer := bar(muted.Render(hints), muted.Render("Ctrl+D выход"), width)
-	return m.chromeView(header + "\n" + body + "\n" + footer)
+	return m.approvalView(m.chromeView(header + "\n" + body + "\n" + footer))
 }
 
 func (m *model) modeControls() string {

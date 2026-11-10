@@ -1,4 +1,4 @@
-# Go TUI preview — checkpoint 10
+# Go TUI preview — checkpoint 11
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
@@ -29,7 +29,21 @@ expansion choices without duplicating results. If a call predates the history
 window, the result is explicitly labeled rather than assigned an invented name.
 Arguments are bounded to 64 KiB, result text to 1 MiB, and retained chat to 4 MiB;
 truncation is labeled. Non-text results remain placeholders. Incremental stdout,
-nested PTC/subagent trees, permission dialogs, and question forms are not implemented.
+nested PTC/subagent trees and question forms are not implemented.
+
+dsh permission requests open a separate scrollable dialog containing the tool,
+reason, and available call arguments. No action is selected on arrival: use
+Left/Right or Tab to select Reject / Allow, then Enter, or click the button.
+Permission is one-shot. Esc defers without deciding; F7 reopens the current
+request; F8 cancels the agent. The original draft and other panels are preserved.
+The client subscribes to `$events` and answers through `$events/result` using
+exactly the receiving authenticated Peer. Disconnection disables answers;
+reconnection replays outstanding requests. An uncertain answer is not resent.
+Withdrawals and decisions from another client remove stale dialogs. Actual
+`approval/asked` / `approval/decided` history displays the authoritative outcome.
+The queue displays up to 32 requests and reloads excess pending requests after
+that batch. Unsupported question interactions are delegated without inventing
+an answer. No permanent allowance or permission-policy editing is implemented.
 
 Tab focuses the sidebar, arrows select a page, and Enter focuses its content.
 Esc returns to chat without losing the draft. Sessions supports refresh (`r`),
@@ -112,10 +126,9 @@ Changing sessions closes only the old subscription, not the remote agent.
 
 F8, the composer Stop button, or `/stop` calls `session/cancel`; it does not remove queued backend messages.
 The client displays confirmed turn completion/cancellation and safe error hints.
-Provider error bodies are not copied into logs or chat. Input questions/approvals
-are reported as pending, but answering them is the next milestone; F8 remains
-available. Rich tool cards, Markdown, attachments, and full paginated history are
-later work. Replacements referencing history outside the loaded window may require
+Provider error bodies are not copied into logs or chat. Permissions use their
+own dialogs; question forms remain pending and F8 stays available. Rich Markdown,
+attachments, and full paginated history remain later work. Replacements referencing history outside the loaded window may require
 a new session; the client reports this instead of guessing an order.
 
 The supported API was verified against actual dsh 0.2.2-rc.1 with a controlled
@@ -233,7 +246,8 @@ Work proceeds in small, reviewable checkpoints with user feedback. The
 and milestone order. Milestone 1 is complete: TUI preferences live in the top menu,
 while dsh settings remain separate. Streamed text chat is implemented in preview.9; validation with an actual cloud
 model remains pending working provider access. Tool-result cards are implemented in preview.10. The next functional checkpoint is
-permission dialogs, followed by user questions and queue controls. Settings editing, workspace features,
+user questions, followed by queue controls. Permission dialogs are implemented
+in preview.11 and tested through the actual dsh approval service. Settings editing, workspace features,
 additional plugin support, and launcher lifecycle remain planned. No
 full-parity claim is made by this preview. The legacy JS client and its packaging
 have been removed; its dsh installation flow remains pending in Go.

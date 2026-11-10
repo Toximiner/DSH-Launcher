@@ -327,7 +327,12 @@ func (m *model) modeDescription() string {
 			label += "\nАгент: не выполняется"
 		}
 		if len(m.session.PendingInput) > 0 {
-			label += "\nОжидается подтверждение/ответ. Эти диалоги пока недоступны в TUI; F8 — отмена."
+			label += "\nОжидается подтверждение/ответ. F7 — разрешения · F8 — отмена."
+			for _, kind := range m.session.PendingInput {
+				if kind == "question" {
+					label += "\nВопросы агента пока недоступны в TUI."
+				}
+			}
 		}
 	}
 	if m.sessionBusy {

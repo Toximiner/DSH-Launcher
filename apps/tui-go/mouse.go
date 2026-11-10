@@ -22,6 +22,9 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if !m.mouseEnabled() {
 		return nil
 	}
+	if cmd, handled := m.approvalMouse(msg); handled {
+		return cmd
+	}
 	if cmd, handled := m.chromeMouse(msg); handled {
 		return cmd
 	}

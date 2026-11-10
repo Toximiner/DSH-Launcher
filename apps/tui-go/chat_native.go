@@ -51,6 +51,18 @@ func readChatConnection(ctx context.Context, login, id string, receive func(*cha
 		return err
 	}
 	defer api.close()
+	return readMuxStream(ctx, api, "session/follow", map[string]any{"request": map[string]any{
+		"address": map[string]any{"kind": "session", "sessionId": id}, "maxMessages": 50, "assistantStream": true,
+	}}, func(data json.RawMessage) bool {
+		var frame chatFrame
+		if json.Unmarshal(data, &frame) != nil {
+			return false
+		}
+		return receive(&frame)
+	})
+}
+
+func readMuxStream(ctx context.Context, api *dshAPI, endpoint string, args map[string]any, receive func(json.RawMessage) bool) error {
 	u, _ := url.Parse(api.origin + "/api/remote.mux")
 	if u.Scheme == "https" {
 		u.Scheme = "wss"
@@ -79,9 +91,7 @@ func readChatConnection(ctx context.Context, login, id string, receive func(*cha
 		return errors.New("не удалось подготовить поток")
 	}
 	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-	if conn.WriteJSON(map[string]any{"type": "open", "streamId": streamID, "endpoint": "session/follow", "payload": map[string]any{"args": map[string]any{"request": map[string]any{
-		"address": map[string]any{"kind": "session", "sessionId": id}, "maxMessages": 50, "assistantStream": true,
-	}}}}) != nil {
+	if conn.WriteJSON(map[string]any{"type": "open", "streamId": streamID, "endpoint": endpoint, "payload": map[string]any{"args": args}}) != nil {
 		return errors.New("не удалось подписаться на сессию")
 	}
 	for {
@@ -101,11 +111,7 @@ func readChatConnection(ctx context.Context, login, id string, receive func(*cha
 		if envelope.Type != "item" {
 			return errors.New("подписка чата остановлена сервером; проверьте доступ и версию dsh")
 		}
-		var frame chatFrame
-		if json.Unmarshal(envelope.Value, &frame) != nil {
-			return errors.New("неподдерживаемые данные потока dsh")
-		}
-		if !receive(&frame) {
+		if !receive(envelope.Value) {
 			return nil
 		}
 	}

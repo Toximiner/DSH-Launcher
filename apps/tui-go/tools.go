@@ -40,6 +40,14 @@ func (m *model) toolView(t *chatTool) string {
 	if t.State == "running" && !m.chat.ready {
 		state = "? Нет связи · состояние уточняется"
 	}
+	if t.State == "running" && m.approvals != nil {
+		for _, request := range m.approvals.requests {
+			if request.Request.CallID == t.ID {
+				state = "◌ Ожидает разрешения · F7"
+				break
+			}
+		}
+	}
 	name := t.Name
 	if name == "" {
 		name = "Инструмент · вызов вне окна истории"

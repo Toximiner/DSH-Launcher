@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import select
 import signal
@@ -17,6 +18,7 @@ from terminal import Terminal
 parser = argparse.ArgumentParser()
 parser.add_argument('--binary', required=True)
 parser.add_argument('--dsh', required=True, help='Installed dsh 0.2.2-rc.1; Node 24.9+ must be in PATH')
+parser.add_argument('--capture-approval', help='Optional terminal-cell JSON of an actual pending permission')
 parser.add_argument('--capture-tools', help='Optional terminal-cell JSON of actual tool results')
 parser.add_argument('--capture-cells', help='Optional terminal-cell JSON for an actual UI screenshot')
 args = parser.parse_args()
@@ -44,6 +46,19 @@ class Model(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         try:
+            if number in (6, 8, 10):
+                names = [entry['function']['name'] for entry in body.get('tools', [])]
+                tool = next((name for name in names if name == 'tui_approval_probe' or name.endswith('__tui_approval_probe')), None)
+                assert tool, f'Approval test tool not offered: {names}'
+                marker = {6: 'grant', 8: 'reject', 10: 'cancel'}[number]
+                send({'role': 'assistant', 'tool_calls': [
+                    {'index': 0, 'id': 'approval-' + marker, 'type': 'function',
+                     'function': {'name': tool, 'arguments': json.dumps({'marker': marker})}},
+                ]})
+                send({}, 'tool_calls')
+                self.wfile.write(b'data: [DONE]\n\n')
+                self.wfile.flush()
+                return
             if number == 4:
                 names = [entry['function']['name'] for entry in body.get('tools', [])]
                 read_name = next((name for name in names if name == 'read' or name.endswith('__read')), None)
@@ -91,12 +106,15 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
     (profile / 'package.json').write_text(json.dumps({
         'name': 'dsh-tui-isolated-test', 'private': True, 'dependencies': {},
         'dsh': {'profile': {'bundles': ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']}}}))
+    probe = profile / 'approval-probe.mjs'
+    probe.write_text(Path(__file__).with_name('approval_probe.mjs').read_text())
     (profile / 'cordis.yml').write_text('[]\n')
     dsh = Path(args.dsh).resolve()
     modules = next((path for path in dsh.parents if path.name == 'node_modules'), None)
     if modules:
         (profile / 'node_modules').symlink_to(modules, target_is_directory=True)
     (profile / 'cordis.patch.yml').write_text(json.dumps([
+        {'insert': [{'id': 'tui-approval-probe', 'name': str(probe), 'config': {'directory': str(root / 'project')}}]},
         {'id': 'llm-pi-ai', 'config': {'providers': {'tui-fixture': {
             'apiKeyEnv': 'TUI_TEST_API_KEY', 'api': 'openai-completions',
             'baseURL': f'http://127.0.0.1:{model.server_port}/v1',
@@ -184,6 +202,43 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('> ▸ read · ! Ошибка', timeout=10)
         app.send('\x1b')
         app.wait('> preserved draft')
+        app.send('\x15')
+        app.command('Request permission to create the grant marker.')
+        app.wait('Запрос разрешения dsh', timeout=20)
+        app.wait('Create grant.marker', timeout=10)
+        session_id = re.search(r'Сессия · (session-[a-z0-9-]+)', app.text).group(1)
+        app.close(root / 'before-approval-reconnect.ansi')
+        app = Terminal(str(Path(args.binary).resolve()), ['--session', session_id], {**env, 'DSH_TUI_URL': login})
+        app.resize(120, 42)
+        app.wait('Create grant.marker', timeout=20)
+        assert not (project / 'grant.marker').exists(), 'Tool ran before permission'
+        app.send('\r')
+        for _ in range(5):
+            app.pump()
+        assert not (project / 'grant.marker').exists(), 'Unselected Enter granted permission'
+        if args.capture_approval:
+            capture_cells(app, args.capture_approval)
+        app.send('\t\x1b[C\r')
+        app.wait('Ответ 7: проверка транспорта настоящего dsh.', timeout=20)
+        assert (project / 'grant.marker').read_text() == 'approved\n', 'Approved action did not run'
+        app.wait('Разрешено один раз', timeout=10)
+        app.send('\x1b[5~' * 20)
+        app.wait('Агент: не выполняется', timeout=20)
+        app.command('Request permission to create the reject marker.')
+        app.wait('Create reject.marker', timeout=20)
+        app.send('\t\r')
+        app.wait('Ответ 9: проверка транспорта настоящего dsh.', timeout=20)
+        assert not (project / 'reject.marker').exists(), 'Rejected tool wrote its marker'
+        app.wait('Отказано', timeout=10)
+        app.send('\x1b[5~' * 20)
+        app.wait('Агент: не выполняется', timeout=20)
+        app.command('Request permission to create the cancel marker.')
+        app.wait('Create cancel.marker', timeout=20)
+        app.send('\x1b[19~')
+        app.wait('Выполнение остановлено.', timeout=20)
+        assert not (project / 'cancel.marker').exists(), 'Cancelled tool wrote its marker'
+        assert len(model_calls) == 10, 'Unexpected approval model retry'
+        print('Actual dsh approvals: explicit grant executes, rejection/cancellation do not; audit restored OK')
         print('Actual dsh + controlled model: file-read success/failure, result cards, expansion, draft preservation OK')
         print('Actual dsh + controlled model: submission, partial streaming, two turns, cancellation OK')
         print('This verifies protocol integration, not a real cloud LLM response.')
