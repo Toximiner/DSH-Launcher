@@ -1,5 +1,8 @@
 # Go TUI preview — checkpoint 7
 
+[Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
+[План развития на русском](../../docs/tui-roadmap/README.md)
+
 The terminal client is implemented in Go/Bubble Tea, with read-only dsh settings
 and a panel layout: a workspace sidebar, conversation panel, separate
 message composer, connection status, and keyboard hints. The sidebar hides below
@@ -108,11 +111,11 @@ with the client. Existing attached backends are not stopped.
 The dsh package itself must already be installed; its installer is not ported yet.
 
 JS plugins run inside Node.js/dsh independently of this client's Go code.
-The marketplace host exposes HTTP routes suitable for a future TUI adapter.
+The marketplace host exposes HTTP routes used by the marketplace TUI adapter.
 Its installation does not automatically translate its HTML/React screens.
-Schema/command-based features can use generic terminal controls; custom screens
-need explicit adapters. The marketplace page is now available; custom plugin screens still need their
-own adapters.
+Schema/command-based features can share terminal controls where the backend
+exposes sufficient metadata. A declarative plugin UI contract is planned; complex
+workflows need dedicated adapters. The marketplace page is already available.
 
 ## Marketplace TUI
 
@@ -147,14 +150,19 @@ The demo never changes any backend packages.
 
 The agreed target is terminal-only operation: launcher capabilities, the dsh
 interface, and plugin functionality through dedicated TUI views and adapters.
-Arbitrary HTML/JavaScript plugin screens cannot run inside Bubble Tea. Each
-adapter needs its own mapping from a backend API to terminal controls and a
-behavior test; a generic chat client does not establish plugin compatibility.
+Arbitrary HTML/JavaScript plugin screens cannot run inside Bubble Tea. Plugin
+support combines background operation, shared schema/command views, a proposed
+declarative UI contract, and dedicated adapters for complex workflows. The shared
+contract is not implemented yet. Track backend, settings, commands, and complete
+screen support separately; a generic chat client does not establish full plugin
+compatibility.
 
-Work proceeds in small, reviewable checkpoints with user feedback. After this
-session/mode checkpoint, the proposed next checkpoint is a minimal streamed
-conversation with an existing dsh. Subsequent checkpoints cover
-decisions, settings editing, dsh installation, updates/rollback, diagnostics,
-core dsh screens, and named plugin adapters. No full-parity claim is made by
-this preview. The legacy JS client and its packaging have been removed; its
-streamed chat and dsh installation remain pending in Go.
+Work proceeds in small, reviewable checkpoints with user feedback. The
+[roadmap](../../docs/tui-roadmap/README.en.md) is the maintained capability inventory
+and milestone order. The next UI checkpoint moves TUI preferences to a top menu,
+keeping dsh settings separate and excluding Electron-only options such as
+Wayland/Ozone/GPU. Subsequent checkpoints cover actual streamed chat, interaction,
+settings, workspace features, plugins, and launcher lifecycle. These are planned
+features, not shipped behavior. No full-parity claim is made by this preview.
+The legacy JS client and its packaging have been removed; its streamed chat and
+dsh installation remain pending in Go.

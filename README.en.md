@@ -11,6 +11,8 @@ Run a private live instance with actual dsh in GitHub Codespaces: [instructions]
 
 ## Terminal version (experimental)
 
+GUI parity inventory, implementation milestones, and plugin strategy: [TUI roadmap](docs/tui-roadmap/README.en.md).
+
 The public demo preview is disabled. For a live instance with actual dsh, use
 the [private Codespaces deployment](tools/live/README.md).
 
