@@ -1,5 +1,6 @@
 {
-  "source_commit": "9276be2",
+  "source_commit": "a8b9524",
   "type": "Go shared model compiled to WebAssembly; static preview",
-  "backend": "redacted demo snapshot only; no live connection"
+  "backend": "redacted demo snapshot only; no live connection",
+  "mobile": "auto-fit, manual zoom, touch navigation"
 }

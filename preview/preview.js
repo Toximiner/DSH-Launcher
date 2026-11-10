@@ -9,7 +9,7 @@
     window.previewTerminal = term;
     const ready = new Promise(resolve => window.addEventListener('dsh-tui-ready',resolve,{once:true}));
     const go = new Go();
-    const response = await fetch('tui.wasm.gz');
+    const response = await fetch('tui.wasm.gz?v=mobile-1');
     if (!response.ok) throw new Error('Не удалось загрузить Go-клиент');
     const bytes = await new Response(response.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
     const instance = await WebAssembly.instantiate(bytes,go.importObject);
@@ -22,6 +22,7 @@
     let writing = false;
     let pending = null;
     function render(view) {
+      for (const item of document.querySelectorAll('[data-page]')) item.setAttribute('aria-pressed',String(Number(item.dataset.page)===dshTui.currentPage()));
       pending = view;
       if (writing) return;
       function flush() {
@@ -31,7 +32,45 @@
       }
       flush();
     }
-    function resize() {fit.fit();render(dshTui.resize(term.cols,term.rows));}
+    let autoScale = true;
+    let requestedFont = 16;
+    function resize() {
+      let font = requestedFont;
+      term.options.fontSize = font;
+      if (autoScale) {
+        for (let attempt=0;attempt<12;attempt++) {
+          const size=fit.proposeDimensions();
+          if (!size || (size.cols>=44 && size.rows>=18) || font<=6) break;
+          font=Math.max(6,Math.min(font-0.5,Math.floor(font*Math.min(size.cols/44,size.rows/18)*2)/2));
+          term.options.fontSize=font;
+        }
+      }
+      fit.fit();
+      // Keep a usable virtual terminal even when the user zooms beyond the viewport.
+      term.resize(Math.max(44,term.cols),Math.max(18,term.rows));
+      render(dshTui.resize(term.cols,term.rows));
+    }
+    document.getElementById('fit').onclick=()=>{autoScale=true;requestedFont=16;resize();};
+    for (const [id,delta] of [['zoom-out',-1],['zoom-in',1]]) {
+      document.getElementById(id).onclick=()=>{
+        autoScale=false;requestedFont=Math.max(6,Math.min(28,term.options.fontSize+delta));resize();
+      };
+    }
+    for (const button of document.querySelectorAll('[data-page]')) {
+      button.onclick=()=>{
+        const page=Number(button.dataset.page);
+        render(dshTui.page(page));
+        if (page===0) term.focus(); else host.querySelector('textarea')?.blur();
+      };
+    }
+    for (const button of document.querySelectorAll('[data-key]')) {
+      button.onclick=()=>render(dshTui.key(button.dataset.key));
+    }
+    function visualResize() {
+      if (window.visualViewport) document.documentElement.style.setProperty('--viewport-height',window.visualViewport.height+'px');
+      resize();
+    }
+    window.visualViewport?.addEventListener('resize',visualResize);
     new ResizeObserver(resize).observe(host);
     const keys = {'\r':'enter','\t':'tab','\x1b':'esc','\x7f':'backspace','\x04':'ctrl+d','\x03':'ctrl+c','\x15':'ctrl+u','\x01':'ctrl+a','\x05':'ctrl+e','\x1b[A':'up','\x1b[B':'down','\x1b[C':'right','\x1b[D':'left','\x1b[5~':'pgup','\x1b[6~':'pgdown','\x1b[H':'home','\x1b[F':'end','\x1b[3~':'delete','\x1bOP':'f1'};
     term.onData(data => {
@@ -57,7 +96,8 @@
       event.preventDefault();render(dshTui.mouse(...position(event),event.deltaY<0?'up':'down'));
     },{passive:false});
     document.getElementById('reset').onclick=()=>location.reload();
-    loading.hidden=true;resize();term.focus();
+    loading.hidden=true;visualResize();
+    if (!matchMedia('(pointer: coarse)').matches) term.focus();
     window.dshPreviewReady=true;
   } catch (error) {loading.hidden=false;loading.textContent='Ошибка запуска: '+error.message;}
 })();
