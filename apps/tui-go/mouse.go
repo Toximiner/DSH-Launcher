@@ -3,9 +3,10 @@ package main
 import tea "github.com/charmbracelet/bubbletea"
 
 const (
-	sidebarWidth = 24
-	sidebarGap   = 1
-	bodyTop      = 2
+	sidebarWidth   = 24
+	sidebarGap     = 1
+	bodyTop        = 2
+	composerHeight = 6
 )
 
 type area struct{ x, y, width, height int }
@@ -52,7 +53,17 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 			return m.showChat()
 		}
 	}
-	composer := area{mainX, bodyTop + bodyHeight - 6, width, 5}
+	composer := area{mainX, bodyTop + bodyHeight - composerHeight - 1, width, composerHeight}
+	if m.page == chatPage && msg.Y == composer.y+2 {
+		x := mainX + 2 + len([]rune("Режим: "))
+		for i, name := range []string{"Обычный", "План", "Цель"} {
+			width := len([]rune(name)) + 2
+			if (area{x, msg.Y, width, 1}).contains(msg.X, msg.Y) {
+				return m.chooseMode([]string{"default", "plan", "goal"}[i])
+			}
+			x += width + 1
+		}
+	}
 	if m.page == 0 && composer.contains(msg.X, msg.Y) {
 		m.navFocused = false
 		return m.input.Focus()

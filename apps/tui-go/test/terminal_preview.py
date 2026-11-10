@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
 from pathlib import Path
 import signal
+import socket
 import sys
 import tempfile
 import unittest
@@ -144,6 +145,56 @@ class TerminalPreview(unittest.TestCase):
             server.shutdown()
             server.server_close()
             worker.join(timeout=2)
+
+    def test_owned_backend_market_and_agent_modes(self):
+        self.app.close(Path(self.temp.name) / 'first.log')
+        root = Path(self.temp.name)
+        bin_dir = root / 'bin'
+        bin_dir.mkdir()
+        for name, content in [('node', '#!/bin/sh\necho v24.22.1\n'), ('pnpm', '#!/bin/sh\nexit 0\n')]:
+            executable = bin_dir / name
+            executable.write_text(content)
+            executable.chmod(0o700)
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            port = sock.getsockname()[1]
+        env = {**os.environ, 'PATH': str(bin_dir), 'HOME': self.temp.name,
+               'DSH_HOME': str(root / 'dsh'), 'XDG_CONFIG_HOME': str(root / 'config'),
+               'XDG_DATA_HOME': str(root / 'data'), 'DSH_TEST_ROOT': self.temp.name,
+               'TERM': 'xterm-256color'}
+        env.pop('DSH_TUI_URL', None)
+        self.app = Terminal(BINARY, ['--start', '--dsh', str(Path(__file__).with_name('fake_dsh.py')),
+                                    '--port', str(port), '--cwd', str(root)], env)
+        self.app.wait('Не спрашивать больше')
+        manifest = root / 'dsh/profiles/web/package.json'
+        self.assertFalse(manifest.exists())
+        self.app.command('i')
+        self.app.wait('Режим: обычный')
+        self.assertIn('dshmarket', manifest.read_text())
+        self.app.command('/mode plan')
+        self.app.wait('Режим: планирование')
+        self.mouse(0, 36, 24)
+        self.app.wait('Режим: обычный')
+        self.mouse(0, 54, 24)
+        self.app.wait('> /goal ')
+        self.app.command('Test objective')
+        self.app.wait('Режим: цель')
+        self.app.wait('Test objective')
+        self.app.command('/mode default')
+        self.app.wait('Режим: обычный')
+        self.app.command('/goal clear')
+        self.app.command('/sessions')
+        self.app.wait('› session-pty')
+        self.app.send('\r')
+        self.app.wait('Сессия · session-pty')
+        self.app.command('/exit')
+        self.app.exited()
+        with socket.socket() as sock:
+            self.assertNotEqual(sock.connect_ex(('127.0.0.1', port)), 0)
+        calls = [json.loads(line)['method'] for line in (root / 'requests.jsonl').read_text().splitlines()]
+        self.assertIn('goals/create', calls)
+        self.assertIn('goals/pause', calls)
+        self.assertNotIn('session/prompt', calls)
 
     def test_input_history_and_local_commands(self):
         self.app.command('Привет 世界')

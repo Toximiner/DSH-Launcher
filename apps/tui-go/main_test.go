@@ -110,6 +110,7 @@ func TestNavigationPreservesDraft(t *testing.T) {
 
 func TestPanelsFitTerminal(t *testing.T) {
 	m := newModel()
+	m.session = &sessionView{ID: "session-long-identifier", Plan: &planState{Active: true, Pending: true}}
 	m.settingsLogin = "http://localhost/?token=test"
 	m.settings = &settingsSnapshot{Namespaces: []settingsNamespace{{NS: "namespace", Value: map[string]any{"long-field": strings.Repeat("Текст 世界 ", 20)}}}}
 	enter(m, "Длинное сообщение с русским текстом и 世界, которое должно переноситься внутри панели разговора.")

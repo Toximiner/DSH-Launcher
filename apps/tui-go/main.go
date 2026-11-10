@@ -15,8 +15,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const version = "0.2.0-preview.5"
-const help = "/help — справка\n/clear — очистить экран\n/exit — выйти\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
+const version = "0.2.0-preview.6"
+const help = "/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/help — справка\n/clear — очистить экран\n/exit — выйти\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
 	chatPage = iota
@@ -31,24 +31,35 @@ var pages = []string{"Чат", "Сессии", "Настройки dsh", "Нас
 type quitMsg struct{}
 
 type model struct {
-	input           textinput.Model
-	viewport        viewport.Model
-	width, height   int
-	lines           []string
-	history         []string
-	historyIndex    int
-	draft           string
-	workspace       string
-	page            int
-	navFocused      bool
-	events          []string
-	settingsLogin   string
-	settingsContext context.Context
-	settingsLoading bool
-	settingsError   string
-	settings        *settingsSnapshot
-	settingsIndex   int
-	settingsUpdated time.Time
+	input            textinput.Model
+	viewport         viewport.Model
+	width, height    int
+	lines            []string
+	history          []string
+	historyIndex     int
+	draft            string
+	workspace        string
+	page             int
+	navFocused       bool
+	events           []string
+	settingsLogin    string
+	settingsContext  context.Context
+	settingsLoading  bool
+	settingsError    string
+	settings         *settingsSnapshot
+	settingsIndex    int
+	settingsUpdated  time.Time
+	browserPreview   bool
+	session          *sessionView
+	sessionItems     []sessionItem
+	sessionBusy      bool
+	sessionError     string
+	sessionSequence  int
+	sessionStale     bool
+	sessionListIndex int
+	sessionQueue     []sessionAction
+	initialSession   string
+	createSession    bool
 }
 
 func newModel() *model {
@@ -92,9 +103,15 @@ func (m *model) rebuild() {
 			"Здесь появится разговор с агентом.\n\n" + muted.Render("Пока можно проверить ввод и навигацию.") + "\n\n" + accent.Render("F1 — справка   Tab — разделы")
 		content = lipgloss.Place(m.viewport.Width, m.viewport.Height, lipgloss.Center, lipgloss.Center, welcome)
 	}
+	if m.session != nil || m.sessionBusy || m.sessionError != "" {
+		if len(m.lines) == 0 {
+			content = "Текст чата пока сохраняется локально.\nСмена режима применяется к подключённой сессии.\n/mode default|plan|goal · /goal <описание>"
+		}
+		content = accent.Render(m.modeDescription()) + "\n\n" + content
+	}
 	switch m.page {
-	case 1:
-		content = heading.Render("Локальный черновик") + "\n\nТекст в этом окне сохраняется только в памяти.\n\n" + muted.Render("Сессии dsh недоступны без подключения.") + "\n\nEsc — вернуться в чат"
+	case sessionsPage:
+		content = m.sessionInfo()
 	case dshSettingsPage:
 		content = m.settingsView()
 	case tuiSettingsPage:
@@ -117,7 +134,7 @@ func (m *model) append(line string) {
 func (m *model) resize() {
 	w, h := m.contentSize()
 	if m.page == 0 {
-		h -= 6
+		h -= composerHeight + 1
 	}
 	m.viewport.Width = max(1, w-4)
 	m.viewport.Height = max(1, h-4)
@@ -140,10 +157,56 @@ func (m *model) showChat() tea.Cmd {
 	return m.input.Focus()
 }
 
-func (m *model) Init() tea.Cmd { return tea.Batch(textinput.Blink, m.loadSettings()) }
+func (m *model) Init() tea.Cmd {
+	var session tea.Cmd
+	if m.createSession {
+		session = m.sessionOperation("new", "")
+	} else if m.initialSession != "" {
+		session = m.sessionOperation("connect", m.initialSession)
+	}
+	return tea.Batch(textinput.Blink, m.loadSettings(), session)
+}
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case sessionTick:
+		if msg.sequence == m.sessionSequence && m.session != nil && !m.sessionBusy {
+			return m, m.sessionOperation("refresh", "")
+		}
+		return m, nil
+	case sessionResult:
+		if msg.sequence != m.sessionSequence {
+			return m, nil
+		}
+		m.sessionBusy = false
+		if msg.err != nil {
+			m.sessionError = msg.err.Error()
+			m.sessionStale = msg.view == nil
+		} else {
+			m.sessionError = ""
+			m.sessionStale = false
+		}
+		if msg.view != nil {
+			m.session = msg.view
+		}
+		if msg.list {
+			m.sessionItems = msg.items
+			m.sessionListIndex = 0
+		}
+		m.rebuild()
+		if msg.err != nil && len(m.sessionQueue) > 0 {
+			m.sessionQueue = nil
+			m.append("Ожидающие запросы не выполнены из-за ошибки dsh.")
+		}
+		if len(m.sessionQueue) > 0 {
+			next := m.sessionQueue[0]
+			m.sessionQueue = m.sessionQueue[1:]
+			return m, m.sessionOperation(next.action, next.value)
+		}
+		if m.session != nil {
+			return m, m.sessionTimer()
+		}
+		return m, nil
 	case settingsResult:
 		m.settingsLoading = false
 		if msg.err != nil {
@@ -186,9 +249,23 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "r":
+			if m.page == sessionsPage {
+				return m, m.sessionOperation("list", "")
+			}
 			if m.page == dshSettingsPage {
 				return m, m.loadSettings()
 			}
+		case "f2":
+			if m.session != nil && m.session.Plan != nil && m.session.Plan.Active {
+				return m, m.chooseMode("default")
+			}
+			return m, m.chooseMode("plan")
+		case "alt+1":
+			return m, m.chooseMode("default")
+		case "alt+2":
+			return m, m.chooseMode("plan")
+		case "alt+3":
+			return m, m.chooseMode("goal")
 		case "ctrl+c", "ctrl+d":
 			return m, tea.Quit
 		case "tab":
@@ -205,6 +282,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.append(help)
 			return m, nil
 		case "enter":
+			if m.page == sessionsPage && !m.navFocused && len(m.sessionItems) > 0 {
+				id := m.sessionItems[m.sessionListIndex].ID
+				m.showChat()
+				return m, m.sessionOperation("connect", id)
+			}
 			if m.navFocused {
 				m.navFocused = false
 				if m.page == 0 {
@@ -228,6 +310,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.historyIndex = len(m.history)
 			switch line {
+			case "/new":
+				return m, m.sessionOperation("new", "")
+			case "/sessions":
+				m.page = sessionsPage
+				m.resize()
+				return m, m.sessionOperation("list", "")
+			case "/plan":
+				return m, m.chooseMode("plan")
+			case "/plan off":
+				return m, m.chooseMode("default")
 			case "/exit", "/quit":
 				return m, tea.Quit
 			case "/clear":
@@ -236,6 +328,26 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "/help":
 				m.append(help)
 			default:
+				if strings.HasPrefix(line, "/session ") {
+					return m, m.sessionOperation("connect", strings.TrimSpace(strings.TrimPrefix(line, "/session ")))
+				}
+				if strings.HasPrefix(line, "/mode ") {
+					mode := strings.TrimSpace(strings.TrimPrefix(line, "/mode "))
+					if mode != "default" && mode != "plan" && mode != "goal" {
+						m.append("Режим: default, plan или goal.")
+						return m, nil
+					}
+					return m, m.chooseMode(mode)
+				}
+				if strings.HasPrefix(line, "/goal ") {
+					value := strings.TrimSpace(strings.TrimPrefix(line, "/goal "))
+					action := "goal"
+					if value == "pause" || value == "resume" || value == "clear" {
+						action = value
+						value = ""
+					}
+					return m, m.sessionOperation(action, value)
+				}
 				m.append("Введено: " + line)
 				m.events = append(m.events, "Сохранён локальный черновик: "+clean(line))
 				if len(m.events) > 50 {
@@ -251,6 +363,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.page = (m.page + delta + len(pages)) % len(pages)
 				m.resize()
+				return m, nil
+			}
+			if m.page == sessionsPage && len(m.sessionItems) > 0 {
+				delta := 1
+				if msg.String() == "up" {
+					delta = -1
+				}
+				m.sessionListIndex = (m.sessionListIndex + delta + len(m.sessionItems)) % len(m.sessionItems)
+				m.rebuild()
 				return m, nil
 			}
 			if m.page != 0 {

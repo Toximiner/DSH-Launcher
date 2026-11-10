@@ -53,6 +53,9 @@ func (m *model) sidebar(height int) string {
 	if m.settings != nil {
 		connection = "✓ Снимок настроек dsh"
 	}
+	if m.session != nil {
+		connection = "✓ dsh · " + m.modeLabel()
+	}
 	lines = append(lines, muted.Render(connection), muted.Render("Go · "+version))
 	for i, line := range lines {
 		lines[i] = ansi.Truncate(line, inner, "…")
@@ -81,21 +84,30 @@ func (m *model) View() string {
 	if m.settingsError != "" {
 		status = muted.Render("! Ошибка чтения dsh")
 	}
+	if m.session != nil {
+		status = accent.Render("✓ dsh · " + m.modeLabel())
+	}
+	if m.sessionBusy {
+		status = accent.Render("◌ Запрос сессии dsh")
+	}
 	header := bar(brand, status, width) + "\n" + ansi.Truncate(muted.Render("  Проект: "+filepath.Base(m.workspace)+"  /  "+pages[m.page]), width, "…")
 	title := pages[m.page]
 	if m.page == 0 {
 		title = "Новый разговор"
+		if m.session != nil {
+			title = "Сессия · " + ansi.Truncate(clean(m.session.ID), max(1, w-15), "…")
+		}
 	}
 	view := heading.Render(title) + "\n" + muted.Render(strings.Repeat("─", m.viewport.Width)) + "\n" + m.viewport.View()
 	right := panel(w, bodyHeight, view, "#303d4d")
 	if m.page == 0 {
-		chat := panel(w, bodyHeight-6, view, "#303d4d")
+		chat := panel(w, bodyHeight-composerHeight-1, view, "#303d4d")
 		border := "#303d4d"
 		if !m.navFocused {
 			border = "#58a6ff"
 		}
-		composer := heading.Render("Сообщение") + muted.Render(" · локальный черновик") + "\n" + m.input.View() + "\n" + muted.Render("Enter — сохранить · ↑/↓ — история")
-		right = chat + "\n" + panel(w, 5, composer, border)
+		composer := heading.Render("Сообщение") + muted.Render(" · локальный черновик") + "\n" + m.modeControls() + "\n" + m.input.View() + "\n" + muted.Render("Enter — сохранить · ↑/↓ — история")
+		right = chat + "\n" + panel(w, composerHeight, composer, border)
 	}
 	body := right
 	if width >= 78 {
@@ -107,4 +119,31 @@ func (m *model) View() string {
 	}
 	footer := bar(muted.Render(hints), muted.Render("Ctrl+D выход"), width)
 	return header + "\n" + body + "\n" + footer
+}
+
+func (m *model) modeControls() string {
+	names := []string{"Обычный", "План", "Цель"}
+	selected := -1
+	if m.session != nil && !m.sessionStale {
+		selected = 0
+		if m.session.Plan != nil && m.session.Plan.Active {
+			selected = 1
+		} else if m.session.Goal != nil && m.session.Goal.Goal.Phase == "active" {
+			selected = 2
+		}
+	}
+	text := "Режим: "
+	for i, name := range names {
+		button := "[" + name + "]"
+		if i == selected {
+			button = accent.Bold(true).Render(button)
+		} else {
+			button = muted.Render(button)
+		}
+		if i > 0 {
+			text += " "
+		}
+		text += button
+	}
+	return text
 }

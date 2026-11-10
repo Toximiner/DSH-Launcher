@@ -16,8 +16,9 @@ The Linux terminal client uses **Go + Bubble Tea** in [apps/tui-go](apps/tui-go/
 It provides panels, mouse and keyboard navigation, input history, scrolling,
 and separate dsh/TUI settings. Pass a running dsh login URL through
 `DSH_TUI_URL` or `--url` to read its settings without editing them.
-Chat is currently a local draft; backend startup/installation and streamed chat
-will be ported incrementally. The legacy JS terminal client is removed.
+Session attachment/creation and agent modes are available. `--start` launches dsh
+and offers dshmarket preinstallation into its profile. Chat is still local;
+the dsh installer and streamed chat will be ported incrementally. The legacy JS terminal client is removed.
 
 [Download Linux amd64/arm64 preview binaries](https://toximiner.github.io/DSH-Launcher/).
 The Go client runs without Node.js; the dsh backend requires Node.js 24.9+.

@@ -9,7 +9,7 @@
     window.previewTerminal = term;
     const ready = new Promise(resolve => window.addEventListener('dsh-tui-ready',resolve,{once:true}));
     const go = new Go();
-    const response = await fetch('tui.wasm.gz?v=mobile-1');
+    const response = await fetch('tui.wasm.gz?v=session-6');
     if (!response.ok) throw new Error('Не удалось загрузить Go-клиент');
     const bytes = await new Response(response.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
     const instance = await WebAssembly.instantiate(bytes,go.importObject);

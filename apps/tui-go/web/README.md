@@ -32,3 +32,7 @@ A virtual terminal with scrolling is retained if manual zoom exceeds the display
 Touch page buttons and Left/Right controls provide navigation without arrow keys.
 Visual viewport resizing adapts to the on-screen keyboard. Run
 `python3 apps/tui-go/web/test_mobile.py` for the phone viewport smoke tests.
+
+The mode controls are shared with the native client but do not connect to a live
+backend in the browser. Attempts explain this limitation without starting requests.
+Marketplace preinstallation and owned process management are native-only.

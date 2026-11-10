@@ -1,20 +1,13 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"net/http/cookiejar"
 	"net/url"
 	"sort"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -52,69 +45,20 @@ func settingsURL(value string) (*url.URL, error) {
 	return u, nil
 }
 
-// Only the redacted describe endpoint is exposed; this client has no write API.
+// Settings remain read-only; session control uses separate, explicit operations.
 func readSettings(ctx context.Context, login string) (*settingsSnapshot, error) {
-	u, err := settingsURL(login)
+	api, err := openAPI(ctx, login)
 	if err != nil {
 		return nil, err
 	}
-	origin := u.Scheme + "://" + u.Host
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar, Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	defer client.CloseIdleConnections()
-	q := u.Query()
-	q.Set("interactions", "answer")
-	u.Path = "/connect"
-	u.RawQuery = q.Encode()
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, errors.New("не удалось подключиться к dsh")
+	defer api.close()
+	var snapshot settingsSnapshot
+	if err = api.rpc(ctx, "settings/describe", map[string]any{}, &snapshot); err != nil {
+		return nil, err
 	}
-	res.Body.Close()
-	if res.StatusCode != http.StatusFound || len(jar.Cookies(u)) == 0 {
-		return nil, fmt.Errorf("вход в dsh не выполнен (HTTP %d); получите свежий URL входа", res.StatusCode)
-	}
-	id := make([]byte, 16)
-	if _, err = rand.Read(id); err != nil {
-		return nil, errors.New("не удалось создать идентификатор запроса")
-	}
-	rpcID := hex.EncodeToString(id)
-	body, _ := json.Marshal(map[string]any{"type": "client-request", "rpcId": rpcID, "method": "settings/describe", "payload": map[string]any{"args": map[string]any{}}})
-	req, _ = http.NewRequestWithContext(ctx, http.MethodPost, origin+"/api/settings/describe", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Origin", origin)
-	res, err = client.Do(req)
-	if err != nil {
-		return nil, errors.New("не удалось прочитать настройки dsh")
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("настройки dsh недоступны (HTTP %d)", res.StatusCode)
-	}
-	const limit = 8 << 20
-	data, err := io.ReadAll(io.LimitReader(res.Body, limit+1))
-	if err != nil || len(data) > limit {
-		return nil, errors.New("ответ настроек dsh слишком велик или не прочитан")
-	}
-	var envelope struct {
-		Type   string `json:"type"`
-		ID     string `json:"rpcId"`
-		Result struct {
-			OK    *bool            `json:"ok"`
-			Value settingsSnapshot `json:"value"`
-		} `json:"result"`
-	}
-	if json.Unmarshal(data, &envelope) != nil || envelope.Type != "server-response" || envelope.ID != rpcID || envelope.Result.OK == nil {
-		return nil, errors.New("неподдерживаемый ответ API настроек dsh")
-	}
-	if !*envelope.Result.OK {
-		return nil, errors.New("dsh отказал в чтении настроек; проверьте доступность settings/describe")
-	}
-	if envelope.Result.Value.Namespaces == nil {
+	if snapshot.Namespaces == nil {
 		return nil, errors.New("в ответе dsh отсутствуют разделы настроек")
 	}
-	snapshot := envelope.Result.Value
 	sort.SliceStable(snapshot.Namespaces, func(i, j int) bool { return snapshot.Namespaces[i].NS < snapshot.Namespaces[j].NS })
 	return &snapshot, nil
 }

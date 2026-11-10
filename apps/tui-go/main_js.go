@@ -19,6 +19,7 @@ func main() {
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	m := newModel()
 	m.workspace = "browser-preview"
+	m.browserPreview = true
 	functions := []js.Func{}
 	bind := func(name string, fn func([]js.Value) any) {
 		callback := js.FuncOf(func(_ js.Value, args []js.Value) any { return fn(args) })

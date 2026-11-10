@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Added
 
+- Go preview 0.2.0-preview.6 adds session attachment/creation/selection, backend-confirmed agent modes, pending plan transitions, and goal commands. `--start` offers profile-local dshmarket preinstallation with skip/remember choices and user-local pnpm. Includes API, full PTY, and real dsh checks; chat text remains local.
+
 - Adapted the browser preview for phones with automatic terminal scaling, zoom/Fit buttons, scrolling after manual enlargement, and touch navigation. The terminal adapts when the visual viewport changes, including an on-screen keyboard.
 
 - Removed the legacy JS TUI source, npm/Debian packaging, workflow, and its scenarios. Moved the shared PTY driver into the Go app. Fixed ESLint browser globals for the web adapter and excluded generated builds.
