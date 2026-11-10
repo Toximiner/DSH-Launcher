@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0-preview.14",
+  "source_commit": "4d55e7e8c4593183dfe35e77c9143bbecfc7f8bf",
+  "stage": "individual pending-item removal with explicit confirmation, immutable queue identity, stale-state guards and reconnect recovery; queue editing and steering remain pending",
+  "sha256": {
+    "dsh-launcher-tui-go_linux_amd64": "f60335a529671175a939c5ede10e5e71c831c6652a58d4825c80a01569f897b0",
+    "dsh-launcher-tui-go_linux_arm64": "7357c80eba99f239a9cb855f13c07fdbcfbe2e5de1239e3545ad747c147e21de"
+  }
+}
