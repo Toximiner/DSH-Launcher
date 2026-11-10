@@ -163,6 +163,24 @@ second mutation. Drafts are local to this client process/session and are discard
 when switching sessions or exiting. Actual-dsh tests verify discarded edits,
 multiline model input, reconnect after saving, and retained FIFO work.
 
+While an agent is running, F9 → Ctrl+G (or the Steer button) opens a
+confirmation to promote the selected ordinary queued item into steering.
+Back is selected initially; Right/Tab and Enter explicitly confirm. This calls
+`session/updateQueue` with action=steer and the original item ID; no new prompt
+is created. The backend consumes steering on the next step of the same turn,
+without interrupting an in-flight response. Remaining ordinary tasks stay queued.
+Already-steered items are labeled separately; reconnect restores their placement.
+
+Steering is disabled for idle/disconnected/stale sessions, an open editor, and
+items already admitted or moved to steering. A changed sampled text cancels the
+confirmation instead of sending an unreviewed version; the API has no conditional
+revision guard against a concurrent change after that sample. If the turn closes
+before dsh handles the mutation, dsh rejects it; the client refreshes and does not
+fall back to a new task. Uncertain results never retry automatically. The original
+item ID prevents a second promotion after it has left the next-turn inbox.
+Actual-dsh tests verify confirmation, same-turn journal events, next-step model
+input, preserved ordinary work, reconnect, and minimum terminal size.
+
 The client signs in through `/connect` and reads `/api/settings/describe`.
 It never calls settings write endpoints or loads the settings document from disk.
 Open **Настройки dsh** with the mouse or sidebar keyboard navigation. Left/Right switches
@@ -180,7 +198,8 @@ Use `--url` / `DSH_TUI_URL` with `--new` or `--session ID`, or run `/new` after
 attaching. Wait for chat readiness, then press Enter to send. Text entered before
 readiness or during a session switch stays in the composer. While generation is
 running, Enter queues a follow-up through session/prompt with mode=queue. The
-composer hint changes to explain this. Submission as steering remains a subsequent increment.
+composer hint changes to explain this. Steering is an explicit action in the queue
+dialog; the composer continues to submit ordinary queued follow-ups.
 
 The client signs in through `/connect`, sends `session/prompt` with a unique
 requestId, and subscribes to `session/follow` through `/api/remote.mux` with
@@ -322,7 +341,8 @@ while dsh settings remain separate. Streamed text chat is implemented in preview
 model remains pending working provider access. Tool-result cards are implemented in preview.10. Agent questions are implemented in preview.12, including timed waits and continued
 answers. Queue submission and observation are implemented in preview.13; individual
 queue removal is implemented in preview.14 and multiline editing in preview.15.
-The next functional checkpoint is steering controls. Permission dialogs
+Queue-to-steering promotion is implemented in preview.16. The next checkpoints
+cover nested tool calls and incremental stdout. Permission dialogs
 are implemented in preview.11 and tested through the actual dsh approval service. Settings editing, workspace features,
 additional plugin support, and launcher lifecycle remain planned. No
 full-parity claim is made by this preview. The legacy JS client and its packaging

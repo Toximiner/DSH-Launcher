@@ -43,6 +43,8 @@ multiline text, timed holds, continued replies, and cancellation. Queue checks
 verify two waiting follow-ups, reconnection, three individual FIFO turns, and confirmed removal of one pending
 task while preserving the active turn and other work. Queue editing checks cover
 discarding a draft, saving multiline text, model input, and retained FIFO order.
+Steering checks promote a queued item to the next step of the same turn, verify
+actual session journal events, and preserve remaining work across reconnect.
 The test-only approval probe is never enabled by the live deployment. See `apps/tui-go/web/README.md`.
 The legacy JavaScript terminal app and its npm/Debian packaging are removed.
 

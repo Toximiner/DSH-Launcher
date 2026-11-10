@@ -11,6 +11,10 @@ import subprocess
 import tempfile
 import threading
 import time
+import http.cookiejar
+import urllib.parse
+import urllib.request
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from terminal import Terminal, wait_for
@@ -18,6 +22,7 @@ from terminal import Terminal, wait_for
 parser = argparse.ArgumentParser()
 parser.add_argument('--binary', required=True)
 parser.add_argument('--dsh', required=True, help='Installed dsh 0.2.2-rc.1; Node 24.9+ must be in PATH')
+parser.add_argument('--capture-queue-steer', help='Optional terminal-cell JSON of actual steering confirmation')
 parser.add_argument('--capture-queue-edit', help='Optional terminal-cell JSON of an actual queue editor')
 parser.add_argument('--capture-queue-remove', help='Optional terminal-cell JSON of the queue removal confirmation')
 parser.add_argument('--capture-queue', help='Optional terminal-cell JSON of real queued follow-up tasks')
@@ -27,7 +32,7 @@ parser.add_argument('--capture-tools', help='Optional terminal-cell JSON of actu
 parser.add_argument('--capture-cells', help='Optional terminal-cell JSON for an actual UI screenshot')
 args = parser.parse_args()
 model_calls = []
-queue_turns = {17: threading.Event(), 18: threading.Event(), 20: threading.Event(), 22: threading.Event()}
+queue_turns = {17: threading.Event(), 18: threading.Event(), 20: threading.Event(), 22: threading.Event(), 25: threading.Event()}
 
 
 class Model(BaseHTTPRequestHandler):
@@ -491,6 +496,85 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         assert 'EDIT CHANGED TASK' in json.dumps(changed) and 'second line kept' in json.dumps(changed), 'Model did not receive the saved multiline edit'
         assert 'EDIT KEEP NEXT TASK' in json.dumps(retained), 'Editing changed FIFO order or another task'
         assert not any('EDIT ORIGINAL TASK' in json.dumps(message) or 'UNSAVED EDIT' in json.dumps(message) for message in model_calls[22]['messages']), 'Original or discarded text entered model history'
+        app.command('STEER ACTIVE TASK')
+        app.wait('Ответ 25: ', timeout=20)
+        app.command('STEER THIS HINT')
+        app.wait('ОЧЕРЕДЬ DSH · 1', timeout=15)
+        app.command('STEER RETAIN NEXT TASK')
+        app.wait('ОЧЕРЕДЬ DSH · 2', timeout=15)
+        app.send('\x1b[20~')
+        app.wait('Очередь заданий dsh')
+        app.send('\x07')
+        app.wait('Уточнить текущую задачу?')
+        app.send('\r')
+        app.wait('Уточнение отменено.')
+        app.send('\x07')
+        app.wait('Уточнить текущую задачу?')
+        app.resize(44, 18)
+        app.wait('[ Уточнить ]')
+        app.resize(120, 42)
+        def steering_resized():
+            app.pump()
+            return '[ Уточнить ]' in app.screen.display[30]
+        wait_for(steering_resized)
+        if args.capture_queue_steer:
+            capture_cells(app, args.capture_queue_steer)
+        app.send('\x1b[C\r')
+        app.wait('Уточнение принято dsh.', timeout=15)
+        app.wait('↳ Уточнение:', timeout=15)
+        app.send('\x1b')
+        app.wait('Уточнение текущему заданию')
+        assert len(model_calls) == 25, 'Steering interrupted the streaming request'
+        previous_app, app = app, None
+        previous_app.close(root / 'before-steering-reconnect.ansi')
+        app = Terminal(str(Path(args.binary).resolve()), ['--session', session_id], {**env, 'DSH_TUI_URL': login})
+        app.resize(120, 42)
+        app.wait('Уточнение текущему заданию', timeout=20)
+        app.wait('STEER RETAIN NEXT TASK')
+        assert len(model_calls) == 25, 'Reconnection resent steering'
+        queue_turns[25].set()
+        app.wait('Ответ 27: проверка транспорта настоящего dsh.', timeout=25)
+        wait_for(queue_drained)
+        app.send('\x1b[5~' * 20)
+        app.wait('Агент: не выполняется', timeout=20)
+        assert len(model_calls) == 27, 'Steering duplicated or lost model work'
+        hint = [message for message in model_calls[25]['messages'] if message.get('role') == 'user'][-1]
+        retained = [message for message in model_calls[26]['messages'] if message.get('role') == 'user'][-1]
+        assert 'STEER THIS HINT' in json.dumps(hint), 'Model did not receive steering on its next step'
+        assert 'STEER RETAIN NEXT TASK' in json.dumps(retained), 'Steering consumed other queued work'
+        # Read the actual journal to distinguish another step from a new turn.
+        parsed = urllib.parse.urlsplit(login)
+        origin = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, '', '', ''))
+        class ConnectResponse(urllib.request.HTTPErrorProcessor):
+            def http_response(self, request, response):
+                if response.status == 302:
+                    return response
+                return super().http_response(request, response)
+        cookies = http.cookiejar.CookieJar()
+        opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookies), ConnectResponse())
+        connect = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, '/connect', parsed.query, ''))
+        with opener.open(connect, timeout=10) as response:
+            assert response.status == 302 and len(cookies) > 0, 'Journal reader did not authenticate'
+        rpc_id = uuid.uuid4().hex
+        request = urllib.request.Request(origin + '/api/session/events', data=json.dumps({
+            'type': 'client-request', 'rpcId': rpc_id, 'method': 'session/events',
+            'payload': {'args': {'request': {'address': {'kind': 'session', 'sessionId': session_id}, 'maxMessages': 50}}},
+        }).encode(), headers={'Content-Type': 'application/json', 'Origin': origin})
+        with opener.open(request, timeout=10) as response:
+            journal = json.load(response)
+        assert journal['rpcId'] == rpc_id and journal['result']['ok'], 'Actual session journal read failed'
+        turns = {}
+        current_turn = None
+        for record in journal['result']['value']['records']:
+            event = record['event']
+            if event['type'] == 'turn/start':
+                current_turn = event['data']['turn']
+            if event['type'] == 'user/message':
+                for marker in ['STEER ACTIVE TASK', 'STEER THIS HINT', 'STEER RETAIN NEXT TASK']:
+                    if marker in json.dumps(event['data'].get('content', '')):
+                        turns[marker] = current_turn
+        assert len(turns) == 3 and turns['STEER ACTIVE TASK'] == turns['STEER THIS HINT'] != turns['STEER RETAIN NEXT TASK'], f'Steering did not remain in the active turn: {turns}'
+        print('Actual dsh steering: explicit confirmation, next step in the same turn, retained FIFO work, reconnect without resending OK')
         print('Actual dsh queue edit: discard, multiline save, minimum layout, reconnect, changed model input and retained FIFO order OK')
         print('Actual dsh queue removal: explicit confirmation, cancellation preserves active turn and other item, reconnect and minimum layout OK')
         print('Actual dsh queue: two follow-ups while streaming, server queue confirmation, individual FIFO turns, no duplicates OK')

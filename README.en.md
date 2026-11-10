@@ -33,8 +33,8 @@ expands its details, and Esc restores composer focus. Permission dialogs support
 While the agent runs, Enter queues the next task in dsh. Pending tasks appear
 in chat; F8 stops the current task and retains the queue.
 
-Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.15/dsh-launcher-tui-go_linux_amd64) ·
-[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.15/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.15/SHA256SUMS).
+Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.16/dsh-launcher-tui-go_linux_amd64) ·
+[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.16/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.16/SHA256SUMS).
 The Go client runs without Node.js; the dsh backend requires Node.js 24.9+.
 
 ## How it works

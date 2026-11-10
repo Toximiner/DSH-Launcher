@@ -26,7 +26,7 @@ func TestQueueRemovalRequiresExplicitConfirmationAndStableIdentity(t *testing.T)
 	key(m, tea.KeyF9)
 	key(m, tea.KeyDown)
 	key(m, tea.KeyEnter)
-	if m.queueDialog.confirm != "item-two" || m.queueDialog.remove {
+	if m.queueDialog.confirm != "item-two" || m.queueDialog.accept {
 		t.Fatal("queue removal did not default to cancelling the action")
 	}
 	key(m, tea.KeyEnter)
@@ -105,7 +105,7 @@ func TestQueueRemovalRPCAndUncertainResultDoNotRetry(t *testing.T) {
 			m := queueModel(t)
 			m.settingsLogin = server.URL + "/?token=test"
 			m.requestQueueRemoval()
-			m.queueDialog.remove = true
+			m.queueDialog.accept = true
 			cmd := m.removeQueuedItem()
 			if cmd == nil || !m.queueDialog.busy {
 				t.Fatal("confirmed removal did not start")
