@@ -64,7 +64,7 @@ func TestPageShortcutsPreserveDraft(t *testing.T) {
 	for _, key := range []struct {
 		key  rune
 		page int
-	}{{'s', sessionsPage}, {'d', dshSettingsPage}, {'t', tuiSettingsPage}, {'l', logPage}, {'m', marketPage}, {'c', chatPage}} {
+	}{{'s', sessionsPage}, {'d', dshSettingsPage}, {'l', logPage}, {'m', marketPage}, {'c', chatPage}} {
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key.key}, Alt: true})
 		if m.page != key.page || m.input.Value() != "unfinished draft" {
 			t.Fatalf("page shortcut %c lost draft or selected wrong page", key.key)
@@ -113,8 +113,8 @@ func TestNavigationPreservesDraft(t *testing.T) {
 		t.Fatal("dsh settings view did not open")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if m.page != tuiSettingsPage || !strings.Contains(clean(m.View()), "сведения о клиенте") {
-		t.Fatal("TUI settings view did not open")
+	if m.page != logPage {
+		t.Fatal("sidebar did not skip TUI settings")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if m.page != 0 || m.navFocused || m.input.Value() != "Мой черновик" {

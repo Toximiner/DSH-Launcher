@@ -2,7 +2,7 @@
 
 [Русский](README.md) | **English**
 
-Baseline: November 10, 2026, Go client `0.2.0-preview.7`.
+Baseline: November 10, 2026, Go client `0.2.0-preview.8`.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.
 
@@ -19,6 +19,7 @@ disabled; private Codespaces supports live inspection.
 
 ## Already implemented
 
+- File/View/Help menu, modal TUI settings, persisted mouse/input-history preferences.
 - Sidebar navigation, panels, local draft input/history, mouse, and scrolling.
 - dsh attachment and read-only settings with secret masking.
 - Session creation/list/attachment, backend-confirmed modes, and goal commands.
@@ -35,7 +36,7 @@ no API key; actual model responses and agent tool execution remain unverified.
 
 | Area | Current state | Remaining work | Milestone |
 |---|---|---|---|
-| Application menu | TUI settings in sidebar | Top menu and separate client settings dialog | 1 |
+| Application menu | Top menu and modal client settings | Basic milestone complete; further polish at milestone 14 | 1 ✓ |
 | Chat | Local drafts | Submission, streaming, cancellation, reconnection | 2 |
 | Tools and questions | No dedicated views | Execution/results, permissions, user answers | 3 |
 | Sessions and history | Create/list/attach | History, search, rename, fork, supported archive operations | 4 |
@@ -56,7 +57,7 @@ no API key; actual model responses and agent tool execution remain unverified.
 
 ## Milestones and acceptance criteria
 
-1. **Top menu and TUI settings.** File, View, Help menus; move TUI settings out
+1. **Top menu and TUI settings — complete in preview.8.** File, View, Help menus; move TUI settings out
    of the sidebar into a dialog reached from the top. Keep dsh settings separate.
    Initial editable preferences: mouse and input history, persisted between runs;
    include client information and help. Done: keyboard/mouse and narrow terminals

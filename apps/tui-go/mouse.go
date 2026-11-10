@@ -19,6 +19,12 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if m.width < 44 || m.height < 18 || msg.Action != tea.MouseActionPress {
 		return nil
 	}
+	if !m.mouseEnabled() {
+		return nil
+	}
+	if cmd, handled := m.chromeMouse(msg); handled {
+		return cmd
+	}
 	width, bodyHeight := m.contentSize()
 	mainX := 0
 	if m.width-1 >= 78 {
@@ -47,9 +53,9 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	}
 	if mainX != 0 {
 		// Sidebar content starts below its border; four rows precede navigation.
-		navigation := area{1, bodyTop + 1 + 4, sidebarWidth - 2, len(pages)}
+		navigation := area{1, bodyTop + 1 + 4, sidebarWidth - 2, len(navigationPages)}
 		if navigation.contains(msg.X, msg.Y) {
-			m.page = msg.Y - navigation.y
+			m.page = navigationPages[msg.Y-navigation.y]
 			m.navFocused = true
 			m.input.Blur()
 			m.resize()
@@ -61,7 +67,7 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 			return nil
 		}
 		// A blank row and session heading follow navigation.
-		draft := area{1, navigation.y + len(pages) + 2, sidebarWidth - 2, 1}
+		draft := area{1, navigation.y + len(navigationPages) + 2, sidebarWidth - 2, 1}
 		if draft.y < bodyTop+bodyHeight-3 && draft.contains(msg.X, msg.Y) {
 			return m.showChat()
 		}

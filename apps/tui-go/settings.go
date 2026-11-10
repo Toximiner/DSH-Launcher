@@ -168,7 +168,3 @@ func settingsFields(ns settingsNamespace) []string {
 	}
 	return lines
 }
-
-func (m *model) tuiSettingsView() string {
-	return heading.Render("Настройки TUI · сведения о клиенте") + "\n\nВерсия     " + version + "\nИнтерфейс  Русский · тёмная тема\nТерминал   " + fmt.Sprintf("%d × %d", m.width, m.height) + "\n\nРабочая папка\n" + m.workspace + "\n\n" + muted.Render("Параметры клиента показаны только для чтения.")
-}

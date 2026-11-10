@@ -11,7 +11,7 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from terminal import Terminal  # noqa: E402
+from terminal import Terminal, wait_for  # noqa: E402
 
 BINARY = str(Path(sys.argv[1]).resolve())
 
@@ -19,10 +19,11 @@ BINARY = str(Path(sys.argv[1]).resolve())
 class TerminalPreview(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='tui-go-pty-')
-        env = {**os.environ, 'PATH': '/nonexistent', 'TERM': 'xterm-256color', 'HOME': self.temp.name}
+        env = {**os.environ, 'PATH': '/nonexistent', 'TERM': 'xterm-256color', 'HOME': self.temp.name, 'XDG_CONFIG_HOME': self.temp.name + '/config'}
         env.pop('DSH_TUI_URL', None)
         env.pop('DISPLAY', None)
         env.pop('WAYLAND_DISPLAY', None)
+        self.env = env
         self.app = Terminal(BINARY, [], env)
         self.app.wait('Новый разговор')
 
@@ -34,6 +35,15 @@ class TerminalPreview(unittest.TestCase):
         suffix = 'm' if release else 'M'
         self.app.send(f'\x1b[<{button};{x + 1};{y + 1}{suffix}')
 
+    def close_preferences(self):
+        self.app.send('\x1b')
+
+        def closed():
+            self.app.pump()
+            return 'Мышь в интерфейсе' not in self.app.text
+
+        wait_for(closed)
+
     def test_mouse_navigation_and_scroll(self):
         self.assertIn(b'\x1b[?1002h', self.app.raw)
         self.assertIn(b'\x1b[?1006h', self.app.raw)
@@ -43,9 +53,11 @@ class TerminalPreview(unittest.TestCase):
         self.app.wait('Сессии dsh недоступны')
         self.mouse(0, 5, 9)
         self.app.wait('Для чтения настроек работающего dsh')
-        self.mouse(0, 5, 10)
-        self.app.wait('Настройки TUI · сведения о клиенте')
-        self.mouse(0, 5, 15)
+        self.mouse(0, 2, 1)
+        self.mouse(0, 3, 3)
+        self.app.wait('Мышь в интерфейсе')
+        self.close_preferences()
+        self.mouse(0, 5, 14)
         self.app.wait('> Черновик мыши')
         self.mouse(0, 5, 7)
         self.mouse(0, 30, 25)
@@ -72,13 +84,46 @@ class TerminalPreview(unittest.TestCase):
 
     def test_no_mouse_option(self):
         self.app.close(Path(self.temp.name) / 'first.log')
-        env = {**os.environ, 'PATH': '/nonexistent', 'TERM': 'xterm-256color', 'HOME': self.temp.name}
+        env = {**os.environ, 'PATH': '/nonexistent', 'TERM': 'xterm-256color', 'HOME': self.temp.name, 'XDG_CONFIG_HOME': self.temp.name + '/config'}
         env.pop('DSH_TUI_URL', None)
         self.app = Terminal(BINARY, ['--no-mouse'], env)
         self.app.wait('Новый разговор')
         self.assertNotIn(b'\x1b[?1002h', self.app.raw)
         self.app.command('keyboard-only')
         self.app.wait('keyboard-only')
+
+    def test_preferences_survive_restart_and_mouse_can_be_restored(self):
+        self.app.command('history entry')
+        self.app.wait('history entry')
+        self.app.send('unsent draft')
+        self.app.send('\x1b[21~')
+        self.app.send('\r')
+        self.app.wait('Мышь в интерфейсе')
+        self.app.send('\x1b[B\r\x1b[A\r')
+        path = Path(self.env['XDG_CONFIG_HOME']) / 'dsh-launcher-tui/preferences.json'
+
+        def saved(mouse, history):
+            self.app.pump()
+            return path.exists() and json.loads(path.read_text()) == {'mouse': mouse, 'inputHistory': history}
+
+        wait_for(lambda: saved(False, False))
+        self.app.send('\x1b')
+        self.app.wait('> unsent draft')
+        self.app.send('\x1b[A')
+        self.app.wait('> unsent draft')
+        self.assertIn(b'\x1b[?1002l', self.app.raw)
+        self.app.send('\x04')
+        self.app.exited()
+        self.app.close(Path(self.temp.name) / 'before-restart.log')
+        self.app = Terminal(BINARY, [], self.env)
+        self.app.wait('Новый разговор')
+        self.assertNotIn(b'\x1b[?1002h', self.app.raw)
+        self.app.send('\x1bOS\r')
+        self.app.wait('Мышь в интерфейсе')
+        wait_for(lambda: saved(True, False))
+        self.assertIn(b'\x1b[?1002h', self.app.raw)
+        self.app.send('\x1b[B\r')
+        wait_for(lambda: saved(True, True))
 
     def test_settings_snapshot_navigation_and_refresh(self):
         state = {'reads': 0, 'fail': False, 'paths': []}
@@ -116,16 +161,16 @@ class TerminalPreview(unittest.TestCase):
         try:
             self.app.close(Path(self.temp.name) / 'first.log')
             env = {**os.environ, 'PATH': '/nonexistent', 'TERM': 'xterm-256color',
-                   'HOME': self.temp.name,
+                   'HOME': self.temp.name, 'XDG_CONFIG_HOME': self.temp.name + '/config',
                    'DSH_TUI_URL': f'http://127.0.0.1:{server.server_port}/?token=not-for-display'}
             self.app = Terminal(BINARY, [], env)
             self.app.wait('Новый разговор')
             self.mouse(0, 5, 9)
             self.app.wait('loaded-model-1')
-            self.mouse(0, 5, 10)
-            self.app.wait('Настройки TUI · сведения о клиенте')
-            self.assertNotIn('loaded-model-1', self.app.text)
+            self.app.send('\x1bOS')
+            self.app.wait('Мышь в интерфейсе')
             self.app.send('r')
+            self.close_preferences()
             self.mouse(0, 5, 9)
             self.app.wait('loaded-model-1')
             self.app.send('\x1b[C')
@@ -244,7 +289,7 @@ class TerminalPreview(unittest.TestCase):
         self.app.send('\x15')
         self.app.resize(60, 20)
         self.app.command('/help')
-        self.app.wait('/clear — очистить экран')
+        self.app.wait('колесо — прокрутка')
         self.app.send('\x04')
         self.app.exited()
 
@@ -260,8 +305,10 @@ class TerminalPreview(unittest.TestCase):
         self.app.wait('Сессии dsh недоступны')
         self.app.send('\x1b[B')
         self.app.wait('Для чтения настроек работающего dsh')
-        self.app.send('\x1b[B')
-        self.app.wait('Настройки TUI · сведения о клиенте')
+        self.app.send('\x1bOS')
+        self.app.wait('Мышь в интерфейсе')
+        self.close_preferences()
+        self.app.wait('Для чтения настроек работающего dsh')
         self.app.send('\x1b')
         self.app.wait('> Несохранённый черновик')
 

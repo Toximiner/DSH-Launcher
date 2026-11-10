@@ -30,7 +30,7 @@ with sync_playwright() as playwright:
         page.locator('[data-key="right"]').tap()
         page.wait_for_function('() => ' + SCREEN + '.includes("maxParallelToolCalls")')
         page.locator('[data-page="3"]').tap()
-        page.wait_for_function('() => ' + SCREEN + '.includes("сведения о клиенте")')
+        page.wait_for_function('() => ' + SCREEN + '.includes("Мышь в интерфейсе")')
         font = page.evaluate('previewTerminal.options.fontSize')
         page.locator('#zoom-in').tap()
         assert page.evaluate('previewTerminal.options.fontSize') > font

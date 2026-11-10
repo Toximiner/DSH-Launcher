@@ -37,7 +37,7 @@ func run(args []string, out io.Writer) error {
 		return fmt.Errorf("unexpected positional arguments")
 	}
 	if *helpFlag {
-		fmt.Fprintln(out, "dsh-launcher-tui-go [--help] [--version] [--no-mouse] [--url URL]\nGo-прототип: панели, Tab — разделы, Esc — чат, /help, /clear, /exit.\nНастройки dsh доступны только для чтения через --url или DSH_TUI_URL.\nПодключение: --session ID или --new. Режимы: /mode default|plan|goal.\nЛокальный запуск: --start [--dsh PATH] [--profile web] [--port 3080] [--market ask|install|skip].\nТекст чата пока сохраняется локально. Node.js нужен только бэкенду dsh.")
+		fmt.Fprintln(out, "dsh-launcher-tui-go [--help] [--version] [--no-mouse] [--url URL]\nGo-прототип: F10 — меню, F4 — настройки TUI, Tab — разделы, Esc — чат. /help, /clear, /exit.\nНастройки dsh доступны только для чтения через --url или DSH_TUI_URL.\nПодключение: --session ID или --new. Режимы: /mode default|plan|goal.\nЛокальный запуск: --start [--dsh PATH] [--profile web] [--port 3080] [--market ask|install|skip].\nТекст чата пока сохраняется локально. Node.js нужен только бэкенду dsh.")
 		return nil
 	}
 	if *versionFlag {
@@ -101,12 +101,22 @@ func run(args []string, out io.Writer) error {
 		return fmt.Errorf("a login URL or --start is required for sessions")
 	}
 	m := newModel()
+	m.mouseForcedOff = *noMouseFlag
+	if path, prefErr := clientPreferencesPath(); prefErr == nil {
+		m.prefs, prefErr = readClientPreferences(path)
+		m.savePreferences = func(prefs clientPreferences) error { return writeClientPreferences(path, prefs) }
+		if prefErr != nil {
+			m.preferencesNote = "Ошибка чтения настроек; используются стандартные."
+		}
+	} else {
+		m.preferencesNote = "Папка настроек недоступна; выбор не сохраняется."
+	}
 	m.settingsLogin = *loginFlag
 	m.settingsContext = ctx
 	m.initialSession = *sessionFlag
 	m.createSession = *newFlag
 	options := []tea.ProgramOption{tea.WithAltScreen(), tea.WithoutSignalHandler()}
-	if !*noMouseFlag {
+	if m.mouseEnabled() {
 		options = append(options, tea.WithMouseCellMotion())
 	}
 	p := tea.NewProgram(m, options...)

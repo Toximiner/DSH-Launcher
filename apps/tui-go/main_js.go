@@ -33,6 +33,13 @@ func main() {
 		if page < 0 || page >= len(pages) {
 			return m.View()
 		}
+		if page == tuiSettingsPage {
+			m.openDialog("settings")
+			return m.View()
+		}
+		if m.chrome.menuOpen || m.chrome.dialog != "" {
+			m.closeChrome()
+		}
 		m.page = page
 		m.navFocused = false
 		if page == chatPage {
@@ -54,7 +61,7 @@ func main() {
 		if key == "ctrl+c" || key == "ctrl+d" || (m.page == dshSettingsPage && key == "r") {
 			return m.View()
 		}
-		keys := map[string]tea.KeyType{"enter": tea.KeyEnter, "tab": tea.KeyTab, "esc": tea.KeyEsc, "up": tea.KeyUp, "down": tea.KeyDown, "left": tea.KeyLeft, "right": tea.KeyRight, "pgup": tea.KeyPgUp, "pgdown": tea.KeyPgDown, "home": tea.KeyHome, "end": tea.KeyEnd, "backspace": tea.KeyBackspace, "delete": tea.KeyDelete, "ctrl+u": tea.KeyCtrlU, "ctrl+a": tea.KeyCtrlA, "ctrl+e": tea.KeyCtrlE, "f1": tea.KeyF1}
+		keys := map[string]tea.KeyType{"enter": tea.KeyEnter, "tab": tea.KeyTab, "esc": tea.KeyEsc, "up": tea.KeyUp, "down": tea.KeyDown, "left": tea.KeyLeft, "right": tea.KeyRight, "pgup": tea.KeyPgUp, "pgdown": tea.KeyPgDown, "home": tea.KeyHome, "end": tea.KeyEnd, "backspace": tea.KeyBackspace, "delete": tea.KeyDelete, "ctrl+u": tea.KeyCtrlU, "ctrl+a": tea.KeyCtrlA, "ctrl+e": tea.KeyCtrlE, "f1": tea.KeyF1, "f4": tea.KeyF4, "f10": tea.KeyF10, "shift+tab": tea.KeyShiftTab}
 		if kind, ok := keys[key]; ok {
 			m.Update(tea.KeyMsg{Type: kind})
 		} else {

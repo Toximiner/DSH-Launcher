@@ -17,16 +17,17 @@
 [приватный стенд Codespaces](tools/live/README.md).
 
 Терминальный клиент Linux развивается на **Go + Bubble Tea** в [apps/tui-go](apps/tui-go/README.md).
-Доступны панели, мышь и клавиатура, история ввода, прокрутка и отдельные разделы
-настроек dsh и TUI. URL входа работающего dsh задаётся через `DSH_TUI_URL` или `--url`:
+Доступны панели, мышь и клавиатура, история ввода и прокрутка. Настройки TUI
+открываются через верхнее меню «Файл», F4 или Alt+T; выбор мыши и истории сохраняется.
+Настройки dsh остаются отдельным разделом. URL входа работающего dsh задаётся через `DSH_TUI_URL` или `--url`:
 клиент читает его настройки без редактирования.
 Доступны подключение/создание сессии и режимы агента. `--start` запускает dsh
 и предлагает предустановку dshmarket в профиль. В разделе «Маркет» доступны
 поиск и подтверждаемые установка, обновление и удаление плагинов. Чат пока локальный; установка
 самого dsh и потоковый чат переносятся постепенно. Устаревшая терминальная JS-версия удалена.
 
-Готовые Go-сборки: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.7/dsh-launcher-tui-go_linux_amd64) ·
-[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.7/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.7/SHA256SUMS).
+Готовые Go-сборки: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.8/dsh-launcher-tui-go_linux_amd64) ·
+[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.8/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.8/SHA256SUMS).
 Go-клиенту не нужен Node.js; самому бэкенду dsh нужен Node.js 24.9+.
 
 ## Как работает

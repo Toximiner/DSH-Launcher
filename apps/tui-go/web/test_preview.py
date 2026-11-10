@@ -38,8 +38,11 @@ with sync_playwright() as playwright:
     visible('deepseek-flash')
     if args.screenshot:
         page.screenshot(path=args.screenshot)
-    click_cell(5, 10)
-    visible('сведения о клиенте')
+    click_cell(2, 1)
+    click_cell(3, 3)
+    visible('Мышь в интерфейсе')
+    page.keyboard.press('Escape')
+    assert page.evaluate('dshTui.currentPage()') == 2
     page.keyboard.press('Escape')
     page.keyboard.type('Browser input test')
     page.keyboard.press('Enter')

@@ -1,4 +1,4 @@
-# Go TUI preview — checkpoint 7
+# Go TUI preview — checkpoint 8
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
@@ -17,10 +17,23 @@ The minimum terminal size is 44 columns by 18 rows.
 It can read settings from an already running dsh 0.2.2-rc.1. Chat does not connect
 to dsh or send messages yet. Submitted text appears as a
 local draft card; it is never represented as an assistant reply. Tab focuses the sidebar, Up/Down selects a page, Enter focuses
-its content, and Esc returns to chat without losing the draft. Sessions lists backend sessions (refresh with `r`, select with arrows and Enter); Log shows actual local application information. The sidebar
-separates **Настройки dsh** (read-only backend snapshots and connection instructions)
-from **Настройки TUI** (local client version, interface, terminal size, and workspace).
-Local client information stays available with or without a backend login URL.
+its content, and Esc returns to chat without losing the draft. Sessions lists backend
+sessions (refresh with `r`, select with arrows and Enter); Log shows local client
+information. **Настройки dsh** remains a separate read-only backend section.
+**Настройки TUI** opens from **Файл → Настройки TUI…**, F4, or Alt+T; it is no
+longer in the sidebar. F10 (or Alt+F/V/H) opens File/View/Help; arrows and Enter
+navigate, Esc closes. Settings dialogs preserve the current page, scroll, draft,
+and focus. Menu controls and settings checkboxes also support mouse clicks.
+
+Mouse and input-history preferences apply immediately and are saved atomically
+in `${XDG_CONFIG_HOME:-~/.config}/dsh-launcher-tui/preferences.json`. Disabling
+history clears recall entries, keeps the current draft, and does not erase visible
+chat records; message history itself is not saved to this file. `--no-mouse`
+overrides the saved preference for the current run. Use F4 to restore mouse
+reporting after disabling it. A failed write keeps the previous setting and shows
+an error. Help → About shows the version, terminal size, and workspace even when
+offline. Settings contain no Wayland, Ozone, GPU, Chromium, or tray controls.
+The local WASM adapter applies preferences only for its current browser session.
 `/help` lists local commands, `/clear` clears the view, and `/exit` or Ctrl+D exits. Node.js is not needed for attaching the Go client to an existing backend.
 Starting dsh locally requires Node.js 24.9+.
 
@@ -159,10 +172,9 @@ compatibility.
 
 Work proceeds in small, reviewable checkpoints with user feedback. The
 [roadmap](../../docs/tui-roadmap/README.en.md) is the maintained capability inventory
-and milestone order. The next UI checkpoint moves TUI preferences to a top menu,
-keeping dsh settings separate and excluding Electron-only options such as
-Wayland/Ozone/GPU. Subsequent checkpoints cover actual streamed chat, interaction,
-settings, workspace features, plugins, and launcher lifecycle. These are planned
-features, not shipped behavior. No full-parity claim is made by this preview.
-The legacy JS client and its packaging have been removed; its streamed chat and
-dsh installation remain pending in Go.
+and milestone order. Milestone 1 is complete: TUI preferences live in the top menu,
+while dsh settings remain separate. The next checkpoint is minimal actual streamed
+chat. Later checkpoints cover interaction, settings, workspace features, plugins,
+and launcher lifecycle. Those are planned features, not shipped behavior. No
+full-parity claim is made by this preview. The legacy JS client and its packaging
+have been removed; its streamed chat and dsh installation remain pending in Go.

@@ -13,6 +13,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Added
 
+- Go preview 0.2.0-preview.8 adds File/View/Help menus, modal TUI settings with persisted mouse/input-history preferences, shortcut help, and About. F10 opens the menu; F4 / Alt+T opens settings. TUI settings leave the sidebar; dialogs preserve the page, scroll, draft, and focus. Electron-specific controls are excluded. Tests cover minimum dimensions, mouse, save failures, and restart persistence.
+
 - Added a private live Codespaces deployment with Node 24, actual dsh and dshmarket, native Go TUI through ttyd, font fitting, and touch navigation.
 
 - Go preview 0.2.0-preview.7 adds a marketplace TUI with catalog search, installed packages, mouse controls, and confirmed install/update/remove actions. State is reread after operations and progress comes from dshmarket. The browser has a clearly labeled sample catalog without backend writes.

@@ -15,8 +15,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const version = "0.2.0-preview.7"
-const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/help — справка\n/clear — очистить экран\n/exit — выйти\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
+const version = "0.2.0-preview.8"
+const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/help — справка\n/clear — очистить экран\n/exit — выйти\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
 	chatPage = iota
@@ -28,10 +28,16 @@ const (
 )
 
 var pages = []string{"Чат", "Сессии", "Настройки dsh", "Настройки TUI", "Журнал", "Маркет"}
+var navigationPages = []int{chatPage, sessionsPage, dshSettingsPage, logPage, marketPage}
 
 type quitMsg struct{}
 
 type model struct {
+	chrome              chromeState
+	prefs               clientPreferences
+	mouseForcedOff      bool
+	savePreferences     func(clientPreferences) error
+	preferencesNote     string
 	input               textinput.Model
 	viewport            viewport.Model
 	width, height       int
@@ -85,7 +91,7 @@ func newModel() *model {
 	input.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#58a6ff"))
 	input.Focus()
 	cwd, _ := os.Getwd()
-	m := &model{input: input, viewport: viewport.New(78, 17), width: 80, height: 24, workspace: clean(cwd), events: []string{"Открыт интерфейс клиента. Подключение к dsh отсутствует."}}
+	m := &model{prefs: defaultClientPreferences(), input: input, viewport: viewport.New(78, 17), width: 80, height: 24, workspace: clean(cwd), events: []string{"Открыт интерфейс клиента. Подключение к dsh отсутствует."}}
 	m.marketSearch = newMarketSearch()
 	m.resize()
 	return m
@@ -128,8 +134,6 @@ func (m *model) rebuild() {
 		content = m.sessionInfo()
 	case dshSettingsPage:
 		content = m.settingsView()
-	case tuiSettingsPage:
-		content = m.tuiSettingsView()
 	case marketPage:
 		content = m.marketView()
 	case logPage:
@@ -301,7 +305,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		return m, m.mouse(msg)
 	case tea.KeyMsg:
-		if page, ok := map[string]int{"alt+c": chatPage, "alt+s": sessionsPage, "alt+d": dshSettingsPage, "alt+t": tuiSettingsPage, "alt+l": logPage, "alt+m": marketPage}[msg.String()]; ok {
+		if cmd, handled := m.chromeKey(msg); handled {
+			return m, cmd
+		}
+		if page, ok := map[string]int{"alt+c": chatPage, "alt+s": sessionsPage, "alt+d": dshSettingsPage, "alt+l": logPage, "alt+m": marketPage}[msg.String()]; ok && msg.Alt {
 			m.page = page
 			m.navFocused = false
 			m.marketEditing = false
@@ -364,10 +371,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.input.Focus()
 		case "esc":
 			return m, m.showChat()
-		case "f1":
-			m.showChat()
-			m.append(help)
-			return m, nil
 		case "enter":
 			if m.page == sessionsPage && !m.navFocused && len(m.sessionItems) > 0 {
 				id := m.sessionItems[m.sessionListIndex].ID
@@ -392,7 +395,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if line == "" {
 				return m, nil
 			}
-			if len(m.history) == 0 || m.history[len(m.history)-1] != line {
+			if m.prefs.InputHistory && (len(m.history) == 0 || m.history[len(m.history)-1] != line) {
 				m.history = append(m.history, line)
 			}
 			if len(m.history) > 50 {
@@ -457,7 +460,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if msg.String() == "up" {
 					delta = -1
 				}
-				m.page = (m.page + delta + len(pages)) % len(pages)
+				index := 0
+				for i, page := range navigationPages {
+					if page == m.page {
+						index = i
+						break
+					}
+				}
+				m.page = navigationPages[(index+delta+len(navigationPages))%len(navigationPages)]
 				m.resize()
 				return m, nil
 			}
@@ -472,6 +482,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.page != 0 {
 				m.viewport, _ = m.viewport.Update(msg)
+				return m, nil
+			}
+			if !m.prefs.InputHistory {
 				return m, nil
 			}
 			if m.historyIndex == len(m.history) {

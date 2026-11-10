@@ -34,10 +34,10 @@ func (m *model) sidebar(height int) string {
 		focus += " · ФОКУС"
 	}
 	lines := []string{muted.Bold(true).Render("РАБОЧАЯ ОБЛАСТЬ"), heading.Render(ansi.Truncate(filepath.Base(m.workspace), inner, "…")), "", muted.Bold(true).Render(focus)}
-	for i, page := range pages {
-		text := "   " + page
-		if i == m.page {
-			text = lipgloss.NewStyle().Width(inner).Bold(true).Foreground(lipgloss.Color("#79c0ff")).Background(lipgloss.Color("#233044")).Render(" › " + page)
+	for _, page := range navigationPages {
+		text := "   " + pages[page]
+		if page == m.page {
+			text = lipgloss.NewStyle().Width(inner).Bold(true).Foreground(lipgloss.Color("#79c0ff")).Background(lipgloss.Color("#233044")).Render(" › " + pages[page])
 		}
 		lines = append(lines, text)
 	}
@@ -90,7 +90,7 @@ func (m *model) View() string {
 	if m.sessionBusy {
 		status = accent.Render("◌ Запрос сессии dsh")
 	}
-	header := bar(brand, status, width) + "\n" + ansi.Truncate(muted.Render("  Проект: "+filepath.Base(m.workspace)+"  /  "+pages[m.page]), width, "…")
+	header := bar(brand, status, width) + "\n" + m.menuBar(width)
 	title := pages[m.page]
 	if m.page == 0 {
 		title = "Новый разговор"
@@ -113,12 +113,12 @@ func (m *model) View() string {
 	if width >= 78 {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, m.sidebar(bodyHeight), " ", right)
 	}
-	hints := "Tab разделы · Esc чат · PgUp/PgDn"
+	hints := "F10 меню · Tab разделы · Esc чат"
 	if m.page == dshSettingsPage && m.settingsLogin != "" {
 		hints = "←/→ раздел · r обновить · PgUp/PgDn"
 	}
 	footer := bar(muted.Render(hints), muted.Render("Ctrl+D выход"), width)
-	return header + "\n" + body + "\n" + footer
+	return m.chromeView(header + "\n" + body + "\n" + footer)
 }
 
 func (m *model) modeControls() string {

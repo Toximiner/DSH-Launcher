@@ -17,16 +17,17 @@ The public demo preview is disabled. For a live instance with actual dsh, use
 the [private Codespaces deployment](tools/live/README.md).
 
 The Linux terminal client uses **Go + Bubble Tea** in [apps/tui-go](apps/tui-go/README.md).
-It provides panels, mouse and keyboard navigation, input history, scrolling,
-and separate dsh/TUI settings. Pass a running dsh login URL through
+It provides panels, mouse and keyboard navigation, input history, and scrolling.
+TUI preferences open from the top File menu, F4, or Alt+T; mouse/history choices
+are persisted. dsh settings remain a separate section. Pass a running dsh login URL through
 `DSH_TUI_URL` or `--url` to read its settings without editing them.
 Session attachment/creation and agent modes are available. `--start` launches dsh
 and offers dshmarket preinstallation into its profile. The Marketplace page provides
 search and confirmed plugin install/update/remove actions. Chat is still local;
 the dsh installer and streamed chat will be ported incrementally. The legacy JS terminal client is removed.
 
-Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.7/dsh-launcher-tui-go_linux_amd64) ·
-[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.7/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.7/SHA256SUMS).
+Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.8/dsh-launcher-tui-go_linux_amd64) ·
+[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.8/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.8/SHA256SUMS).
 The Go client runs without Node.js; the dsh backend requires Node.js 24.9+.
 
 ## How it works
