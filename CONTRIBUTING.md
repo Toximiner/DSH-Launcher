@@ -34,6 +34,11 @@ The experimental terminal app is an independent npm package in `apps/tui`:
 `npm run build:tui:deb`. The `tui` workflow tests it and uploads its npm archive
 and Debian package separately. The root
 ESLint command checks both apps. TUI-only work does not need Electron installed.
+Installed TUI scenarios live in `test/docker-tui`, with their own fake Web API
+and a real-backend smoke test. See [the Docker guide](test/docker-tui/README.md)
+for host-side validation and CI artifacts. The `tui` workflow runs their Docker
+matrix on Ubuntu 24.04 / 26.04 and Debian 13 after the TUI unit tests pass.
+Run these Docker scenarios in CI; local harness checks can use an extracted `.deb`.
 
 ## CI
 

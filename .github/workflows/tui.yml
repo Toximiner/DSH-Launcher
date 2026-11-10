@@ -3,10 +3,10 @@ name: tui
 on:
   push:
     branches: [main]
-    paths: ['apps/tui/**', 'build-tui*.sh', 'package.json', '.github/workflows/tui.yml', 'eslint.config.js']
+    paths: ['apps/tui/**', 'test/docker-tui/**', 'build-tui*.sh', 'package.json', '.github/workflows/tui.yml', 'eslint.config.js']
   pull_request:
     branches: [main]
-    paths: ['apps/tui/**', 'build-tui*.sh', 'package.json', '.github/workflows/tui.yml', 'eslint.config.js']
+    paths: ['apps/tui/**', 'test/docker-tui/**', 'build-tui*.sh', 'package.json', '.github/workflows/tui.yml', 'eslint.config.js']
   workflow_dispatch:
 
 permissions:
@@ -34,3 +34,32 @@ jobs:
             build/tui/*.tgz
             build/tui/*.deb
           if-no-files-found: error
+
+  docker:
+    needs: test-and-pack
+    name: tui docker (${{ matrix.os }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ['24.04', '26.04', 'debian-13']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/tui/package-lock.json
+      - run: npm ci --prefix apps/tui --ignore-scripts
+      - name: Installed TUI scenarios
+        env:
+          OSES: ${{ matrix.os }}
+        run: test/docker-tui/run.sh
+      - name: Upload Docker logs and terminal transcripts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: tui-docker-${{ matrix.os }}
+          path: test/docker-tui/.work/results/
+          if-no-files-found: warn

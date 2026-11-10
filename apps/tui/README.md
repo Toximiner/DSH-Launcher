@@ -6,8 +6,10 @@ The existing graphical launcher remains a separate application.
 
 ## Run from source
 
-Requires Node.js 22+ and an installed `dsh`. The protocol adapter targets
-`@deepseek-ai/dsh@0.2.2-rc.1`; upstream APIs are pre-stable.
+The TUI requires Node.js 22+. The protocol adapter targets
+`@deepseek-ai/dsh@0.2.2-rc.1`, whose backend requires Node.js 24.9+ when run
+locally; upstream APIs are pre-stable. Use Node.js 24.9+ for both applications
+when the TUI starts dsh on the same machine.
 
 ```sh
 npm ci --prefix apps/tui
@@ -89,3 +91,9 @@ CI tests and packages the TUI independently; it does not publish an npm release.
 It bundles `ws` and depends on system `nodejs (>= 22)`; install it with
 `sudo apt install ./build/tui/dsh-launcher-tui_0.1.0-1_all.deb`.
 The dsh executable must be installed separately and available in PATH.
+
+The CI Docker matrix installs the `.deb` on Ubuntu 24.04 / 26.04 and Debian 13,
+then checks the installed client in a PTY as an ordinary user. Tests cover
+streaming, sessions, approvals, signals, attachment, disconnects, and terminal
+restoration, plus real dsh startup without model requests. See the
+[Docker scenario guide](../../test/docker-tui/README.md) for details and logs.

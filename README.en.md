@@ -13,6 +13,8 @@ This repository also contains **dsh-launcher-tui**, a separate Linux terminal
 application without Electron or a browser. The first version supports streaming
 chat, session selection, response cancellation, and operation approvals.
 Requires Node.js 22+ and an installed dsh; the adapter targets dsh 0.2.2-rc.1.
+The dsh 0.2.2-rc.1 backend itself requires Node.js 24.9+; use Node.js 24.9+
+when running both applications on the same machine.
 
 ```sh
 npm ci --prefix apps/tui

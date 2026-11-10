@@ -8,5 +8,7 @@ logs/
 dsh.desktop
 # test/docker: сборка .deb, tarball Node, логи прогонов
 test/docker/.work/
+test/docker-tui/.work/
+.pytest_cache/
 __pycache__/
 coverage/

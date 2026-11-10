@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Added
 
+- Docker scenarios for the installed TUI package on Ubuntu 24.04 / 26.04 and Debian 13: PTY chat, sessions, approvals, signals, and real dsh startup without model requests. The CI matrix retains terminal logs and JUnit reports.
+
 - Experimental terminal client in `apps/tui`: an independent build without Electron, dsh startup or attachment, streaming chat, sessions, response cancellation, and operation approvals. Separate tests and CI; targets the dsh 0.2.2-rc.1 protocol.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
