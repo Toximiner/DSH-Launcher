@@ -3,10 +3,10 @@ name: tui-go-preview
 on:
   pull_request:
     branches: [main]
-    paths: ['apps/tui-go/**', 'test/docker-tui/terminal.py', '.github/workflows/tui-go.yml']
+    paths: ['apps/tui-go/**', '.github/workflows/tui-go.yml']
   push:
     branches: [main]
-    paths: ['apps/tui-go/**', 'test/docker-tui/terminal.py', '.github/workflows/tui-go.yml']
+    paths: ['apps/tui-go/**', '.github/workflows/tui-go.yml']
   workflow_dispatch:
 
 permissions:

@@ -9,36 +9,18 @@ A small Electron app: a window that opens **DeepSeek Harness**
 
 ## Terminal version (experimental)
 
-[Open the interactive TUI browser preview](https://toximiner.github.io/DSH-Launcher/preview/).
-Chat is local; dsh settings are a demo snapshot without a connection to your server.
+[Open the interactive browser preview](https://toximiner.github.io/DSH-Launcher/preview/).
+It runs the shared Go model in WebAssembly; chat is local and settings use a demo snapshot.
 
-An incremental migration to Go + Bubble Tea has started. The separate
-[Go preview](apps/tui-go/README.md) has sidebar navigation, a conversation panel,
-and a separate composer, with mouse navigation, input history, scrolling, and
-clean shutdown. A login URL enables read-only settings from an existing dsh.
-Its chat is still local. The working JS client below remains available during migration.
+The Linux terminal client uses **Go + Bubble Tea** in [apps/tui-go](apps/tui-go/README.md).
+It provides panels, mouse and keyboard navigation, input history, scrolling,
+and separate dsh/TUI settings. Pass a running dsh login URL through
+`DSH_TUI_URL` or `--url` to read its settings without editing them.
+Chat is currently a local draft; backend startup/installation and streamed chat
+will be ported incrementally. The legacy JS terminal client is removed.
 
-This repository also contains **dsh-launcher-tui**, a separate Linux terminal
-application without Electron or a browser. The first version supports streaming
-chat, session selection, response cancellation, and operation approvals.
-The client requires Node.js 22+; the adapter targets dsh 0.2.2-rc.1.
-When dsh is missing, `/install` installs it for the current user without sudo,
-shows npm output, and starts it after success. `/cancel` cancels installation.
-The installed backend is reused on later starts.
-The dsh 0.2.2-rc.1 backend itself requires Node.js 24.9+; use Node.js 24.9+
-when running both applications on the same machine.
-
-```sh
-npm ci --prefix apps/tui
-npm run tui
-```
-
-For a busy port, use `npm run tui -- --port 3081`. To attach to a running dsh,
-set `DSH_TUI_URL` to the login URL from its terminal.
-`npm run build:tui` builds a separate npm archive without Electron.
-`npm run build:tui:deb` builds a separate `.deb` depending on Node.js 22+.
-GUI build and launch commands remain the same. See the
-[terminal application's README](apps/tui/README.md) for commands and limitations.
+[Download Linux amd64/arm64 preview binaries](https://toximiner.github.io/DSH-Launcher/).
+The Go client runs without Node.js; the dsh backend requires Node.js 24.9+.
 
 ## How it works
 

@@ -1,8 +1,7 @@
 # Go TUI preview — checkpoint 5
 
-This interactive migration checkpoint adds read-only dsh settings to the panel
-layout next to the working
-JavaScript client in `apps/tui`: a workspace sidebar, conversation panel, separate
+The terminal client is implemented in Go/Bubble Tea, with read-only dsh settings
+and a panel layout: a workspace sidebar, conversation panel, separate
 message composer, connection status, and keyboard hints. The sidebar hides below
 78 columns. Input history restores drafts; scrolling, resizing, and clean shutdown
 remain available. Mouse clicks select sidebar pages and the local draft, and
@@ -72,5 +71,5 @@ read-only settings checkpoint, the proposed next checkpoint is a minimal streame
 conversation with an existing dsh. Subsequent checkpoints cover sessions,
 decisions, local backend management, settings, updates/rollback, diagnostics,
 core dsh screens, and named plugin adapters. No full-parity claim is made by
-this preview. The existing JS packages on Pages remain the working distribution
-during migration.
+this preview. The legacy JS client and its packaging have been removed; its
+chat and backend lifecycle capabilities remain pending in Go.

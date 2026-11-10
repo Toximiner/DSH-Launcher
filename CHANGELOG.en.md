@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Added
 
+- Removed the legacy JS TUI source, npm/Debian packaging, workflow, and its scenarios. Moved the shared PTY driver into the Go app. Fixed ESLint browser globals for the web adapter and excluded generated builds.
+
 - Added a static WebAssembly browser preview of the shared Go TUI model, with input, navigation, and mouse controls through xterm.js. Requires no external terminal tunnel. dsh settings are explicitly labeled as a demo snapshot; no user backend connection is made.
 
 - Go preview 0.2.0-preview.5 separates dsh and TUI settings in the sidebar. TUI settings display client information regardless of backend connection; dsh snapshot refresh is confined to its own page.
@@ -19,15 +21,7 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 - Go preview 0.2.0-preview.2: sidebar navigation, conversation and composer panels, connection status, and local pages. Navigation preserves drafts; narrow terminals hide the sidebar. Backend connection is still pending.
 
-- dsh installation in the TUI now shows an animated activity indicator, elapsed time, current phase, and completed npm fetch counts without an invented overall percentage. The working JS client is version 0.1.1.
-
-- First standalone Go/Bubble Tea TUI preview: input, history with draft restoration, scrolling, resizing, and clean shutdown. Backend connection is pending; the working JS client remains available. Includes Go tests and PTY checks without Node in PATH.
-
-- TUI installation prompt for a missing dsh: `/install` installs the pinned backend in a user-local directory without sudo, then starts it. Includes declining, cancellation, npm output, retry after failure, and reuse on subsequent launches.
-
-- Docker scenarios for the installed TUI package on Ubuntu 24.04 / 26.04 and Debian 13: PTY chat, sessions, approvals, signals, and real dsh startup without model requests. The CI matrix retains terminal logs and JUnit reports.
-
-- Experimental terminal client in `apps/tui`: an independent build without Electron, dsh startup or attachment, streaming chat, sessions, response cancellation, and operation approvals. Separate tests and CI; targets the dsh 0.2.2-rc.1 protocol.
+- First standalone Go/Bubble Tea TUI preview: input, history with draft restoration, scrolling, resizing, and clean shutdown. The first checkpoint had no backend connection. Includes Go tests and PTY checks without Node in PATH.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 

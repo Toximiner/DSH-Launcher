@@ -9,8 +9,7 @@ import sys
 import tempfile
 import unittest
 
-ROOT = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(ROOT / 'test/docker-tui'))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from terminal import Terminal  # noqa: E402
 
 BINARY = str(Path(sys.argv[1]).resolve())

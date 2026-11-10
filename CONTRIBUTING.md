@@ -29,16 +29,13 @@ node test/markers.js   # marker-block integrity (also run by npm test)
 npm run coverage  # unit coverage with the gates in package.json
 ```
 
-The experimental terminal app is an independent npm package in `apps/tui`:
-`npm ci --prefix apps/tui`, `npm run test:tui`, `npm run build:tui`, and
-`npm run build:tui:deb`. The `tui` workflow tests it and uploads its npm archive
-and Debian package separately. The root
-ESLint command checks both apps. TUI-only work does not need Electron installed.
-Installed TUI scenarios live in `test/docker-tui`, with their own fake Web API
-and a real-backend smoke test. See [the Docker guide](test/docker-tui/README.md)
-for host-side validation and CI artifacts. The `tui` workflow runs their Docker
-matrix on Ubuntu 24.04 / 26.04 and Debian 13 after the TUI unit tests pass.
-Run these Docker scenarios in CI; local harness checks can use an extracted `.deb`.
+The terminal app lives in `apps/tui-go` and uses Go/Bubble Tea. Run
+`go test -race ./...` and `go build` from that directory. PTY scenarios use
+`apps/tui-go/test/terminal.py` and run through `test/terminal_preview.py` with
+a built binary; install pyte in a project-local Python environment first.
+The `tui-go-preview` workflow checks amd64/arm64 builds, PTY behavior without Node,
+and the static WebAssembly browser preview. See `apps/tui-go/web/README.md`.
+The legacy JavaScript terminal app and its npm/Debian packaging are removed.
 
 ## CI
 
