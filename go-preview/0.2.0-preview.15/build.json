@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0-preview.15",
+  "source_commit": "52fbfe5b591178ca26754592d146f841c41f816b",
+  "stage": "multiline pending-item editing with explicit save, local drafts, observed-conflict guards and reconnect recovery; steering remains pending",
+  "sha256": {
+    "dsh-launcher-tui-go_linux_amd64": "03bd9bb87f5cbeffc77153f07d937ae993febff38b641583f183702693fc229f",
+    "dsh-launcher-tui-go_linux_arm64": "62dcda6764b2b24c27b63db50db571bf840160735d3da6e1c998c943272f23d3"
+  }
+}
