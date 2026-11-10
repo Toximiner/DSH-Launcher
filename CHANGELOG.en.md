@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Added
 
+- dsh installation in the TUI now shows an animated activity indicator, elapsed time, current phase, and completed npm fetch counts without an invented overall percentage. The working JS client is version 0.1.1.
+
 - First standalone Go/Bubble Tea TUI preview: input, history with draft restoration, scrolling, resizing, and clean shutdown. Backend connection is pending; the working JS client remains available. Includes Go tests and PTY checks without Node in PATH.
 
 - TUI installation prompt for a missing dsh: `/install` installs the pinned backend in a user-local directory without sudo, then starts it. Includes declining, cancellation, npm output, retry after failure, and reuse on subsequent launches.

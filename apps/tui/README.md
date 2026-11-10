@@ -24,6 +24,12 @@ and starts the conversation after success. The installation lives under
 `~/.local/share/dsh-launcher-tui/backend` by default, and is reused on later
 starts. It does not need sudo or change the global npm prefix or shell PATH.
 
+During installation, an animated status line shows elapsed time, the current
+phase, completed registry requests, and fetched packages (including cache hits).
+Repeated package URLs are counted once. npm does not provide the total byte
+count, so no overall percentage is shown. The indicator keeps moving while npm
+is silent; npm output remains visible in the scrollback. `/cancel` stops it.
+
 Only `/install` confirms installation; ordinary input does not. On failure,
 `/install` retries; `/cancel`, Ctrl+C, or Ctrl+D stops npm and exits. A failed or
 cancelled installation is not reused. Node.js itself must be installed first;
@@ -101,16 +107,16 @@ npm run build:tui
 npm run build:tui:deb
 ```
 
-The build creates `build/tui/dsh-launcher-tui-0.1.0.tgz`, installable with
-`npm install -g ./build/tui/dsh-launcher-tui-0.1.0.tgz`. The package contains
+The build creates `build/tui/dsh-launcher-tui-0.1.1.tgz`, installable with
+`npm install -g ./build/tui/dsh-launcher-tui-0.1.1.tgz`. The package contains
 only the terminal app and declares one runtime dependency, `ws`. It needs
 Node.js installed separately; a missing dsh can be installed from the TUI.
 Building it does not install Electron.
 CI tests and packages the TUI independently; it does not publish an npm release.
 
-`build:tui:deb` also creates `build/tui/dsh-launcher-tui_0.1.0-1_all.deb`.
+`build:tui:deb` also creates `build/tui/dsh-launcher-tui_0.1.1-1_all.deb`.
 It bundles `ws` and depends on system `nodejs (>= 22)`; install it with
-`sudo apt install ./build/tui/dsh-launcher-tui_0.1.0-1_all.deb`.
+`sudo apt install ./build/tui/dsh-launcher-tui_0.1.1-1_all.deb`.
 The dsh executable can be installed separately in PATH or through the TUI's
 user-local installation prompt.
 

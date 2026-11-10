@@ -14,6 +14,7 @@ if (mode === 'fail') {
   console.error('Test npm installation failed');
   process.exitCode = 1;
 } else if (mode === 'hang') {
+  console.error('npm http fetch GET 200 https://registry.npmjs.org/test/-/test-1.0.0.tgz 10ms');
   const worker = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore' });
   fs.writeFileSync(path.join(state, 'npm-ready.json'), JSON.stringify({ pid: process.pid, worker: worker.pid }));
   console.log('Test npm is waiting');

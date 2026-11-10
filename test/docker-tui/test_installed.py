@@ -188,7 +188,7 @@ def test_install_and_reuse(lab):
     app.wait('Ready')
     calls = lab.npm_calls()
     prefix = lab.root / 'data/dsh-launcher-tui/backend'
-    assert calls == [['install', '--prefix', str(prefix), '--no-audit', '--no-fund', '--ignore-scripts', '@deepseek-ai/dsh@0.2.2-rc.1']]
+    assert calls == [['install', '--prefix', str(prefix), '--no-audit', '--no-fund', '--ignore-scripts', '--loglevel=http', '@deepseek-ai/dsh@0.2.2-rc.1']]
     assert 'Test npm installation progress' in app.text
     backend = lab.ready()
     app.command('/exit')
@@ -219,6 +219,12 @@ def test_cancel_installation(lab, cancel):
     app.wait('dsh was not found')
     app.command('/install')
     app.wait('Test npm is waiting')
+    app.wait('1 packages fetched')
+    initial_status = next(row for row in app.screen.display if 'packages fetched' in row)
+    def activity_changed():
+        app.pump()
+        return any('packages fetched' in row and row != initial_status for row in app.screen.display)
+    wait_for(activity_changed)
     child = json.loads((lab.state / 'npm-ready.json').read_text())
     app.command('/install')
     app.wait('Installation is running')

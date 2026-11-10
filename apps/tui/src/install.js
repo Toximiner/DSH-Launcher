@@ -5,6 +5,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { StringDecoder } = require('node:string_decoder');
 const { stopProcessGroup } = require('./process');
+const { InstallProgress } = require('./install-progress');
 
 const DSH_VERSION = '0.2.2-rc.1';
 const DSH_PACKAGE = `@deepseek-ai/dsh@${DSH_VERSION}`;
@@ -104,43 +105,54 @@ class DshInstaller {
     const env = { ...process.env, PATH: path.dirname(process.execPath) + path.delimiter + (process.env.PATH || '') };
     delete env.DSH_LAUNCHER_GITHUB_TOKEN;
     delete env.DSH_TUI_URL;
-    const child = this.child = spawn(npm, ['install', '--prefix', this.prefix, '--no-audit', '--no-fund', '--ignore-scripts', DSH_PACKAGE], {
+    const child = this.child = spawn(npm, ['install', '--prefix', this.prefix, '--no-audit', '--no-fund', '--ignore-scripts', '--loglevel=http', DSH_PACKAGE], {
       cwd: this.prefix, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
     });
     this.running = true;
-    const started = Date.now();
+    const activity = new InstallProgress();
     const progress = () => {
-      terminal.status = `Installing dsh… ${Math.floor((Date.now() - started) / 1000)}s — /cancel to stop`;
+      terminal.status = activity.text();
       terminal.draw();
     };
     progress();
-    const timer = setInterval(progress, 1000);
+    const timer = setInterval(progress, 100);
     const flushers = [];
     for (const stream of [child.stdout, child.stderr]) {
       const decoder = new StringDecoder('utf8');
       let buffer = '';
-      const flush = () => { if (buffer.trim()) terminal.log('[npm] ' + buffer.slice(-16000)); buffer = ''; };
+      const output = line => {
+        if (!line.trim()) return;
+        if (!signal.aborted) activity.observe(line);
+        terminal.log('[npm] ' + line.slice(-16000));
+        progress();
+      };
+      const flush = () => { output(buffer); buffer = ''; };
       flushers.push(flush);
       stream.on('data', data => {
         buffer += decoder.write(data);
         let index;
         while ((index = buffer.indexOf('\n')) !== -1) {
           const line = buffer.slice(0, index); buffer = buffer.slice(index + 1);
-          if (line.trim()) terminal.log('[npm] ' + line.slice(-16000));
+          output(line);
         }
         if (buffer.length > 16000) flush();
       });
     }
     // Keep a single stop promise: signal handling and application shutdown may
     // both request cancellation while npm is still closing its output pipes.
-    const onAbort = () => { void this.stop().catch(error => terminal.log(error.message)); };
+    const onAbort = () => {
+      activity.phase = 'Stopping installation'; progress();
+      void this.stop().catch(error => terminal.log(error.message));
+    };
     signal.addEventListener('abort', onAbort, { once: true });
     try {
       await new Promise((resolve, reject) => {
         child.once('error', error => reject(new Error(`Cannot run npm: ${error.message}`)));
         child.once('close', (code, exitSignal) => code === 0 ? resolve() : reject(new Error(`npm exited (${exitSignal || code})`)));
       });
+      for (const flush of flushers) flush();
       signal.throwIfAborted();
+      activity.phase = 'Checking installed dsh'; progress();
       if (!findExecutable(this.bin, this.prefix)) throw new Error('npm finished but the dsh executable is missing');
       fs.writeFileSync(this.marker, JSON.stringify({ version: DSH_VERSION }), { mode: 0o600 });
     } finally {

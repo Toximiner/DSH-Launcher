@@ -1,6 +1,6 @@
 {
   "name": "dsh-launcher-tui",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Terminal client and process launcher for DeepSeek Harness",
   "license": "MIT",
   "bin": { "dsh-launcher-tui": "bin/dsh-launcher-tui.js" },

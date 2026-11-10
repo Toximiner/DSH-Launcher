@@ -6,6 +6,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { EventEmitter } = require('node:events');
 const { DshInstaller, DSH_VERSION, DSH_PACKAGE, supportsDsh, findExecutable, installPrefix } = require('../src/install');
+const { InstallProgress } = require('../src/install-progress');
 
 function fixture(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tui-install-'));
@@ -76,10 +77,25 @@ console.log('installation progress');
 `);
   await f.installer.install(npm, f.terminal, new AbortController().signal);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(f.installer.prefix, 'args.json'))),
-    ['install', '--prefix', f.installer.prefix, '--no-audit', '--no-fund', '--ignore-scripts', DSH_PACKAGE]);
+    ['install', '--prefix', f.installer.prefix, '--no-audit', '--no-fund', '--ignore-scripts', '--loglevel=http', DSH_PACKAGE]);
   assert.ok(f.terminal.lines.some(line => line.includes('installation progress')));
   assert.equal(f.installer.managedBinary(), f.installer.bin);
   assert.equal(f.installer.running, false);
+});
+
+test('installation progress reports actual fetches, animates while idle, and never invents a percentage', () => {
+  const progress = new InstallProgress(1000);
+  const first = progress.text(1000);
+  assert.notEqual(first, progress.text(1100), 'silent npm activity must remain visibly animated');
+  progress.observe('npm http fetch GET 404 https://registry.npmjs.org/missing.tgz 10ms');
+  assert.equal(progress.packages.size, 0, 'failed downloads must not count as fetched packages');
+  progress.observe('npm http fetch GET 200 https://registry.npmjs.org/package 10ms');
+  assert.match(progress.text(2000), /Resolving packages.*1 requests completed.*1s/);
+  progress.observe('npm http fetch GET 200 https://registry.npmjs.org/package/-/package-1.0.0.tgz 30ms');
+  progress.observe('npm http cache https://registry.npmjs.org/package/-/package-1.0.0.tgz 1ms');
+  assert.match(progress.text(3000), /Fetching packages.*1 packages fetched/);
+  assert.equal(progress.packages.size, 1, 'repeated URLs must not inflate progress');
+  assert.equal(progress.text(3000).includes('%'), false);
 });
 
 test('an npm failure remains incomplete and can be retried', async t => {

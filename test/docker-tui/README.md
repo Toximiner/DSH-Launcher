@@ -47,7 +47,7 @@ For host-side development without Docker, install pytest and pyte into a virtual
 environment, extract the built `.deb`, and run the same scenarios against it:
 
 ```sh
-dpkg-deb -x build/tui/dsh-launcher-tui_0.1.0-1_all.deb /tmp/tui-installed
+dpkg-deb -x build/tui/dsh-launcher-tui_0.1.1-1_all.deb /tmp/tui-installed
 TUI_TEST_BIN=/tmp/tui-installed/usr/lib/dsh-launcher-tui/bin/dsh-launcher-tui.js \
 TUI_TEST_WS=/tmp/tui-installed/usr/lib/dsh-launcher-tui/node_modules/ws \
 TUI_TEST_REAL_DSH=/absolute/path/to/dsh \

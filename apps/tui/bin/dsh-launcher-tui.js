@@ -63,6 +63,7 @@ async function main() {
     if (!url) {
       const bin = await installer.ensure(config, terminal, lifetime.signal);
       if (!bin || lifetime.signal.aborted) { await quit(); return; }
+      terminal.status = 'Starting dsh…'; terminal.draw();
       url = await server.start({ ...config, bin });
     }
     if (exiting) { await exiting; return; }
