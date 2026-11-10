@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Added
 
+- Go preview 0.2.0-preview.4 reads live dsh settings through `settings/describe`, using a login URL from `DSH_TUI_URL` or `--url`. Includes namespace navigation, scrolling, snapshot refresh, and retaining previous data after an error. Secrets are hidden; editing is unavailable. Validated the protocol, errors, PTY flow, and real dsh 0.2.2-rc.1.
+
 - Go preview 0.2.0-preview.3: click sidebar pages or the local draft, focus the composer, and scroll content under the pointer. `--no-mouse` disables mouse capture. Tests cover hit areas, SGR mouse input, and terminal mode restoration.
 
 - Go preview 0.2.0-preview.2: sidebar navigation, conversation and composer panels, connection status, and local pages. Navigation preserves drafts; narrow terminals hide the sidebar. Backend connection is still pending.

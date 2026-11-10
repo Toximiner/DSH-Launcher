@@ -106,6 +106,8 @@ func TestNavigationPreservesDraft(t *testing.T) {
 
 func TestPanelsFitTerminal(t *testing.T) {
 	m := newModel()
+	m.settingsLogin = "http://localhost/?token=test"
+	m.settings = &settingsSnapshot{Namespaces: []settingsNamespace{{NS: "namespace", Value: map[string]any{"long-field": strings.Repeat("Текст 世界 ", 20)}}}}
 	enter(m, "Длинное сообщение с русским текстом и 世界, которое должно переноситься внутри панели разговора.")
 	for _, size := range []tea.WindowSizeMsg{{Width: 100, Height: 30}, {Width: 80, Height: 24}, {Width: 60, Height: 20}, {Width: 44, Height: 18}} {
 		m.Update(size)

@@ -1,5 +1,8 @@
 """Exercise the Go terminal client without Node in PATH."""
 import os
+import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import threading
 from pathlib import Path
 import signal
 import sys
@@ -17,6 +20,7 @@ class TerminalPreview(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='tui-go-pty-')
         env = {**os.environ, 'PATH': '/nonexistent', 'TERM': 'xterm-256color', 'HOME': self.temp.name}
+        env.pop('DSH_TUI_URL', None)
         env.pop('DISPLAY', None)
         env.pop('WAYLAND_DISPLAY', None)
         self.app = Terminal(BINARY, [], env)
@@ -67,11 +71,72 @@ class TerminalPreview(unittest.TestCase):
     def test_no_mouse_option(self):
         self.app.close(Path(self.temp.name) / 'first.log')
         env = {**os.environ, 'PATH': '/nonexistent', 'TERM': 'xterm-256color', 'HOME': self.temp.name}
+        env.pop('DSH_TUI_URL', None)
         self.app = Terminal(BINARY, ['--no-mouse'], env)
         self.app.wait('Новый разговор')
         self.assertNotIn(b'\x1b[?1002h', self.app.raw)
         self.app.command('keyboard-only')
         self.app.wait('keyboard-only')
+
+    def test_settings_snapshot_navigation_and_refresh(self):
+        state = {'reads': 0, 'fail': False, 'paths': []}
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def do_GET(self):
+                state['paths'].append(self.path.split('?')[0])
+                self.send_response(302)
+                self.send_header('Set-Cookie', 'dsh=test; Path=/')
+                self.send_header('Location', '/')
+                self.end_headers()
+
+            def do_POST(self):
+                state['paths'].append(self.path)
+                request = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                state['reads'] += 1
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    'type': 'server-response', 'rpcId': request['rpcId'],
+                    'result': {'ok': not state['fail'], 'value': {'namespaces': [
+                        {'ns': 'model', 'revision': state['reads'],
+                         'value': {'model': f"loaded-model-{state['reads']}"}, 'secrets': []},
+                        {'ns': 'tools', 'revision': 0, 'value': {'limit': 42}, 'secrets': []}
+                    ]}}
+                }).encode())
+
+        server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        try:
+            self.app.close(Path(self.temp.name) / 'first.log')
+            env = {**os.environ, 'PATH': '/nonexistent', 'TERM': 'xterm-256color',
+                   'HOME': self.temp.name,
+                   'DSH_TUI_URL': f'http://127.0.0.1:{server.server_port}/?token=not-for-display'}
+            self.app = Terminal(BINARY, [], env)
+            self.app.wait('Новый разговор')
+            self.mouse(0, 5, 9)
+            self.app.wait('loaded-model-1')
+            self.app.send('\x1b[C')
+            self.app.wait('limit = 42')
+            self.app.send('\x1b[D')
+            self.app.wait('loaded-model-1')
+            self.app.send('r')
+            self.app.wait('loaded-model-2')
+            state['fail'] = True
+            self.app.send('r')
+            self.app.wait('Показан предыдущий снимок.')
+            self.assertIn('loaded-model-2', self.app.text)
+            self.assertNotIn('not-for-display', self.app.text)
+            self.assertEqual(state['reads'], 3)
+            self.assertEqual(set(state['paths']), {'/connect', '/api/settings/describe'})
+        finally:
+            server.shutdown()
+            server.server_close()
+            worker.join(timeout=2)
 
     def test_input_history_and_local_commands(self):
         self.app.command('Привет 世界')

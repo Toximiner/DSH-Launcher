@@ -49,7 +49,11 @@ func (m *model) sidebar(height int) string {
 	for len(lines) < target-2 {
 		lines = append(lines, "")
 	}
-	lines = append(lines, muted.Render("○ dsh не подключён"), muted.Render("Go · "+version))
+	connection := "○ dsh не подключён"
+	if m.settings != nil {
+		connection = "✓ Снимок настроек dsh"
+	}
+	lines = append(lines, muted.Render(connection), muted.Render("Go · "+version))
 	for i, line := range lines {
 		lines[i] = ansi.Truncate(line, inner, "…")
 	}
@@ -68,6 +72,15 @@ func (m *model) View() string {
 	w, bodyHeight := m.contentSize()
 	brand := accent.Bold(true).Render("◆ DSH Launcher")
 	status := lipgloss.NewStyle().Foreground(lipgloss.Color("#d29922")).Render("○ Нет подключения")
+	if m.settings != nil {
+		status = accent.Render("✓ Снимок настроек dsh")
+	}
+	if m.settingsLoading {
+		status = accent.Render("◌ Чтение настроек dsh")
+	}
+	if m.settingsError != "" {
+		status = muted.Render("! Ошибка чтения dsh")
+	}
 	header := bar(brand, status, width) + "\n" + ansi.Truncate(muted.Render("  Проект: "+filepath.Base(m.workspace)+"  /  "+pages[m.page]), width, "…")
 	title := pages[m.page]
 	if m.page == 0 {
@@ -88,6 +101,10 @@ func (m *model) View() string {
 	if width >= 78 {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, m.sidebar(bodyHeight), " ", right)
 	}
-	footer := bar(muted.Render("Tab разделы · Esc чат · PgUp/PgDn"), muted.Render("Ctrl+D выход"), width)
+	hints := "Tab разделы · Esc чат · PgUp/PgDn"
+	if m.page == 2 && m.settingsLogin != "" {
+		hints = "←/→ раздел · r обновить · PgUp/PgDn"
+	}
+	footer := bar(muted.Render(hints), muted.Render("Ctrl+D выход"), width)
 	return header + "\n" + body + "\n" + footer
 }

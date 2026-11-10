@@ -1,7 +1,8 @@
-// A desktop-shaped terminal shell, without backend actions at this checkpoint.
+// A panel-based terminal client with read-only dsh settings.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 	"unicode"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -19,7 +21,7 @@ import (
 	"golang.org/x/term"
 )
 
-const version = "0.2.0-preview.3"
+const version = "0.2.0-preview.4"
 const help = "/help — справка\n/clear — очистить экран\n/exit — выйти\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 var pages = []string{"Чат", "Сессии", "Настройки", "Журнал"}
@@ -27,17 +29,24 @@ var pages = []string{"Чат", "Сессии", "Настройки", "Журна
 type quitMsg struct{}
 
 type model struct {
-	input         textinput.Model
-	viewport      viewport.Model
-	width, height int
-	lines         []string
-	history       []string
-	historyIndex  int
-	draft         string
-	workspace     string
-	page          int
-	navFocused    bool
-	events        []string
+	input           textinput.Model
+	viewport        viewport.Model
+	width, height   int
+	lines           []string
+	history         []string
+	historyIndex    int
+	draft           string
+	workspace       string
+	page            int
+	navFocused      bool
+	events          []string
+	settingsLogin   string
+	settingsContext context.Context
+	settingsLoading bool
+	settingsError   string
+	settings        *settingsSnapshot
+	settingsIndex   int
+	settingsUpdated time.Time
 }
 
 func newModel() *model {
@@ -85,7 +94,7 @@ func (m *model) rebuild() {
 	case 1:
 		content = heading.Render("Локальный черновик") + "\n\nТекст в этом окне сохраняется только в памяти.\n\n" + muted.Render("Сессии dsh недоступны без подключения.") + "\n\nEsc — вернуться в чат"
 	case 2:
-		content = heading.Render("Данные этого окна") + "\n\nВерсия     " + version + "\nИнтерфейс  Русский · тёмная тема\nТерминал   " + fmt.Sprintf("%d × %d", m.width, m.height) + "\n\nРабочая папка\n" + m.workspace + "\n\n" + muted.Render("Подключение к dsh отсутствует.")
+		content = m.settingsView()
 	case 3:
 		content = heading.Render("Журнал клиента · локально") + "\n\n" + strings.Join(m.events, "\n")
 	}
@@ -127,10 +136,31 @@ func (m *model) showChat() tea.Cmd {
 	return m.input.Focus()
 }
 
-func (m *model) Init() tea.Cmd { return textinput.Blink }
+func (m *model) Init() tea.Cmd { return tea.Batch(textinput.Blink, m.loadSettings()) }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case settingsResult:
+		m.settingsLoading = false
+		if msg.err != nil {
+			m.settingsError = msg.err.Error()
+		} else {
+			selected := ""
+			if m.settings != nil && len(m.settings.Namespaces) > 0 {
+				selected = m.settings.Namespaces[m.settingsIndex].NS
+			}
+			m.settings = msg.snapshot
+			m.settingsIndex = 0
+			m.settingsUpdated = time.Now()
+			for i, ns := range m.settings.Namespaces {
+				if ns.NS == selected {
+					m.settingsIndex = i
+					break
+				}
+			}
+		}
+		m.rebuild()
+		return m, nil
 	case quitMsg:
 		return m, tea.Quit
 	case tea.WindowSizeMsg:
@@ -140,6 +170,21 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.mouse(msg)
 	case tea.KeyMsg:
 		switch msg.String() {
+		case "left", "right":
+			if m.page == 2 && m.settings != nil && len(m.settings.Namespaces) > 0 {
+				delta := 1
+				if msg.String() == "left" {
+					delta = -1
+				}
+				m.settingsIndex = (m.settingsIndex + delta + len(m.settings.Namespaces)) % len(m.settings.Namespaces)
+				m.rebuild()
+				m.viewport.GotoTop()
+				return m, nil
+			}
+		case "r":
+			if m.page == 2 {
+				return m, m.loadSettings()
+			}
 		case "ctrl+c", "ctrl+d":
 			return m, tea.Quit
 		case "tab":
@@ -241,6 +286,7 @@ func run(args []string, out io.Writer) error {
 	f := flag.NewFlagSet("dsh-launcher-tui-go", flag.ContinueOnError)
 	f.SetOutput(out)
 	helpFlag := f.Bool("help", false, "показать справку")
+	loginFlag := f.String("url", os.Getenv("DSH_TUI_URL"), "URL входа dsh для чтения настроек")
 	noMouseFlag := f.Bool("no-mouse", false, "отключить мышь для обычного выделения текста")
 	versionFlag := f.Bool("version", false, "показать версию")
 	if err := f.Parse(args); err != nil {
@@ -250,7 +296,7 @@ func run(args []string, out io.Writer) error {
 		return fmt.Errorf("unexpected positional arguments")
 	}
 	if *helpFlag {
-		fmt.Fprintln(out, "dsh-launcher-tui-go [--help] [--version] [--no-mouse]\nGo-прототип: панели, Tab — разделы, Esc — чат, /help, /clear, /exit.\nПодключение к dsh пока не реализовано. Node.js для запуска не нужен.")
+		fmt.Fprintln(out, "dsh-launcher-tui-go [--help] [--version] [--no-mouse] [--url URL]\nGo-прототип: панели, Tab — разделы, Esc — чат, /help, /clear, /exit.\nНастройки dsh доступны только для чтения через --url или DSH_TUI_URL.\nЧат dsh пока не реализован. Node.js для запуска клиента не нужен.")
 		return nil
 	}
 	if *versionFlag {
@@ -260,11 +306,21 @@ func run(args []string, out io.Writer) error {
 	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
 		return fmt.Errorf("run this application in an interactive terminal")
 	}
+	if *loginFlag != "" {
+		if _, err := settingsURL(*loginFlag); err != nil {
+			return err
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m := newModel()
+	m.settingsLogin = *loginFlag
+	m.settingsContext = ctx
 	options := []tea.ProgramOption{tea.WithAltScreen(), tea.WithoutSignalHandler()}
 	if !*noMouseFlag {
 		options = append(options, tea.WithMouseCellMotion())
 	}
-	p := tea.NewProgram(newModel(), options...)
+	p := tea.NewProgram(m, options...)
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	done := make(chan struct{})
