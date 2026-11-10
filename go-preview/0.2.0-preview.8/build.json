@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0-preview.8",
+  "source_commit": "febc44df331669309ca4c0691d3e4a82bceca6f2",
+  "stage": "top menus and modal TUI settings; persisted mouse/input history; sessions, modes, marketplace; text chat remains local",
+  "sha256": {
+    "dsh-launcher-tui-go_linux_amd64": "2ef0e393a19e96f20dee5405426ed0b19b69e398d099610b7ddbac049168edb9",
+    "dsh-launcher-tui-go_linux_arm64": "fa8991501fe52b130d20b32974f481664de2f0233563f63b8a7d502ef474b761"
+  }
+}
