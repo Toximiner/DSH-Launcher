@@ -2,6 +2,7 @@
   "name": "DSH live TUI",
   "build": {"dockerfile": "Dockerfile", "context": "."},
   "remoteUser": "node",
+  "features": {"ghcr.io/devcontainers/features/sshd:1": {"version": "latest"}},
   "postCreateCommand": "python3 tools/live/setup.py",
   "postStartCommand": "python3 tools/live/start.py --daemon",
   "forwardPorts": [7681],
