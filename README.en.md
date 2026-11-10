@@ -17,7 +17,8 @@ It provides panels, mouse and keyboard navigation, input history, scrolling,
 and separate dsh/TUI settings. Pass a running dsh login URL through
 `DSH_TUI_URL` or `--url` to read its settings without editing them.
 Session attachment/creation and agent modes are available. `--start` launches dsh
-and offers dshmarket preinstallation into its profile. Chat is still local;
+and offers dshmarket preinstallation into its profile. The Marketplace page provides
+search and confirmed plugin install/update/remove actions. Chat is still local;
 the dsh installer and streamed chat will be ported incrementally. The legacy JS terminal client is removed.
 
 [Download Linux amd64/arm64 preview binaries](https://toximiner.github.io/DSH-Launcher/).

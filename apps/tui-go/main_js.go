@@ -76,6 +76,16 @@ func main() {
 		m.Update(tea.MouseMsg{X: args[0].Int(), Y: args[1].Int(), Button: button, Action: tea.MouseActionPress})
 		return m.View()
 	})
+	bind("marketSnapshot", func(args []js.Value) any {
+		var snapshot marketSnapshot
+		if err := json.Unmarshal([]byte(args[0].String()), &snapshot); err != nil {
+			return fmt.Sprint(err)
+		}
+		m.market = &snapshot
+		m.marketMessage = "Демонстрационный каталог · без операций с сервером"
+		m.rebuild()
+		return m.View()
+	})
 	bind("snapshot", func(args []js.Value) any {
 		var snapshot settingsSnapshot
 		if err := json.Unmarshal([]byte(args[0].String()), &snapshot); err != nil {

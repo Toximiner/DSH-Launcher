@@ -22,14 +22,14 @@ func TestMouseNavigationAndComposer(t *testing.T) {
 				t.Fatalf("navigation target is not aligned with %s", label)
 			}
 			mouse(m, 5, y, tea.MouseButtonLeft, tea.MouseActionPress)
-			if m.page != page || !m.navFocused || m.input.Focused() {
+			if m.page != page || m.navFocused != (page != marketPage) || m.input.Focused() {
 				t.Fatalf("click did not select page %d", page)
 			}
 		}
-		if !strings.Contains(clean(strings.Split(m.View(), "\n")[14]), "Локальный") {
+		if !strings.Contains(clean(strings.Split(m.View(), "\n")[15]), "Локальный") {
 			t.Fatal("draft target is not aligned with the sidebar")
 		}
-		mouse(m, 5, 14, tea.MouseButtonLeft, tea.MouseActionPress)
+		mouse(m, 5, 15, tea.MouseButtonLeft, tea.MouseActionPress)
 		if m.page != 0 || !m.input.Focused() || m.input.Value() != "draft 世界" {
 			t.Fatal("clicking the local draft lost input or failed to focus chat")
 		}

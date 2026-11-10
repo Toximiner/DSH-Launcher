@@ -45,6 +45,16 @@ with sync_playwright() as playwright:
         page.locator('#fit').tap()
         page.wait_for_function('previewTerminal.cols >= 44 && previewTerminal.rows >= 18')
         assert 'Увеличьте терминал' not in page.evaluate(SCREEN)
+        page.set_viewport_size({'width': width, 'height': height})
+        page.locator('[data-page="5"]').tap()
+        page.wait_for_function('() => ' + SCREEN + '.includes("Маркет · Каталог")')
+        box = page.locator('.xterm-screen').bounding_box()
+        columns, rows = page.evaluate('[previewTerminal.cols,previewTerminal.rows]')
+        page.touchscreen.tap(box['x'] + 5.5 * box['width'] / columns,
+                             box['y'] + 6.5 * box['height'] / rows)
+        page.keyboard.type('prompt')
+        page.keyboard.press('Enter')
+        page.wait_for_function('() => ' + SCREEN + '.includes("dsh-prompt-polish")')
         assert not errors, errors
         print(f'Phone {width}x{height}: auto fit, zoom, touch pages and settings, keyboard-sized viewport OK')
         context.close()

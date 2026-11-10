@@ -47,6 +47,7 @@ jobs:
             build/tui-go-web/*.css
             build/tui-go-web/tui.wasm.gz
             build/tui-go-web/snapshot.json
+            build/tui-go-web/market-demo.json
             build/tui-go-web/LICENSES.txt
             build/tui-go-web/SHA256SUMS
           if-no-files-found: error

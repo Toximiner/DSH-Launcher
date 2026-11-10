@@ -1,4 +1,4 @@
-# Go TUI preview — checkpoint 6
+# Go TUI preview — checkpoint 7
 
 The terminal client is implemented in Go/Bubble Tea, with read-only dsh settings
 and a panel layout: a workspace sidebar, conversation panel, separate
@@ -111,8 +111,37 @@ JS plugins run inside Node.js/dsh independently of this client's Go code.
 The marketplace host exposes HTTP routes suitable for a future TUI adapter.
 Its installation does not automatically translate its HTML/React screens.
 Schema/command-based features can use generic terminal controls; custom screens
-need explicit adapters. This checkpoint adds preinstallation, not marketplace
-search/install/update/remove pages.
+need explicit adapters. The marketplace page is now available; custom plugin screens still need their
+own adapters.
+
+## Marketplace TUI
+
+Open **Маркет** in the sidebar or enter `/market`. The adapter is validated
+against dshmarket 1.73.17 on dsh 0.2.2-rc.1 and requires its authenticated API v1.
+The client reads the catalog, profile declarations, physically present packages,
+and progress from dshmarket. `/` edits the search, Enter returns to the list,
+Up/Down or the wheel selects a plugin, `t` switches to installed packages,
+and `r` refreshes. Mouse clicks work on the search, rows, tabs, and actions.
+
+`i` installs the selected catalog entry, `u` updates its package, and `d` removes
+it. Each operation shows the exact package/profile and requires `y` or Enter;
+`n` or Esc cancels the confirmation. Pasted text cannot confirm an operation.
+Writes use the market's existing endpoints with no force, drain, build-script
+approval, or automatic restart flags. Package state is reread after completion
+or refusal. The profile is checked again before writing. A busy market or
+running-agent guard is respected; operations are never retried automatically.
+Progress uses the server's phase/counts without an invented overall percentage.
+
+Catalog failure retains access to installed profile data. Declarations whose
+files are absent are labeled separately. The market and base/web host bundles
+are not modified through this page. Git-only/aliased packages, compatibility
+resolution dialogs, build approvals, restart, rollback, and operation cancellation
+remain later work. If dsh restarts, obtain a fresh login URL. Closing an attached
+client does not cancel a remote operation; reopen the market to check its state.
+
+The browser has an explicitly labeled sample catalog: search, installed filtering,
+and confirmation UI work, while writes explain that the native client is required.
+The demo never changes any backend packages.
 
 ## Migration scope
 

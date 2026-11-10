@@ -9,7 +9,7 @@
     window.previewTerminal = term;
     const ready = new Promise(resolve => window.addEventListener('dsh-tui-ready',resolve,{once:true}));
     const go = new Go();
-    const response = await fetch('tui.wasm.gz?v=session-6');
+    const response = await fetch('tui.wasm.gz?v=market-7');
     if (!response.ok) throw new Error('Не удалось загрузить Go-клиент');
     const bytes = await new Response(response.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
     const instance = await WebAssembly.instantiate(bytes,go.importObject);
@@ -19,6 +19,9 @@
     if (!snapshotResponse.ok) throw new Error('Не удалось загрузить демонстрационный снимок');
     const snapshot = await snapshotResponse.text();
     dshTui.snapshot(snapshot);
+    const marketResponse=await fetch('market-demo.json');
+    if (!marketResponse.ok) throw new Error('Не удалось загрузить демо маркета');
+    dshTui.marketSnapshot(await marketResponse.text());
     let writing = false;
     let pending = null;
     function render(view) {

@@ -15,8 +15,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const version = "0.2.0-preview.6"
-const help = "/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/help — справка\n/clear — очистить экран\n/exit — выйти\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
+const version = "0.2.0-preview.7"
+const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/help — справка\n/clear — очистить экран\n/exit — выйти\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
 	chatPage = iota
@@ -24,42 +24,55 @@ const (
 	dshSettingsPage
 	tuiSettingsPage
 	logPage
+	marketPage
 )
 
-var pages = []string{"Чат", "Сессии", "Настройки dsh", "Настройки TUI", "Журнал"}
+var pages = []string{"Чат", "Сессии", "Настройки dsh", "Настройки TUI", "Журнал", "Маркет"}
 
 type quitMsg struct{}
 
 type model struct {
-	input            textinput.Model
-	viewport         viewport.Model
-	width, height    int
-	lines            []string
-	history          []string
-	historyIndex     int
-	draft            string
-	workspace        string
-	page             int
-	navFocused       bool
-	events           []string
-	settingsLogin    string
-	settingsContext  context.Context
-	settingsLoading  bool
-	settingsError    string
-	settings         *settingsSnapshot
-	settingsIndex    int
-	settingsUpdated  time.Time
-	browserPreview   bool
-	session          *sessionView
-	sessionItems     []sessionItem
-	sessionBusy      bool
-	sessionError     string
-	sessionSequence  int
-	sessionStale     bool
-	sessionListIndex int
-	sessionQueue     []sessionAction
-	initialSession   string
-	createSession    bool
+	input               textinput.Model
+	viewport            viewport.Model
+	width, height       int
+	lines               []string
+	history             []string
+	historyIndex        int
+	draft               string
+	workspace           string
+	page                int
+	navFocused          bool
+	events              []string
+	settingsLogin       string
+	settingsContext     context.Context
+	settingsLoading     bool
+	settingsError       string
+	settings            *settingsSnapshot
+	settingsIndex       int
+	settingsUpdated     time.Time
+	browserPreview      bool
+	session             *sessionView
+	sessionItems        []sessionItem
+	sessionBusy         bool
+	sessionError        string
+	sessionSequence     int
+	sessionStale        bool
+	sessionListIndex    int
+	sessionQueue        []sessionAction
+	initialSession      string
+	createSession       bool
+	market              *marketSnapshot
+	marketSearch        textinput.Model
+	marketEditing       bool
+	marketInstalledOnly bool
+	marketIndex         int
+	marketBusy          bool
+	marketOperating     bool
+	marketSequence      int
+	marketError         string
+	marketMessage       string
+	marketConfirm       *marketIntent
+	marketHits          []marketHit
 }
 
 func newModel() *model {
@@ -73,6 +86,7 @@ func newModel() *model {
 	input.Focus()
 	cwd, _ := os.Getwd()
 	m := &model{input: input, viewport: viewport.New(78, 17), width: 80, height: 24, workspace: clean(cwd), events: []string{"Открыт интерфейс клиента. Подключение к dsh отсутствует."}}
+	m.marketSearch = newMarketSearch()
 	m.resize()
 	return m
 }
@@ -116,6 +130,8 @@ func (m *model) rebuild() {
 		content = m.settingsView()
 	case tuiSettingsPage:
 		content = m.tuiSettingsView()
+	case marketPage:
+		content = m.marketView()
 	case logPage:
 		content = heading.Render("Журнал клиента · локально") + "\n\n" + strings.Join(m.events, "\n")
 	}
@@ -139,6 +155,7 @@ func (m *model) resize() {
 	m.viewport.Width = max(1, w-4)
 	m.viewport.Height = max(1, h-4)
 	m.input.Width = max(1, w-6)
+	m.marketSearch.Width = max(1, m.viewport.Width-8)
 	m.rebuild()
 }
 
@@ -169,6 +186,54 @@ func (m *model) Init() tea.Cmd {
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case marketResult:
+		if msg.sequence != m.marketSequence {
+			return m, nil
+		}
+		m.marketBusy = false
+		m.marketOperating = false
+		if msg.snapshot != nil {
+			if msg.snapshot.Plugins == nil && m.market != nil && msg.snapshot.Profile == m.market.Profile {
+				msg.snapshot.Plugins = m.market.Plugins
+			}
+			m.market = msg.snapshot
+		}
+		if msg.err != nil {
+			m.marketError = msg.err.Error()
+		} else {
+			m.marketError = ""
+			if msg.operation {
+				m.marketMessage = "Операция завершена; список обновлён."
+			} else {
+				m.marketMessage = "Данные маркета обновлены."
+			}
+		}
+		m.rebuild()
+		return m, nil
+	case marketPulse:
+		if msg.sequence != m.marketSequence || !m.marketOperating {
+			return m, nil
+		}
+		ctx, login, sequence := m.settingsContext, m.settingsLogin, m.marketSequence
+		return m, func() tea.Msg {
+			api, err := openAPI(ctx, login)
+			if err != nil {
+				return marketProgress{sequence: sequence, err: err}
+			}
+			defer api.close()
+			var status marketStatus
+			err = api.marketRequest(ctx, "GET", "status", nil, &status)
+			return marketProgress{sequence: sequence, status: status, err: err}
+		}
+	case marketProgress:
+		if msg.sequence != m.marketSequence || !m.marketOperating {
+			return m, nil
+		}
+		if msg.err == nil && m.market != nil {
+			m.market.Status = msg.status
+		}
+		m.rebuild()
+		return m, m.marketTimer()
 	case sessionTick:
 		if msg.sequence == m.sessionSequence && m.session != nil && !m.sessionBusy {
 			return m, m.sessionOperation("refresh", "")
@@ -236,6 +301,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		return m, m.mouse(msg)
 	case tea.KeyMsg:
+		if m.page == marketPage && !m.navFocused && msg.String() != "ctrl+c" && msg.String() != "ctrl+d" && msg.String() != "tab" {
+			if cmd, handled := m.marketKey(msg); handled {
+				return m, cmd
+			}
+		}
 		switch msg.String() {
 		case "left", "right":
 			if m.page == dshSettingsPage && m.settings != nil && len(m.settings.Namespaces) > 0 {
@@ -289,6 +359,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if m.navFocused {
 				m.navFocused = false
+				if m.page == marketPage {
+					return m, m.loadMarket()
+				}
 				if m.page == 0 {
 					return m, m.input.Focus()
 				}
@@ -310,6 +383,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.historyIndex = len(m.history)
 			switch line {
+			case "/market":
+				m.page = marketPage
+				m.navFocused = false
+				m.input.Blur()
+				m.resize()
+				return m, m.loadMarket()
 			case "/new":
 				return m, m.sessionOperation("new", "")
 			case "/sessions":

@@ -26,6 +26,15 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	}
 	conversation := area{mainX + 2, bodyTop + 3, m.viewport.Width, m.viewport.Height}
 	if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+		if conversation.contains(msg.X, msg.Y) && m.page == marketPage && m.marketConfirm == nil && !m.marketEditing {
+			delta := 1
+			if msg.Button == tea.MouseButtonWheelUp {
+				delta = -1
+			}
+			m.marketIndex = max(0, min(max(0, len(m.marketRows())-1), m.marketIndex+delta))
+			m.rebuild()
+			return nil
+		}
 		if conversation.contains(msg.X, msg.Y) {
 			var cmd tea.Cmd
 			m.viewport, cmd = m.viewport.Update(msg)
@@ -45,12 +54,51 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 			m.input.Blur()
 			m.resize()
 			m.viewport.GotoTop()
+			if m.page == marketPage {
+				m.navFocused = false
+				return m.loadMarket()
+			}
 			return nil
 		}
 		// A blank row and session heading follow navigation.
 		draft := area{1, navigation.y + len(pages) + 2, sidebarWidth - 2, 1}
 		if draft.y < bodyTop+bodyHeight-3 && draft.contains(msg.X, msg.Y) {
 			return m.showChat()
+		}
+	}
+	if m.page == marketPage && conversation.contains(msg.X, msg.Y) {
+		x, y := msg.X-conversation.x, msg.Y-conversation.y
+		for _, hit := range m.marketHits {
+			if !hit.box.contains(x, y) {
+				continue
+			}
+			m.navFocused = false
+			switch hit.kind {
+			case "yes":
+				return m.executeMarket()
+			case "no":
+				m.marketConfirm = nil
+			case "row":
+				if m.marketConfirm == nil {
+					m.marketIndex = hit.index
+				}
+			case "tab":
+				if m.marketConfirm == nil {
+					m.marketInstalledOnly = !m.marketInstalledOnly
+					m.marketIndex = 0
+				}
+			case "search":
+				if m.marketConfirm == nil {
+					m.marketEditing = true
+					cmd := m.marketSearch.Focus()
+					m.rebuild()
+					return cmd
+				}
+			default:
+				m.confirmMarket(hit.kind)
+			}
+			m.rebuild()
+			return nil
 		}
 	}
 	composer := area{mainX, bodyTop + bodyHeight - composerHeight - 1, width, composerHeight}

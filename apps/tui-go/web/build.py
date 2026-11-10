@@ -43,7 +43,7 @@ run(args.go, 'build', '-trimpath', '-modfile=' + str(modfile), '-o', str(output 
 (output / 'tui.wasm.gz').write_bytes(gzip.compress((output / 'tui.wasm').read_bytes(), compresslevel=9, mtime=0))
 goroot = Path(run(args.go, 'env', 'GOROOT'))
 shutil.copy2(goroot / 'lib/wasm/wasm_exec.js', output / 'wasm_exec.js')
-for name in ('index.html', 'preview.js', 'snapshot.json'):
+for name in ('index.html', 'preview.js', 'snapshot.json', 'market-demo.json'):
     shutil.copy2(source / name, output / name)
 licenses = [tea_dir.joinpath('LICENSE').read_text()]
 for package, version, files in [
@@ -64,7 +64,7 @@ for package, version, files in [
             if member.name.lower() in ('package/license', 'package/license.md'):
                 licenses.append(package + '\n' + archive.extractfile(member).read().decode())
 (output / 'LICENSES.txt').write_text('\n\n'.join(licenses))
-public = ('index.html', 'preview.js', 'snapshot.json', 'tui.wasm.gz', 'wasm_exec.js',
+public = ('index.html', 'preview.js', 'snapshot.json', 'market-demo.json', 'tui.wasm.gz', 'wasm_exec.js',
           'xterm.js', 'xterm.css', 'addon-fit.js', 'LICENSES.txt')
 (output / 'SHA256SUMS').write_text(''.join(
     hashlib.sha256((output / name).read_bytes()).hexdigest() + '  ' + name + '\n' for name in public))

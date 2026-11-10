@@ -35,4 +35,6 @@ Visual viewport resizing adapts to the on-screen keyboard. Run
 
 The mode controls are shared with the native client but do not connect to a live
 backend in the browser. Attempts explain this limitation without starting requests.
-Marketplace preinstallation and owned process management are native-only.
+Marketplace writes, preinstallation, and owned process management are native-only.
+The demo marketplace has searchable sample entries and confirmations that refuse
+backend writes; it never modifies installed packages.

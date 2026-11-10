@@ -17,7 +17,7 @@ if args[0] == 'plugin':
     print('Test marketplace installed', flush=True)
     sys.exit(0)
 port = int(args[args.index('--port') + 1])
-state = {'plan': False, 'goal': None}
+state = {'plan': False, 'goal': None, 'plugins': {'alpha-plugin': '1.0.0'}}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -25,6 +25,21 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        if self.path.startswith('/dsh-market/'):
+            values = {
+                '/dsh-market/api/v1/capabilities': {'apiVersion': 1, 'profile': profile, 'marketVersion': '1.73.17'},
+                '/dsh-market/installed': {'installed': state['plugins'], 'present': list(state['plugins'])},
+                '/dsh-market/status': {'busy': False, 'active': False},
+                '/dsh-market/registry': {'registry': {'plugins': [
+                    {'name': 'Alpha', 'npm': 'alpha-plugin', 'url': 'https://github.com/test/alpha', 'description': {'en': 'Alpha plugin'}},
+                    {'name': 'Beta', 'npm': 'beta-plugin', 'url': 'https://github.com/test/beta', 'description': {'en': 'Beta plugin'}}
+                ]}},
+            }
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(values[self.path]).encode())
+            return
         self.send_response(302)
         self.send_header('Set-Cookie', 'dsh=test; Path=/')
         self.send_header('Location', '/')
@@ -32,6 +47,26 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         request = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        if self.path.startswith('/dsh-market/'):
+            operation = self.path.rsplit('/', 1)[-1]
+            with (root / 'market-writes.jsonl').open('a') as log:
+                log.write(json.dumps({'operation': operation, 'body': request}) + '\n')
+            if operation == 'install':
+                assert request == {'url': 'https://github.com/test/beta'}
+                state['plugins']['beta-plugin'] = '1.0.0'
+            elif operation == 'update':
+                assert request == {'name': 'beta-plugin'}
+                state['plugins']['beta-plugin'] = '2.0.0'
+            elif operation == 'uninstall':
+                assert request == {'name': 'beta-plugin'}
+                del state['plugins']['beta-plugin']
+            else:
+                raise AssertionError('Unexpected mutation')
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"ok":true}')
+            return
         method = request['method']
         arguments = request['payload']['args']
         with (root / 'requests.jsonl').open('a') as log:
