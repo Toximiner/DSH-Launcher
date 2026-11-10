@@ -120,6 +120,11 @@ class Model(BaseHTTPRequestHandler):
 
 
 def capture_cells(app, path):
+    # Resizing can deliver a valid modal before the final screen rows arrive.
+    def fully_painted():
+        app.pump()
+        return "Ctrl+D" in app.screen.display[-1]
+    wait_for(fully_painted)
     cells = []
     for y in range(app.screen.lines):
         for x in range(app.screen.columns):
