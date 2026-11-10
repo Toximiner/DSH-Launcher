@@ -36,6 +36,8 @@ The maintained terminal libraries are Bubble Tea, Bubbles (`textinput` and
 `viewport`), and Lip Gloss. The build produces a separate executable named
 `dsh-launcher-tui-go`, so it can be tried alongside the existing client.
 
+[Static browser preview build and limitations](web/README.md).
+
 ## Read dsh settings
 
 Start dsh separately, then pass its login URL through the environment (avoids

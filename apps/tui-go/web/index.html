@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>DSH Launcher — браузерный просмотр TUI</title>
+<link rel="stylesheet" href="xterm.css">
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0;background:#101318;color:#e6edf3;font:14px/1.4 system-ui,sans-serif}body{display:flex;flex-direction:column}header{display:flex;gap:16px;align-items:center;padding:12px 20px;background:#18212d;border-bottom:1px solid #303d4d}header strong{font-size:16px}header a{color:#79c0ff}header button{margin-left:auto;border:1px solid #47576c;border-radius:6px;padding:6px 12px;background:#233044;color:#e6edf3;cursor:pointer}.note{padding:8px 20px;color:#b4bdca;background:#141b24;font-size:13px}#terminal{flex:1;min-height:0;margin:8px 10px;padding:0;overflow:hidden}#loading{position:absolute;inset:45% 10% auto;text-align:center;color:#79c0ff}.xterm{height:100%}button:focus-visible,a:focus-visible{outline:2px solid #58a6ff;outline-offset:3px}@media(max-width:650px){header{flex-wrap:wrap;gap:8px;padding:8px 12px}header strong{font-size:14px}.note{padding:6px 12px}#terminal{margin:4px}}
+</style>
+</head>
+<body>
+<header><strong>◆ DSH Launcher · Go TUI в браузере</strong><a href="https://github.com/Toximiner/DSH-Launcher/pull/39" target="_blank" rel="noopener">Исходники</a><button id="reset" type="button">Сбросить демо</button></header>
+<div class="note">Интерактивная Go-модель TUI. Чат — локальный черновик; настройки dsh — демонстрационный снимок от 10.11.2026, без подключения к серверу и обновления. Клики, колесо и клавиатура работают. Shift + мышь — выделение текста.</div>
+<div id="terminal" aria-label="Интерактивный терминал DSH Launcher"></div>
+<div id="loading" role="status">Загрузка Go-клиента…</div>
+<script src="xterm.js"></script><script src="addon-fit.js"></script><script src="wasm_exec.js"></script><script src="preview.js"></script>
+</body>
+</html>

@@ -36,6 +36,20 @@ jobs:
           python3 -m venv build/go-pty-env
           build/go-pty-env/bin/pip install pyte==0.8.2
           build/go-pty-env/bin/python apps/tui-go/test/terminal_preview.py build/tui-go/dsh-launcher-tui-go_linux_amd64
+      - name: Build static browser preview
+        run: python3 apps/tui-go/web/build.py
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dsh-launcher-tui-browser-preview
+          path: |
+            build/tui-go-web/index.html
+            build/tui-go-web/*.js
+            build/tui-go-web/*.css
+            build/tui-go-web/tui.wasm.gz
+            build/tui-go-web/snapshot.json
+            build/tui-go-web/LICENSES.txt
+            build/tui-go-web/SHA256SUMS
+          if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
           name: dsh-launcher-tui-go-preview

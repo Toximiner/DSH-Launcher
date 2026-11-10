@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Added
 
+- Added a static WebAssembly browser preview of the shared Go TUI model, with input, navigation, and mouse controls through xterm.js. Requires no external terminal tunnel. dsh settings are explicitly labeled as a demo snapshot; no user backend connection is made.
+
 - Go preview 0.2.0-preview.5 separates dsh and TUI settings in the sidebar. TUI settings display client information regardless of backend connection; dsh snapshot refresh is confined to its own page.
 
 - Go preview 0.2.0-preview.4 reads live dsh settings through `settings/describe`, using a login URL from `DSH_TUI_URL` or `--url`. Includes namespace navigation, scrolling, snapshot refresh, and retaining previous data after an error. Secrets are hidden; editing is unavailable. Validated the protocol, errors, PTY flow, and real dsh 0.2.2-rc.1.

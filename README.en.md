@@ -9,6 +9,9 @@ A small Electron app: a window that opens **DeepSeek Harness**
 
 ## Terminal version (experimental)
 
+[Open the interactive TUI browser preview](https://toximiner.github.io/DSH-Launcher/preview/).
+Chat is local; dsh settings are a demo snapshot without a connection to your server.
+
 An incremental migration to Go + Bubble Tea has started. The separate
 [Go preview](apps/tui-go/README.md) has sidebar navigation, a conversation panel,
 and a separate composer, with mouse navigation, input history, scrolling, and
