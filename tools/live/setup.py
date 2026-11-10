@@ -4,7 +4,6 @@ import json
 import os
 from pathlib import Path
 import platform
-import shutil
 import subprocess
 import urllib.request
 
@@ -43,7 +42,7 @@ if not ttyd.exists():
     meta = json.load(urllib.request.urlopen('https://api.github.com/repos/tsl0922/ttyd/releases/tags/1.7.7', timeout=30))
     asset = next(item for item in meta['assets'] if item['name'] == 'ttyd.' + architecture)
     content = urllib.request.urlopen(asset['browser_download_url'], timeout=60).read()
-    if asset.get('digest', '').startswith('sha256:'):
+    if (asset.get('digest') or '').startswith('sha256:'):
         assert hashlib.sha256(content).hexdigest() == asset['digest'].split(':', 1)[1]
     ttyd.write_bytes(content)
     ttyd.chmod(0o700)
