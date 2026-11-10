@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Added
 
+- Adapted the browser preview for phones with automatic terminal scaling, zoom/Fit buttons, scrolling after manual enlargement, and touch navigation. The terminal adapts when the visual viewport changes, including an on-screen keyboard.
+
 - Removed the legacy JS TUI source, npm/Debian packaging, workflow, and its scenarios. Moved the shared PTY driver into the Go app. Fixed ESLint browser globals for the web adapter and excluded generated builds.
 
 - Added a static WebAssembly browser preview of the shared Go TUI model, with input, navigation, and mouse controls through xterm.js. Requires no external terminal tunnel. dsh settings are explicitly labeled as a demo snapshot; no user backend connection is made.

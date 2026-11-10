@@ -26,6 +26,23 @@ func main() {
 		js.Global().Get("dshTui").Set(name, callback)
 	}
 	js.Global().Set("dshTui", js.Global().Get("Object").New())
+	bind("currentPage", func(args []js.Value) any { return m.page })
+	bind("page", func(args []js.Value) any {
+		page := args[0].Int()
+		if page < 0 || page >= len(pages) {
+			return m.View()
+		}
+		m.page = page
+		m.navFocused = false
+		if page == chatPage {
+			m.input.Focus()
+		} else {
+			m.input.Blur()
+		}
+		m.resize()
+		m.viewport.GotoTop()
+		return m.View()
+	})
 	bind("resize", func(args []js.Value) any {
 		m.Update(tea.WindowSizeMsg{Width: args[0].Int(), Height: args[1].Int()})
 		return m.View()
