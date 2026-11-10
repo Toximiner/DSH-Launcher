@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0-preview.17",
+  "source_commit": "f577f458c16fb5de24ec5decf389c208fef49ecc",
+  "stage": "nested PTC calls from explicit root/parent/subcall events, independent cards, hierarchy navigation and replay; incremental stdout and subagent session UI remain pending",
+  "sha256": {
+    "dsh-launcher-tui-go_linux_amd64": "b11ae484e7f39de18b8ac04c1886e76c474bf1a0e9215f72794fc160cfef3c6c",
+    "dsh-launcher-tui-go_linux_arm64": "28eb6b374e740637b5ffe655a7406ee0ebe21ba985c3ca5ece7f67fa12f7178b"
+  }
+}
