@@ -1,4 +1,4 @@
-# Go TUI preview — checkpoint 11
+# Go TUI preview — checkpoint 12
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
@@ -29,7 +29,7 @@ expansion choices without duplicating results. If a call predates the history
 window, the result is explicitly labeled rather than assigned an invented name.
 Arguments are bounded to 64 KiB, result text to 1 MiB, and retained chat to 4 MiB;
 truncation is labeled. Non-text results remain placeholders. Incremental stdout,
-nested PTC/subagent trees and question forms are not implemented.
+nested PTC/subagent trees are not implemented.
 
 dsh permission requests open a separate scrollable dialog containing the tool,
 reason, and available call arguments. No action is selected on arrival: use
@@ -42,8 +42,29 @@ reconnection replays outstanding requests. An uncertain answer is not resent.
 Withdrawals and decisions from another client remove stale dialogs. Actual
 `approval/asked` / `approval/decided` history displays the authoritative outcome.
 The queue displays up to 32 requests and reloads excess pending requests after
-that batch. Unsupported question interactions are delegated without inventing
-an answer. No permanent allowance or permission-policy editing is implemented.
+that batch. Question interactions use the same receiving Peer and request queue. No permanent allowance or permission-policy editing is implemented.
+
+Agent questions open a separate form with one question per page. Tab / Up/Down
+focuses an option or the custom field; Enter/Space selects an option. A single
+choice clears custom text; multiple choices can accompany custom text. The
+custom field supports multiple lines, Unicode, and paste; Enter inserts a line.
+Left/Right outside the editor, or the mouse pager, changes questions. Explicit
+Skip sends an empty selection for that item. F5 or Answer submits the complete
+batch only after every question is answered or explicitly skipped. No initial
+selection is sent automatically. Esc defers, F7 reopens, and F8 cancels the agent.
+The chat draft is preserved and question answers never use session/prompt.
+
+The form supports up to 32 questions and 64 options each within a 1 MiB request
+budget; each custom answer is limited to 65,536 characters. Plan/approval question
+intents retain the supplied detail and options without implicit approval. While
+connected, the client holds timed waits through userQuestions/attachWait. After
+a wait continues on the backend, session userQuestions projections restore its
+form and replies use userQuestions/answer. The dsh-tagged late reply appears as
+an answer in history. No uncertain reply is retried automatically. Draft progress
+survives deferral and read reconnects within this client process, including a timed
+question becoming continued. Restarting reloads pending questions; draft answers
+are not persisted to disk. Continued reply receipts suppress duplicate forms until
+dsh admits the answer. Arbitrary future interaction kinds remain delegated.
 
 Tab focuses the sidebar, arrows select a page, and Enter focuses its content.
 Esc returns to chat without losing the draft. Sessions supports refresh (`r`),
@@ -127,7 +148,7 @@ Changing sessions closes only the old subscription, not the remote agent.
 F8, the composer Stop button, or `/stop` calls `session/cancel`; it does not remove queued backend messages.
 The client displays confirmed turn completion/cancellation and safe error hints.
 Provider error bodies are not copied into logs or chat. Permissions use their
-own dialogs; question forms remain pending and F8 stays available. Rich Markdown,
+own dialogs; agent question forms are available and F8 stays available. Rich Markdown,
 attachments, and full paginated history remain later work. Replacements referencing history outside the loaded window may require
 a new session; the client reports this instead of guessing an order.
 
@@ -245,9 +266,9 @@ Work proceeds in small, reviewable checkpoints with user feedback. The
 [roadmap](../../docs/tui-roadmap/README.en.md) is the maintained capability inventory
 and milestone order. Milestone 1 is complete: TUI preferences live in the top menu,
 while dsh settings remain separate. Streamed text chat is implemented in preview.9; validation with an actual cloud
-model remains pending working provider access. Tool-result cards are implemented in preview.10. The next functional checkpoint is
-user questions, followed by queue controls. Permission dialogs are implemented
-in preview.11 and tested through the actual dsh approval service. Settings editing, workspace features,
+model remains pending working provider access. Tool-result cards are implemented in preview.10. Agent questions are implemented in preview.12, including timed waits and continued
+answers. The next functional checkpoint is queue controls. Permission dialogs
+are implemented in preview.11 and tested through the actual dsh approval service. Settings editing, workspace features,
 additional plugin support, and launcher lifecycle remain planned. No
 full-parity claim is made by this preview. The legacy JS client and its packaging
 have been removed; its dsh installation flow remains pending in Go.

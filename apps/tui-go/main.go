@@ -15,8 +15,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const version = "0.2.0-preview.11"
-const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF7 — запрос разрешения\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
+const version = "0.2.0-preview.12"
+const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
 	chatPage = iota
@@ -318,6 +318,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.session = msg.view
 			chatCmd = m.startChat(msg.view.ID)
+			m.syncContinuedQuestions()
 		}
 		if msg.list {
 			m.sessionItems = msg.items
@@ -616,6 +617,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport, cmd = m.viewport.Update(msg)
 			return m, cmd
 		}
+	}
+	if cmd, handled := m.questionMessage(msg); handled {
+		return m, cmd
 	}
 	if m.navFocused || m.page != 0 {
 		return m, nil

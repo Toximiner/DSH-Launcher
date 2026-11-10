@@ -132,7 +132,7 @@ func (m *model) View() string {
 		hints = "F6 инструменты · Enter раскрыть · Esc ввод"
 	}
 	if m.approvals != nil && len(m.approvals.requests) > 0 {
-		hints = "F7 разрешение · F8 остановить агента"
+		hints = "F7 запросы · F8 остановить агента"
 	}
 	footer := bar(muted.Render(hints), muted.Render("Ctrl+D выход"), width)
 	return m.approvalView(m.chromeView(header + "\n" + body + "\n" + footer))

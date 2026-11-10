@@ -40,10 +40,17 @@ func (m *model) toolView(t *chatTool) string {
 	if t.State == "running" && !m.chat.ready {
 		state = "? Нет связи · состояние уточняется"
 	}
-	if t.State == "running" && m.approvals != nil {
+	if t.State != "error" && t.State != "stopped" && m.approvals != nil {
 		for _, request := range m.approvals.requests {
-			if request.Request.CallID == t.ID {
+			callID := request.Request.CallID
+			if request.Request.Wait != nil {
+				callID = request.Request.Wait.CallID
+			}
+			if callID == t.ID {
 				state = "◌ Ожидает разрешения · F7"
+				if request.Event == "user-questions/request" {
+					state = "◌ Ожидает ответа · F7"
+				}
 				break
 			}
 		}

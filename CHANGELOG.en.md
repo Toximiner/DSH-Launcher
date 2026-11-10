@@ -13,6 +13,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Added
 
+- Go preview 0.2.0-preview.12 adds a dedicated agent-question dialog with single/multiple choice, multiline custom answers, explicit skip, and batch navigation. F5 submits the complete batch through the dsh question channel without changing the chat draft. F7 reopens deferred requests; F8 cancels. Connected clients hold timed questions; continued questions restore from the session projection and use userQuestions/answer. Actual ask_user_question integration with a controlled provider and UI captures are included.
+
 - Go preview 0.2.0-preview.11 adds explicit one-shot permission dialogs with reason, arguments, scrolling, and allow/reject controls. Esc defers, F7 reopens, F8 cancels, and the composer draft survives. Answers use the receiving Peer; disconnected actions are disabled and uncertain answers never retry automatically. Decisions restore from dsh history. Actual dsh integration covers execution only after approval, rejection, cancellation, and reconnection using a controlled test model provider.
 
 - Go preview 0.2.0-preview.10 adds tool cards with arguments, results, errors, cancellation state, and folded long output. F6 / Shift+F6 selects cards, Enter or click expands them, and Esc restores composer focus without losing the draft. Reconnection restores cards without duplication. Actual dsh integration verifies a real file read and missing-file error using a controlled test provider. Permission and question dialogs remain pending.

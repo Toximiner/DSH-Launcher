@@ -13,11 +13,12 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from terminal import Terminal
+from terminal import Terminal, wait_for
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--binary', required=True)
 parser.add_argument('--dsh', required=True, help='Installed dsh 0.2.2-rc.1; Node 24.9+ must be in PATH')
+parser.add_argument('--capture-question', help='Optional terminal-cell JSON of an actual question form')
 parser.add_argument('--capture-approval', help='Optional terminal-cell JSON of an actual pending permission')
 parser.add_argument('--capture-tools', help='Optional terminal-cell JSON of actual tool results')
 parser.add_argument('--capture-cells', help='Optional terminal-cell JSON for an actual UI screenshot')
@@ -46,6 +47,30 @@ class Model(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         try:
+            if number in (11, 13, 16):
+                names = [entry['function']['name'] for entry in body.get('tools', [])]
+                tool = next((name for name in names if name == 'ask_user_question' or name.endswith('__ask_user_question')), None)
+                assert tool, f'Question tool not offered: {names}'
+                if number == 13:
+                    schema = next(entry['function']['parameters'] for entry in body['tools'] if entry['function']['name'] == tool)
+                    assert 'timeout' in schema.get('properties', {}), 'Timed question preset was not applied'
+                if number == 11:
+                    questions = [
+                        {'id': 'language', 'header': 'Language', 'question': 'Which language should the agent use?',
+                         'options': [{'label': 'Go', 'description': 'Use the current Go implementation.'}, {'label': 'Rust'}]},
+                        {'id': 'checks', 'question': 'Which checks should run?', 'multi_select': True,
+                         'options': [{'label': 'Unit tests'}, {'label': 'PTY checks'}, {'label': 'CI'}]},
+                        {'id': 'notes', 'question': 'Add implementation notes.'},
+                    ]
+                else:
+                    questions = [{'id': 'continue', 'question': 'Can we continue after reconnect?' if number == 13 else 'Cancel this unanswered question?',
+                                  'options': [{'label': 'Continue'}, {'label': 'Pause'}]}]
+                send({'role': 'assistant', 'tool_calls': [{'index': 0, 'id': f'question-{number}', 'type': 'function',
+                      'function': {'name': tool, 'arguments': json.dumps({'questions': questions, 'timeout': 1 if number == 13 else -1})}}]})
+                send({}, 'tool_calls')
+                self.wfile.write(b'data: [DONE]\n\n')
+                self.wfile.flush()
+                return
             if number in (6, 8, 10):
                 names = [entry['function']['name'] for entry in body.get('tools', [])]
                 tool = next((name for name in names if name == 'tui_approval_probe' or name.endswith('__tui_approval_probe')), None)
@@ -124,6 +149,18 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         {'id': 'agent-default-model', 'config': {'provider': 'tui-fixture', 'model': 'fixture'}},
         {'id': 'session-title-llm', 'disabled': True},
     ]))
+    # Preset plugins are data inside the preset config, not top-level loader IDs.
+    # Preserve the installed standard preset verbatim except for the question mode.
+    preset = (modules / '@deepseek-ai/dsh-web-app/presets/standard.patch.yml').read_text()
+    config = preset.split('      config:\n', 1)[1]
+    plugin = "            name: '@deepseek-ai/dsh-tool-ask-user'\n"
+    assert config.count(plugin) == 1, 'Pinned question preset shape changed'
+    config = config.replace(plugin, plugin + '            config:\n              mode: timed\n')
+    overlay = root / 'timed-questions.patch.yml'
+    overlay.write_text('- id: preset-standard\n  config:\n' + ''.join(line[4:] if line.startswith('    ') else line for line in config.splitlines(keepends=True)))
+    patch_file = profile / 'cordis.patch.yml'
+    patches = json.loads(patch_file.read_text())
+    patch_file.write_text(''.join('- ' + json.dumps(patch) + '\n' for patch in patches) + overlay.read_text())
     project = root / 'project'
     project.mkdir()
     (project / 'notes.txt').write_text('\n'.join(f'Tool output line {i:02d}' for i in range(1, 13)) + '\n')
@@ -152,7 +189,8 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
                     login = line.split('dsh web: ')[1].strip()
                     break
         if not login:
-            raise RuntimeError('Actual dsh did not start in the isolated profile')
+            detail = '\n'.join(line for line in (root / 'backend.log').read_text().splitlines() if 'token=' not in line)[-3000:]
+            raise RuntimeError('Actual dsh did not start in the isolated profile:\n' + detail)
 
         def drain():
             for line in process.stdout:
@@ -207,7 +245,8 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Запрос разрешения dsh', timeout=20)
         app.wait('Create grant.marker', timeout=10)
         session_id = re.search(r'Сессия · (session-[a-z0-9-]+)', app.text).group(1)
-        app.close(root / 'before-approval-reconnect.ansi')
+        previous_app, app = app, None
+        previous_app.close(root / 'before-approval-reconnect.ansi')
         app = Terminal(str(Path(args.binary).resolve()), ['--session', session_id], {**env, 'DSH_TUI_URL': login})
         app.resize(120, 42)
         app.wait('Create grant.marker', timeout=20)
@@ -238,6 +277,70 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Выполнение остановлено.', timeout=20)
         assert not (project / 'cancel.marker').exists(), 'Cancelled tool wrote its marker'
         assert len(model_calls) == 10, 'Unexpected approval model retry'
+        app.command('Ask for language, checks, and free-form notes.')
+        app.wait('Which language should the agent use?', timeout=20)
+        app.send('\x1b')
+        def question_deferred():
+            app.pump()
+            return 'Вопрос агента' not in app.text
+        wait_for(question_deferred)
+        app.send('retained chat draft')
+        app.wait('> retained chat draft')
+        app.send('\x1b[18~')
+        app.wait('Вопрос агента')
+        app.wait('Which language should the agent use?', timeout=10)
+        app.send('\t\r\x1b[C')
+        app.wait('Which checks should run?', timeout=10)
+        app.send('\t\r\x1b[B ')
+        app.wait('[✓] PTY checks')
+        if args.capture_question:
+            capture_cells(app, str(Path(args.capture_question).with_name('29-question-options-cells.json')))
+        app.send('\x1b[C')
+        app.wait('Add implementation notes.', timeout=10)
+        app.send('\tTerminal questions work.\rKeep the chat draft.')
+        app.wait('Keep the chat draft.', timeout=10)
+        if args.capture_question:
+            capture_cells(app, args.capture_question)
+        app.send('\x1b[15~')
+        app.wait('Ответ 12: проверка транспорта настоящего dsh.', timeout=20)
+        app.wait('> retained chat draft', timeout=10)
+        tool_results = [message for message in model_calls[11]['messages'] if message.get('role') == 'tool']
+        answered = [message for message in tool_results if message.get('tool_call_id') == 'question-11']
+        assert len(answered) == 1, 'Question answer was not returned as the tool result'
+        text = answered[0]['content']
+        if isinstance(text, list):
+            text = next(block['text'] for block in text if block.get('type') == 'text')
+        batch = json.loads(text)['answers']
+        assert batch[0]['selected'] == ['Go'], batch
+        assert batch[1]['selected'] == ['Unit tests', 'PTY checks'], batch
+        assert batch[2]['custom'] == 'Terminal questions work.\nKeep the chat draft.', batch
+        app.send('\x1b[5~' * 20)
+        app.wait('Агент: не выполняется', timeout=20)
+        app.send('\x15')
+        app.command('Ask a timed question, then continue after disconnect.')
+        app.wait('Can we continue after reconnect?', timeout=20)
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            app.pump()
+        assert len(model_calls) == 13, 'Timed question expired while the TUI held its wait'
+        session_id = re.search(r'Сессия · (session-[a-z0-9-]+)', app.text).group(1)
+        previous_app, app = app, None
+        previous_app.close(root / 'before-question-reconnect.ansi')
+        wait_for(lambda: len(model_calls) >= 14, timeout=10)
+        app = Terminal(str(Path(args.binary).resolve()), ['--session', session_id], {**env, 'DSH_TUI_URL': login})
+        app.resize(120, 42)
+        app.wait('Can we continue after reconnect?', timeout=20)
+        app.send('\t\r\x1b[15~')
+        app.wait('Ответ 15: проверка транспорта настоящего dsh.', timeout=20)
+        assert any('answer_to_pending_question' in json.dumps(message) for message in model_calls[14]['messages']), 'Continued reply was not tagged by dsh'
+        app.send('\x1b[5~' * 20)
+        app.wait('Агент: не выполняется', timeout=20)
+        app.command('Ask one more question for cancellation.')
+        app.wait('Cancel this unanswered question?', timeout=20)
+        app.send('\x1b[19~')
+        app.wait('Выполнение остановлено.', timeout=20)
+        assert len(model_calls) == 16, 'Unexpected question retry or duplicate reply'
+        print('Actual dsh questions: single/multi-select, multiline custom answer, draft preservation, timed hold, continued reply, cancellation OK')
         print('Actual dsh approvals: explicit grant executes, rejection/cancellation do not; audit restored OK')
         print('Actual dsh + controlled model: file-read success/failure, result cards, expansion, draft preservation OK')
         print('Actual dsh + controlled model: submission, partial streaming, two turns, cancellation OK')

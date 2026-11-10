@@ -62,7 +62,13 @@ func readChatConnection(ctx context.Context, login, id string, receive func(*cha
 	})
 }
 
-func readMuxStream(ctx context.Context, api *dshAPI, endpoint string, args map[string]any, receive func(json.RawMessage) bool) error {
+type muxSubscriptions struct {
+	open   func(string, map[string]any) (string, error)
+	cancel func(string)
+	closed func(string)
+}
+
+func readMuxStream(ctx context.Context, api *dshAPI, endpoint string, args map[string]any, receive func(json.RawMessage) bool, subscriptions ...*muxSubscriptions) error {
 	u, _ := url.Parse(api.origin + "/api/remote.mux")
 	if u.Scheme == "https" {
 		u.Scheme = "wss"
@@ -90,6 +96,35 @@ func readMuxStream(ctx context.Context, api *dshAPI, endpoint string, args map[s
 	if err != nil {
 		return errors.New("не удалось подготовить поток")
 	}
+	additional := make(map[string]bool)
+	known := make(map[string]bool)
+	if len(subscriptions) > 0 {
+		hooks := subscriptions[0]
+		hooks.open = func(method string, namedArgs map[string]any) (string, error) {
+			if len(additional) >= 32 {
+				return "", errors.New("слишком много потоков ожидания")
+			}
+			id, err := newRequestID()
+			if err != nil {
+				return "", err
+			}
+			conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			err = conn.WriteJSON(map[string]any{"type": "open", "streamId": id, "endpoint": method, "payload": map[string]any{"args": namedArgs}})
+			if err == nil {
+				additional[id] = true
+				known[id] = true
+			}
+			return id, err
+		}
+		hooks.cancel = func(id string) {
+			if !additional[id] {
+				return
+			}
+			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			_ = conn.WriteJSON(map[string]any{"type": "cancel", "streamId": id})
+			delete(additional, id)
+		}
+	}
 	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if conn.WriteJSON(map[string]any{"type": "open", "streamId": streamID, "endpoint": endpoint, "payload": map[string]any{"args": args}}) != nil {
 		return errors.New("не удалось подписаться на сессию")
@@ -105,8 +140,27 @@ func readMuxStream(ctx context.Context, api *dshAPI, endpoint string, args map[s
 			ID    string          `json:"streamId"`
 			Value json.RawMessage `json:"value"`
 		}
-		if json.Unmarshal(data, &envelope) != nil || envelope.ID != streamID {
+		if json.Unmarshal(data, &envelope) != nil {
 			return errors.New("неподдерживаемый протокол потока dsh")
+		}
+		if envelope.ID != streamID {
+			if !known[envelope.ID] {
+				return errors.New("неизвестный поток ожидания dsh")
+			}
+			if envelope.Type == "end" || envelope.Type == "error" {
+				delete(additional, envelope.ID)
+				if len(subscriptions) > 0 && subscriptions[0].closed != nil {
+					subscriptions[0].closed(envelope.ID)
+				}
+				// Preserve a bounded tombstone window for late cancellation frames.
+				if len(known) > 256 {
+					known = make(map[string]bool)
+					for id := range additional {
+						known[id] = true
+					}
+				}
+			}
+			continue
 		}
 		if envelope.Type != "item" {
 			return errors.New("подписка чата остановлена сервером; проверьте доступ и версию dsh")

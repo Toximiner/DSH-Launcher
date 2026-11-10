@@ -12,9 +12,11 @@ import (
 )
 
 type approvalRequest struct {
-	ToolName string `json:"toolName"`
-	CallID   string `json:"callId"`
-	Reason   string `json:"reason"`
+	ToolName  string         `json:"toolName"`
+	CallID    string         `json:"callId"`
+	Reason    string         `json:"reason"`
+	Questions []userQuestion `json:"questions"`
+	Wait      *questionWait  `json:"wait"`
 }
 type approvalFrame struct {
 	Type     string          `json:"type"`
@@ -29,6 +31,7 @@ type approvalNotice struct {
 	frame      *approvalFrame
 	err        error
 	answer     func(string, string) error
+	reply      func(string, any) error
 	disconnect context.CancelFunc
 }
 type approvalUpdate struct {
@@ -50,6 +53,9 @@ type approvalState struct {
 	selection            int
 	viewport             viewport.Model
 	answer               func(string, string) error
+	reply                func(string, any) error
+	forms                map[string]*questionForm
+	answeredQuestions    map[string]bool
 	disconnect           context.CancelFunc
 	note                 string
 }
@@ -80,7 +86,7 @@ func (m *model) handleApprovalUpdate(msg approvalUpdate) tea.Cmd {
 		if n.generation == s.generation {
 			s.ready = false
 			s.busy = false
-			s.note = "Нет связи с каналом разрешений. Ответы недоступны до переподключения."
+			s.note = "Нет связи с каналом запросов. Ответы недоступны до переподключения."
 		}
 	} else if f := n.frame; f != nil {
 		if f.Type == "ready" {
@@ -91,13 +97,14 @@ func (m *model) handleApprovalUpdate(msg approvalUpdate) tea.Cmd {
 			s.busy = false
 			s.selection = -1
 			s.answer = n.answer
+			s.reply = n.reply
 			s.disconnect = n.disconnect
 			s.note = ""
 			s.overflow = false
 		} else if n.generation == s.generation && s.ready {
 			switch f.Type {
 			case "waterfall":
-				if m.chat == nil || f.AgentID != m.chat.id || f.Event != "approval/request" || f.ID == "" {
+				if m.chat == nil || f.AgentID != m.chat.id || (f.Event != "approval/request" && f.Event != "user-questions/request") || f.ID == "" {
 					break
 				}
 				for _, existing := range s.requests {
@@ -117,6 +124,11 @@ func (m *model) handleApprovalUpdate(msg approvalUpdate) tea.Cmd {
 				}
 				request.Request.Reason = boundedToolText(request.Request.Reason, toolArgumentsLimit)
 				s.requests = append(s.requests, request)
+				if request.Event == "user-questions/request" {
+					if form := m.prepareQuestion(request); form.invalid {
+						s.requests[len(s.requests)-1].Request.Questions = nil
+					}
+				}
 				if len(s.requests) == 1 {
 					s.visible = true
 					s.selection = -1
@@ -129,6 +141,7 @@ func (m *model) handleApprovalUpdate(msg approvalUpdate) tea.Cmd {
 			}
 		}
 	}
+	m.syncContinuedQuestions()
 	m.rebuild()
 	return waitApprovals(s)
 }
@@ -136,6 +149,7 @@ func (m *model) removeApproval(id string) {
 	s := m.approvals
 	for i, request := range s.requests {
 		if request.ID == id {
+			delete(s.forms, id)
 			current := i == 0
 			s.requests = append(s.requests[:i], s.requests[i+1:]...)
 			if current {
@@ -173,6 +187,7 @@ func (m *model) handleApprovalAnswer(msg approvalAnswerResult) {
 	if s == nil || s.epoch != msg.epoch || s.generation != msg.generation || len(s.requests) == 0 || s.requests[0].ID != msg.id {
 		return
 	}
+	question := s.requests[0].Event == "user-questions/request"
 	if msg.err != nil {
 		s.ready = false
 		s.note = "Ответ не подтверждён. Восстанавливаем канал; автоматического повтора нет."
@@ -180,9 +195,21 @@ func (m *model) handleApprovalAnswer(msg approvalAnswerResult) {
 			s.disconnect()
 		}
 	} else {
+		if question {
+			delete(s.forms, questionFormKey(s.requests[0]))
+		}
+		if question && strings.HasPrefix(msg.id, "continued:") {
+			if s.answeredQuestions == nil {
+				s.answeredQuestions = make(map[string]bool)
+			}
+			s.answeredQuestions[msg.id] = true
+		}
 		m.removeApproval(msg.id)
 		if m.chat != nil {
 			m.chat.note = "Ответ на запрос передан dsh; итог отображается в истории разрешений."
+			if question {
+				m.chat.note = "Ответы на вопросы переданы dsh."
+			}
 		}
 	}
 	m.rebuild()
@@ -200,6 +227,9 @@ func (m *model) approvalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 	if !s.visible || len(s.requests) == 0 {
 		return nil, false
+	}
+	if s.requests[0].Event == "user-questions/request" {
+		return m.questionKey(msg), true
 	}
 	if msg.Paste {
 		return nil, true
@@ -241,6 +271,9 @@ func (m *model) approvalView(base string) string {
 	if s == nil || !s.visible || len(s.requests) == 0 || m.width < 44 || m.height < 18 {
 		return base
 	}
+	if s.requests[0].Event == "user-questions/request" {
+		return m.questionView(base)
+	}
 	request := s.requests[0].Request
 	box := m.approvalBox()
 	inner := box.width - 4
@@ -273,6 +306,9 @@ func (m *model) approvalMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 	s := m.approvals
 	if s == nil || !s.visible || len(s.requests) == 0 {
 		return nil, false
+	}
+	if s.requests[0].Event == "user-questions/request" {
+		return m.questionMouse(msg), true
 	}
 	box := m.approvalBox()
 	body := area{box.x + 2, box.y + 3, box.width - 4, box.height - 8}

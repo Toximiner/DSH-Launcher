@@ -452,6 +452,10 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	var tool *chatTool
 	switch event.Type {
 	case "user/message":
+		if data.Source.Kind == "user-question-reply" {
+			role = "ВЫ · ОТВЕТЫ НА ВОПРОС"
+			text = questionReplyText(contentText(data.Content))
+		}
 		if data.Source.Kind == "user" || data.Source.Kind == "" {
 			role = "ВЫ"
 			if data.Source.Kind == "" {
@@ -494,6 +498,9 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 		}
 		tool.State = "done"
 		tool.Result = boundedToolText(contentText(data.Message.Content), chatTextLimit)
+		if tool.Name == "ask_user_question" && tool.State == "done" {
+			tool.Result = questionReplyText(tool.Result)
+		}
 		if data.Message.IsError || data.Error != nil {
 			tool.State = "error"
 			if data.Error != nil {

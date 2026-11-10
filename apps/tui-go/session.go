@@ -17,6 +17,7 @@ type planState struct {
 }
 type goalState struct {
 	Goal struct {
+		Questions     []continuedQuestion
 		ID            string `json:"id"`
 		Revision      int    `json:"revision"`
 		Phase         string `json:"phase"`
@@ -28,6 +29,7 @@ type goalState struct {
 	Rounds int `json:"roundsStarted"`
 }
 type sessionView struct {
+	Questions     []continuedQuestion
 	ID            string
 	Plan          *planState
 	Goal          *goalState
@@ -76,6 +78,15 @@ func readSession(ctx context.Context, api *dshAPI, id string) (*sessionView, err
 		if json.Unmarshal(data, &view.Goal) != nil {
 			return nil, errors.New("неподдерживаемое состояние цели")
 		}
+	}
+	if data, ok := projection.Values["userQuestions"]; ok {
+		var questions struct {
+			Active []continuedQuestion `json:"active"`
+		}
+		if json.Unmarshal(data, &questions) != nil {
+			return nil, errors.New("неподдерживаемые вопросы сессии")
+		}
+		view.Questions = questions.Active
 	}
 	var state struct {
 		Cursor       int      `json:"cursor"`
@@ -327,10 +338,10 @@ func (m *model) modeDescription() string {
 			label += "\nАгент: не выполняется"
 		}
 		if len(m.session.PendingInput) > 0 {
-			label += "\nОжидается подтверждение/ответ. F7 — разрешения · F8 — отмена."
+			label += "\nОжидается подтверждение/ответ. F7 — вопросы/разрешения · F8 — отмена."
 			for _, kind := range m.session.PendingInput {
 				if kind == "question" {
-					label += "\nВопросы агента пока недоступны в TUI."
+					label += "\nВопросы агента: F7 — открыть."
 				}
 			}
 		}

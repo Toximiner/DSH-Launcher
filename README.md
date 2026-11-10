@@ -26,13 +26,13 @@
 поиск и подтверждаемые установка, обновление и удаление плагинов. В подключённой сессии
 работает текстовый потоковый чат: Enter — отправить, F8 — остановить. Без подключения
 сохраняется локальный черновик. Для настоящих ответов нужен настроенный провайдер LLM
-в dsh. Установка самого dsh и формы вопросов агента ещё не перенесены. JS-версия TUI удалена.
+в dsh. Установка самого dsh пока не перенесена. JS-версия TUI удалена.
 
 Инструменты отображаются карточками со статусом и результатом; F6 выбирает карточку,
-Enter или клик раскрывает детали, Esc возвращает к вводу. Разрешения открываются отдельным окном: выбор кнопки и Enter либо клик; F7 повторно открывает запрос. Вопросы агента — следующий шаг.
+Enter или клик раскрывает детали, Esc возвращает к вводу. Разрешения открываются отдельным окном: выбор кнопки и Enter либо клик; F7 повторно открывает запрос. Вопросы агента поддерживают варианты, множественный выбор и многострочный ответ: F5 отправляет весь набор, F7 возвращает отложенное окно.
 
-Готовые Go-сборки: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.11/dsh-launcher-tui-go_linux_amd64) ·
-[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.11/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.11/SHA256SUMS).
+Готовые Go-сборки: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.12/dsh-launcher-tui-go_linux_amd64) ·
+[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.12/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.12/SHA256SUMS).
 Go-клиенту не нужен Node.js; самому бэкенду dsh нужен Node.js 24.9+.
 
 ## Как работает

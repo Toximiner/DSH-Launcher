@@ -25,14 +25,13 @@ Session attachment/creation and agent modes are available. `--start` launches ds
 and offers dshmarket preinstallation into its profile. The Marketplace page provides
 search and confirmed plugin install/update/remove actions. Attached sessions support
 streamed text chat: Enter sends, F8 stops. Offline input remains a local draft.
-Actual replies require a configured LLM provider in dsh. The dsh installer and
-agent question forms remain pending. The legacy JS terminal client is removed.
+Actual replies require a configured LLM provider in dsh. The dsh installer remains pending. The legacy JS terminal client is removed.
 
 Tool cards show execution state and results; F6 selects a card, Enter or click
-expands its details, and Esc restores composer focus. Permission dialogs support explicit one-shot allow/reject; F7 reopens a deferred request. Agent question forms remain pending.
+expands its details, and Esc restores composer focus. Permission dialogs support explicit one-shot allow/reject; F7 reopens a deferred request. Agent questions support options, multiple selections, and multiline custom text; F5 submits the batch and F7 reopens deferred requests.
 
-Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.11/dsh-launcher-tui-go_linux_amd64) ·
-[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.11/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.11/SHA256SUMS).
+Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.12/dsh-launcher-tui-go_linux_amd64) ·
+[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.12/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.12/SHA256SUMS).
 The Go client runs without Node.js; the dsh backend requires Node.js 24.9+.
 
 ## How it works

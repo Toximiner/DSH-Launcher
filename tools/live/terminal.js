@@ -24,7 +24,7 @@
   document.getElementById('reload').onclick=()=>location.reload();
   term.onData(data=>send('0',data));
   for(const button of document.querySelectorAll('[data-key]'))button.onclick=()=>{send('0','\x1b'+button.dataset.key);if(button.dataset.key==='c')term.focus();else host.querySelector('textarea')?.blur();};
-  const actions={approval:'\x1b[18~',left:'\x1b[D',right:'\x1b[C',tools:'\x1b[17~',up:'\x1b[A',down:'\x1b[B',enter:'\r',esc:'\x1b',stop:'\x1b[19~'};
+  const actions={answer:'\x1b[15~',nextfield:'\t',approval:'\x1b[18~',left:'\x1b[D',right:'\x1b[C',tools:'\x1b[17~',up:'\x1b[A',down:'\x1b[B',enter:'\r',esc:'\x1b',stop:'\x1b[19~'};
   for(const button of document.querySelectorAll('[data-action]'))button.onclick=()=>send('0',actions[button.dataset.action]);
   resize();
   try{

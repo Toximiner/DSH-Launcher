@@ -263,3 +263,84 @@ func TestApprovalOverflowReplaysAfterVisibleBatch(t *testing.T) {
 		t.Fatal("excess requests were left inaccessible instead of being replayed")
 	}
 }
+
+func TestTimedQuestionClaimUsesInteractionMux(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	checked := make(chan struct{})
+	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/connect" {
+			http.SetCookie(w, &http.Cookie{Name: "peer", Value: "owner", Path: "/"})
+			w.WriteHeader(302)
+			return
+		}
+		if r.URL.Path != "/api/remote.mux" {
+			t.Error("unexpected question transport route")
+			w.WriteHeader(404)
+			return
+		}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		var primary struct {
+			ID       string `json:"streamId"`
+			Endpoint string `json:"endpoint"`
+		}
+		if conn.ReadJSON(&primary) != nil {
+			return
+		}
+		send := func(id string, value any) {
+			_ = conn.WriteJSON(map[string]any{"type": "item", "streamId": id, "value": value})
+		}
+		send(primary.ID, map[string]any{"type": "ready", "clientId": "client"})
+		send(primary.ID, map[string]any{"type": "waterfall", "event": "user-questions/request", "eventId": "question", "agentId": "s", "request": map[string]any{"wait": map[string]any{"callId": "call", "timed": true}, "questions": []any{map[string]any{"id": "q", "question": "Choose"}}}})
+		var claim struct {
+			ID       string `json:"streamId"`
+			Endpoint string `json:"endpoint"`
+			Payload  struct {
+				Args struct {
+					AgentID string `json:"agentId"`
+					CallID  string `json:"callId"`
+				}
+			}
+		}
+		if conn.ReadJSON(&claim) != nil {
+			return
+		}
+		if claim.Endpoint != "userQuestions/attachWait" || claim.Payload.Args.AgentID != "s" || claim.Payload.Args.CallID != "call" || claim.ID == primary.ID {
+			t.Error("timed claim lost its scope or reused the primary logical stream")
+		}
+		send(claim.ID, map[string]any{"remainingMs": 1000})
+		send(primary.ID, map[string]any{"type": "cancel", "eventId": "question"})
+		var stop struct {
+			Type string
+			ID   string `json:"streamId"`
+		}
+		if conn.ReadJSON(&stop) != nil {
+			return
+		}
+		if stop.Type != "cancel" || stop.ID != claim.ID {
+			t.Error("withdrawal did not release the logical wait")
+		}
+		close(checked)
+		<-ctx.Done()
+	}))
+	defer func() { cancel(); server.Close() }()
+	inbox := make(chan approvalNotice, 32)
+	done := make(chan struct{})
+	go func() { followApprovalEvents(ctx, server.URL+"/?token=test", "s", inbox); close(done) }()
+	select {
+	case <-checked:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed wait was not attached/released on the receiving mux")
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("question transport leaked after cancellation")
+	}
+}
