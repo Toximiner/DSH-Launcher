@@ -29,6 +29,12 @@ node test/markers.js   # marker-block integrity (also run by npm test)
 npm run coverage  # unit coverage with the gates in package.json
 ```
 
+The experimental terminal app is an independent npm package in `apps/tui`:
+`npm ci --prefix apps/tui`, `npm run test:tui`, `npm run build:tui`, and
+`npm run build:tui:deb`. The `tui` workflow tests it and uploads its npm archive
+and Debian package separately. The root
+ESLint command checks both apps. TUI-only work does not need Electron installed.
+
 ## CI
 
 - **build-deb** — runs on every PR and tag: unit tests, ESLint, coverage,

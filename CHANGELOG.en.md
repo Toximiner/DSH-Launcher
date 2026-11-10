@@ -7,6 +7,10 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+### Added
+
+- Experimental terminal client in `apps/tui`: an independent build without Electron, dsh startup or attachment, streaming chat, sessions, response cancellation, and operation approvals. Separate tests and CI; targets the dsh 0.2.2-rc.1 protocol.
+
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
 ## [1.18.0] — 2026-11-05

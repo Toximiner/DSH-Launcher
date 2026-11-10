@@ -7,6 +7,25 @@
 A small Electron app: a window that opens **DeepSeek Harness**
 (`dsh web`) and manages its process along the way.
 
+## Terminal version (experimental)
+
+This repository also contains **dsh-launcher-tui**, a separate Linux terminal
+application without Electron or a browser. The first version supports streaming
+chat, session selection, response cancellation, and operation approvals.
+Requires Node.js 22+ and an installed dsh; the adapter targets dsh 0.2.2-rc.1.
+
+```sh
+npm ci --prefix apps/tui
+npm run tui
+```
+
+For a busy port, use `npm run tui -- --port 3081`. To attach to a running dsh,
+set `DSH_TUI_URL` to the login URL from its terminal.
+`npm run build:tui` builds a separate npm archive without Electron.
+`npm run build:tui:deb` builds a separate `.deb` depending on Node.js 22+.
+GUI build and launch commands remain the same. See the
+[terminal application's README](apps/tui/README.md) for commands and limitations.
+
 ## How it works
 
 - **Clicking the “DeepSeek Harness” shortcut**:
