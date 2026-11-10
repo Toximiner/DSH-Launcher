@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0-preview.16",
+  "source_commit": "d98acc8b080b44cfad7b257b35fd33172368ae1b",
+  "stage": "confirmed queue-to-steering promotion, next step within the same turn, immutable item identity and reconnect recovery; nested tool calls and incremental stdout remain pending",
+  "sha256": {
+    "dsh-launcher-tui-go_linux_amd64": "2d190c97ab2b95c55292d180109ae39e88b4920a9712b9bef6e96bb807ba99f4",
+    "dsh-launcher-tui-go_linux_arm64": "b99aa7665b2931097518f6abdba19c1ef1751a1390c7bac2866337cef7040710"
+  }
+}
