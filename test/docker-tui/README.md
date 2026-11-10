@@ -19,12 +19,16 @@ copied into the image. A deterministic Web API peer controls streaming and
 decision timing. A separate smoke scenario boots real dsh, creates and lists
 sessions, and verifies shutdown. No model provider or API key is used.
 
-The 18 scenarios cover package metadata and help, five exit paths, stopping a
+The 23 scenarios cover package metadata and help, five exit paths, stopping a
 stubborn process group, preserving an attached server, partial output before
 settlement, duplicate prevention, session creation and switching, explicit allow
 and reject decisions, questions and cancellation, unrelated-session delegation,
 disconnects, bracketed paste and resize, invalid login, a missing executable,
-and real backend startup. Normal exits and errors check terminal restoration.
+and real backend startup. Installer scenarios cover declining, explicit consent,
+successful startup and reuse, npm failure and retry, duplicate requests, and
+cancellation through commands or signals. npm is replaced by a stand-in for
+these cases, so they do not download packages. Normal exits and errors check
+terminal restoration.
 
 CI calls `test/docker-tui/run.sh` with `OSES` set to one matrix entry. Artifacts
 under `.work/results/<os>/` include the build log, pytest output, JUnit XML,

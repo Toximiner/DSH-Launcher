@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -36,7 +37,8 @@ class Lab:
         self.state = root / 'backend'
         self.state.mkdir()
         self.env = {**os.environ, 'HOME': str(root), 'DSH_HOME': str(root / 'dsh-home'),
-                    'TUI_FAKE_STATE': str(self.state), 'TERM': 'xterm-256color'}
+                    'TUI_FAKE_STATE': str(self.state), 'TERM': 'xterm-256color',
+                    'XDG_DATA_HOME': str(root / 'data')}
         for key in ('DISPLAY', 'WAYLAND_DISPLAY', 'DSH_TUI_URL', 'DSH_BIN', 'DSH_ARGS',
                     'DSH_CWD', 'NODE_OPTIONS', 'NODE_V8_COVERAGE', 'DSH_LAUNCHER_GITHUB_TOKEN'):
             self.env.pop(key, None)
@@ -65,17 +67,31 @@ class Lab:
         self.backends.append((proc, output))
         return wait_for(self.ready)
 
-    def app(self, *, attach=False, args=None, env=None):
+    def app(self, *, attach=False, args=None, env=None, missing=False):
         arguments = ['--cwd', str(self.root)]
         if attach:
             self.backend()
             app_env = {**self.env, 'DSH_TUI_URL': self.ready()['url']}
         else:
-            arguments += ['--dsh', self.fake, '--port', str(self.port)]
+            arguments += ['--port', str(self.port)]
+            if not missing:
+                arguments += ['--dsh', self.fake]
             app_env = self.env
         app = Terminal(self.executable, arguments + (args or []), {**app_env, **(env or {})})
         self.apps.append(app)
         return app
+
+    def install_environment(self, mode='ok'):
+        shim = self.root / 'bin'
+        shim.mkdir()
+        (shim / 'node').symlink_to(shutil.which('node'))
+        (shim / 'npm').symlink_to(Path(__file__).parent / 'fakes' / 'npm.js')
+        (self.state / 'npm-mode').write_text(mode)
+        return {'PATH': str(shim), 'TUI_FAKE_DSH': self.fake}
+
+    def npm_calls(self):
+        log = self.state / 'npm.jsonl'
+        return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
 
     def close(self):
         results = Path(os.environ.get('TUI_TEST_RESULTS', str(self.root / 'results')))
@@ -100,6 +116,9 @@ class Lab:
             log = self.state / 'requests.jsonl'
             if log.exists():
                 (results / f'{self.name}.requests.jsonl').write_bytes(log.read_bytes())
+            npm_log = self.state / 'npm.jsonl'
+            if npm_log.exists():
+                (results / f'{self.name}.npm.jsonl').write_bytes(npm_log.read_bytes())
 
 
 @pytest.fixture

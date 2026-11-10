@@ -2,6 +2,18 @@
 const { spawn } = require('node:child_process');
 const { StringDecoder } = require('node:string_decoder');
 
+async function stopProcessGroup(child) {
+  if (!child?.pid) return;
+  const signal = name => { try { process.kill(-child.pid, name); } catch (error) { if (error.code !== 'ESRCH') throw error; } };
+  signal('SIGTERM');
+  const deadline = Date.now() + 4000;
+  while (Date.now() < deadline) {
+    try { process.kill(-child.pid, 0); } catch (error) { if (error.code === 'ESRCH') return; throw error; }
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  signal('SIGKILL');
+}
+
 // Only children started here belong to this client; attached servers are never killed.
 class DshProcess {
   constructor() { this.child = null; this.stopping = false; }
@@ -50,16 +62,8 @@ class DshProcess {
     this.stopping = true;
     const child = this.child;
     // The process group can outlive its original leader after a dsh self-restart.
-    if (!child.pid) return;
-    const signal = (name) => { try { process.kill(-child.pid, name); } catch (error) { if (error.code !== 'ESRCH') throw error; } };
-    signal('SIGTERM');
-    const deadline = Date.now() + 4000;
-    while (Date.now() < deadline) {
-      try { process.kill(-child.pid, 0); } catch (error) { if (error.code === 'ESRCH') return; throw error; }
-      await new Promise(resolve => setTimeout(resolve, 50));
-    }
-    signal('SIGKILL');
+    await stopProcessGroup(child);
   }
 }
 
-module.exports = { DshProcess };
+module.exports = { DshProcess, stopProcessGroup };

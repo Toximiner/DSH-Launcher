@@ -1,5 +1,6 @@
 """Installed-package scenarios, with no display server or runtime Internet."""
 import os
+import json
 from pathlib import Path
 import re
 import signal
@@ -164,6 +165,72 @@ def test_missing_dsh_restores_terminal(lab):
     app = lab.app(args=['--dsh', '/nonexistent/dsh'])
     app.exited(code=1)
     assert b'Cannot start dsh' in app.raw
+
+
+def test_decline_installation(lab):
+    app = lab.app(missing=True, env=lab.install_environment())
+    app.wait('dsh was not found')
+    assert not lab.npm_calls(), 'npm started before confirmation'
+    app.command('yes')
+    app.wait('Use /install')
+    assert not lab.npm_calls(), 'Ordinary text confirmed installation'
+    app.command('/cancel')
+    app.exited()
+    assert not lab.npm_calls()
+    assert lab.ready() is None
+
+
+def test_install_and_reuse(lab):
+    env = lab.install_environment()
+    app = lab.app(missing=True, env=env)
+    app.wait('dsh was not found')
+    app.command('/install')
+    app.wait('Ready')
+    calls = lab.npm_calls()
+    prefix = lab.root / 'data/dsh-launcher-tui/backend'
+    assert calls == [['install', '--prefix', str(prefix), '--no-audit', '--no-fund', '--ignore-scripts', '@deepseek-ai/dsh@0.2.2-rc.1']]
+    assert 'Test npm installation progress' in app.text
+    backend = lab.ready()
+    app.command('/exit')
+    app.exited()
+    wait_for(lambda: not alive(backend['pid']))
+    second = lab.app(missing=True, env=env)
+    second.wait('Ready')
+    assert len(lab.npm_calls()) == 1, 'Completed installation was not reused'
+    assert 'dsh was not found' not in second.text
+
+
+def test_failed_installation_can_retry(lab):
+    app = lab.app(missing=True, env=lab.install_environment('fail'))
+    app.wait('dsh was not found')
+    app.command('/install')
+    app.wait('Installation failed: npm exited (1)')
+    assert lab.ready() is None
+    assert not (lab.root / 'data/dsh-launcher-tui/backend/.installed.json').exists()
+    (lab.state / 'npm-mode').write_text('ok')
+    app.command('/install')
+    app.wait('Ready')
+    assert len(lab.npm_calls()) == 2
+
+
+@pytest.mark.parametrize('cancel', ['command', 'signal'])
+def test_cancel_installation(lab, cancel):
+    app = lab.app(missing=True, env=lab.install_environment('hang'))
+    app.wait('dsh was not found')
+    app.command('/install')
+    app.wait('Test npm is waiting')
+    child = json.loads((lab.state / 'npm-ready.json').read_text())
+    app.command('/install')
+    app.wait('Installation is running')
+    assert len(lab.npm_calls()) == 1
+    if cancel == 'command':
+        app.command('/cancel')
+    else:
+        app.proc.send_signal(signal.SIGTERM)
+    app.exited(timeout=12)
+    wait_for(lambda: not alive(child['pid']) and not alive(child['worker']))
+    assert not (lab.root / 'data/dsh-launcher-tui/backend/.installed.json').exists()
+    assert lab.ready() is None
 
 
 def test_real_dsh(lab):

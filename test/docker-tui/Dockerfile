@@ -28,7 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends /tmp/launcher.d
     && rm -f /tmp/launcher.deb && rm -rf /var/lib/apt/lists/*
 COPY tests /opt/tui-tests
 RUN useradd --create-home --shell /bin/sh tester \
-    && chmod -R a+rX /opt/tui-tests && chmod 755 /opt/tui-tests/fakes/dsh.js
+    && chmod -R a+rX /opt/tui-tests && chmod 755 /opt/tui-tests/fakes/*.js
 ENV HOME=/home/tester TERM=xterm-256color \
     TUI_TEST_BIN=/usr/bin/dsh-launcher-tui \
     TUI_TEST_REAL_DSH=/opt/dsh/bin/dsh \

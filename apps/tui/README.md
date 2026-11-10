@@ -11,6 +11,20 @@ The TUI requires Node.js 22+. The protocol adapter targets
 locally; upstream APIs are pre-stable. Use Node.js 24.9+ for both applications
 when the TUI starts dsh on the same machine.
 
+If `dsh` is missing from PATH, the TUI offers `/install` and `/cancel`.
+`/install` installs the pinned backend for the current user, shows npm output,
+and starts the conversation after success. The installation lives under
+`$XDG_DATA_HOME/dsh-launcher-tui/backend`, or
+`~/.local/share/dsh-launcher-tui/backend` by default, and is reused on later
+starts. It does not need sudo or change the global npm prefix or shell PATH.
+
+Only `/install` confirms installation; ordinary input does not. On failure,
+`/install` retries; `/cancel`, Ctrl+C, or Ctrl+D stops npm and exits. A failed or
+cancelled installation is not reused. Node.js itself must be installed first;
+the prompt explains when Node.js 24.9+ or npm is missing. A bad explicit
+`--dsh` / `DSH_BIN` path remains an error instead of installing another program.
+Attaching with `--url` does not need or install a local dsh.
+
 ```sh
 npm ci --prefix apps/tui
 npm run tui
@@ -84,13 +98,15 @@ npm run build:tui:deb
 The build creates `build/tui/dsh-launcher-tui-0.1.0.tgz`, installable with
 `npm install -g ./build/tui/dsh-launcher-tui-0.1.0.tgz`. The package contains
 only the terminal app and declares one runtime dependency, `ws`. It needs
-Node.js and dsh installed separately. Building it does not install Electron.
+Node.js installed separately; a missing dsh can be installed from the TUI.
+Building it does not install Electron.
 CI tests and packages the TUI independently; it does not publish an npm release.
 
 `build:tui:deb` also creates `build/tui/dsh-launcher-tui_0.1.0-1_all.deb`.
 It bundles `ws` and depends on system `nodejs (>= 22)`; install it with
 `sudo apt install ./build/tui/dsh-launcher-tui_0.1.0-1_all.deb`.
-The dsh executable must be installed separately and available in PATH.
+The dsh executable can be installed separately in PATH or through the TUI's
+user-local installation prompt.
 
 The CI Docker matrix installs the `.deb` on Ubuntu 24.04 / 26.04 and Debian 13,
 then checks the installed client in a PTY as an ordinary user. Tests cover

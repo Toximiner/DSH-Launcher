@@ -12,7 +12,10 @@ A small Electron app: a window that opens **DeepSeek Harness**
 This repository also contains **dsh-launcher-tui**, a separate Linux terminal
 application without Electron or a browser. The first version supports streaming
 chat, session selection, response cancellation, and operation approvals.
-Requires Node.js 22+ and an installed dsh; the adapter targets dsh 0.2.2-rc.1.
+The client requires Node.js 22+; the adapter targets dsh 0.2.2-rc.1.
+When dsh is missing, `/install` installs it for the current user without sudo,
+shows npm output, and starts it after success. `/cancel` cancels installation.
+The installed backend is reused on later starts.
 The dsh 0.2.2-rc.1 backend itself requires Node.js 24.9+; use Node.js 24.9+
 when running both applications on the same machine.
 

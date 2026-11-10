@@ -2,6 +2,7 @@
 'use strict';
 const { options } = require('../src/options');
 const { DshProcess } = require('../src/process');
+const { DshInstaller } = require('../src/install');
 const { Terminal } = require('../src/terminal');
 const { DshClient } = require('../src/client');
 const { Chat, HELP } = require('../src/chat');
@@ -16,22 +17,26 @@ const USAGE = `dsh-launcher-tui [options]
   --help          Show help
 
 Without --url, starts its own dsh web server. Use a free port.
+If dsh is missing, /install installs it for this user; /cancel exits.
 Only loopback connections are accepted; use SSH forwarding for remote hosts.
 Ctrl+D or /exit quits. Ctrl+C stops the current response.
-Requires Node.js 22+ and dsh with the 0.2.2-rc.1 web API.`;
+The client requires Node.js 22+; installing/running dsh 0.2.2-rc.1 requires 24.9+.`;
 
 async function main() {
   const config = options(process.argv.slice(2));
   if (config.help) { console.log(USAGE); return; }
   const terminal = new Terminal();
   const server = new DshProcess();
+  const installer = new DshInstaller();
+  const lifetime = new AbortController();
   let client, chat, exiting;
   const quit = () => {
     if (exiting) return exiting;
     exiting = (async () => {
       terminal.status = 'Stopping…'; terminal.draw();
+      lifetime.abort();
       client?.close();
-      try { await server.stop(); } finally { terminal.close(); terminal.emit('quit-complete'); }
+      try { await installer.stop(); await server.stop(); } finally { terminal.close(); terminal.emit('quit-complete'); }
     })();
     return exiting;
   };
@@ -43,9 +48,23 @@ async function main() {
     if (chat) void chat.input('/stop').catch(error => terminal.log(error.message));
     else onSignal();
   });
+  let queue = Promise.resolve();
+  terminal.on('line', line => {
+    if (line === '/exit' || line === '/quit' || (!chat && line === '/cancel')) { onSignal(); return; }
+    if (!chat) {
+      if (installer.running) terminal.log('Installation is running; use /cancel to stop.');
+      return;
+    }
+    queue = queue.then(() => { if (!exiting) return chat.input(line); }).catch(error => terminal.log('Error: ' + error.message));
+  });
   try {
     terminal.log('DSH Launcher TUI — experimental\n' + HELP);
-    const url = config.url || await server.start(config);
+    let url = config.url;
+    if (!url) {
+      const bin = await installer.ensure(config, terminal, lifetime.signal);
+      if (!bin || lifetime.signal.aborted) { await quit(); return; }
+      url = await server.start({ ...config, bin });
+    }
     if (exiting) { await exiting; return; }
     client = new DshClient(url);
     client.on('fault', error => {
@@ -57,11 +76,6 @@ async function main() {
     if (exiting) { await exiting; return; }
     chat = new Chat(client, terminal, config.cwd);
     if (config.session) await chat.open(config.session); else await chat.newSession();
-    let queue = Promise.resolve();
-    terminal.on('line', line => {
-      if (line === '/exit' || line === '/quit') { onSignal(); return; }
-      queue = queue.then(() => { if (!exiting) return chat.input(line); }).catch(error => terminal.log('Error: ' + error.message));
-    });
     await new Promise(resolve => terminal.once('quit-complete', resolve));
   } catch (error) {
     if (exiting) { await exiting; return; }

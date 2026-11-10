@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Added
 
+- TUI installation prompt for a missing dsh: `/install` installs the pinned backend in a user-local directory without sudo, then starts it. Includes declining, cancellation, npm output, retry after failure, and reuse on subsequent launches.
+
 - Docker scenarios for the installed TUI package on Ubuntu 24.04 / 26.04 and Debian 13: PTY chat, sessions, approvals, signals, and real dsh startup without model requests. The CI matrix retains terminal logs and JUnit reports.
 
 - Experimental terminal client in `apps/tui`: an independent build without Electron, dsh startup or attachment, streaming chat, sessions, response cancellation, and operation approvals. Separate tests and CI; targets the dsh 0.2.2-rc.1 protocol.
