@@ -11,7 +11,7 @@ A small Electron app: a window that opens **DeepSeek Harness**
 
 An incremental migration to Go + Bubble Tea has started. The separate
 [Go preview](apps/tui-go/README.md) has sidebar navigation, a conversation panel,
-and a separate composer, with input history, scrolling, and clean shutdown; it does not connect to dsh yet. The working JS client below remains
+and a separate composer, with mouse navigation, input history, scrolling, and clean shutdown; it does not connect to dsh yet. The working JS client below remains
 available during migration.
 
 This repository also contains **dsh-launcher-tui**, a separate Linux terminal

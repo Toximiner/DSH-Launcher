@@ -19,8 +19,8 @@ import (
 	"golang.org/x/term"
 )
 
-const version = "0.2.0-preview.2"
-const help = "/help — справка\n/clear — очистить экран\n/exit — выйти\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nTab — боковая панель · Esc — вернуться в чат"
+const version = "0.2.0-preview.3"
+const help = "/help — справка\n/clear — очистить экран\n/exit — выйти\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 var pages = []string{"Чат", "Сессии", "Настройки", "Журнал"}
 
@@ -115,7 +115,7 @@ func (m *model) resize() {
 func (m *model) contentSize() (int, int) {
 	w := max(1, m.width-1)
 	if w >= 78 {
-		w -= 25
+		w -= sidebarWidth + sidebarGap
 	}
 	return w, max(1, m.height-3)
 }
@@ -136,6 +136,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.resize()
+	case tea.MouseMsg:
+		return m, m.mouse(msg)
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "ctrl+d":
@@ -239,6 +241,7 @@ func run(args []string, out io.Writer) error {
 	f := flag.NewFlagSet("dsh-launcher-tui-go", flag.ContinueOnError)
 	f.SetOutput(out)
 	helpFlag := f.Bool("help", false, "показать справку")
+	noMouseFlag := f.Bool("no-mouse", false, "отключить мышь для обычного выделения текста")
 	versionFlag := f.Bool("version", false, "показать версию")
 	if err := f.Parse(args); err != nil {
 		return err
@@ -247,7 +250,7 @@ func run(args []string, out io.Writer) error {
 		return fmt.Errorf("unexpected positional arguments")
 	}
 	if *helpFlag {
-		fmt.Fprintln(out, "dsh-launcher-tui-go [--help] [--version]\nGo-прототип: панели, Tab — разделы, Esc — чат, /help, /clear, /exit.\nПодключение к dsh пока не реализовано. Node.js для запуска не нужен.")
+		fmt.Fprintln(out, "dsh-launcher-tui-go [--help] [--version] [--no-mouse]\nGo-прототип: панели, Tab — разделы, Esc — чат, /help, /clear, /exit.\nПодключение к dsh пока не реализовано. Node.js для запуска не нужен.")
 		return nil
 	}
 	if *versionFlag {
@@ -257,7 +260,11 @@ func run(args []string, out io.Writer) error {
 	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
 		return fmt.Errorf("run this application in an interactive terminal")
 	}
-	p := tea.NewProgram(newModel(), tea.WithAltScreen(), tea.WithoutSignalHandler())
+	options := []tea.ProgramOption{tea.WithAltScreen(), tea.WithoutSignalHandler()}
+	if !*noMouseFlag {
+		options = append(options, tea.WithMouseCellMotion())
+	}
+	p := tea.NewProgram(newModel(), options...)
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	done := make(chan struct{})

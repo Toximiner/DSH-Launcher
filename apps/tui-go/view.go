@@ -27,7 +27,7 @@ func bar(left, right string, width int) string {
 }
 
 func (m *model) sidebar(height int) string {
-	const width = 24
+	const width = sidebarWidth
 	const inner = 20
 	focus := "РАЗДЕЛЫ"
 	if m.navFocused {
