@@ -7,6 +7,10 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+### Changed
+
+- Disabled the public GitHub Pages demo by removing its browser runtime and advertised links. Native Go downloads remain available on the landing page; live usage is documented for private Codespaces.
+
 ### Added
 
 - Added a private live Codespaces deployment with Node 24, actual dsh and dshmarket, native Go TUI through ttyd, font fitting, and touch navigation.

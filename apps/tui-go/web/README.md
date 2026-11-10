@@ -1,5 +1,8 @@
 # Static browser preview
 
+The public GitHub Pages demo is disabled. This adapter remains available for local
+development and CI. For actual dsh, use the [private live deployment](../../../tools/live/README.md).
+
 This preview runs the native client's shared Go model (`Update`/`View`) in
 WebAssembly, using xterm.js for display and browser input. It requires no tunnel,
 server terminal, login, or install. The page clearly labels its limits: local

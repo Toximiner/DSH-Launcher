@@ -11,8 +11,8 @@ Run a private live instance with actual dsh in GitHub Codespaces: [instructions]
 
 ## Terminal version (experimental)
 
-[Open the interactive browser preview](https://toximiner.github.io/DSH-Launcher/preview/).
-It runs the shared Go model in WebAssembly; chat is local and settings use a demo snapshot.
+The public demo preview is disabled. For a live instance with actual dsh, use
+the [private Codespaces deployment](tools/live/README.md).
 
 The Linux terminal client uses **Go + Bubble Tea** in [apps/tui-go](apps/tui-go/README.md).
 It provides panels, mouse and keyboard navigation, input history, scrolling,
