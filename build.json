@@ -1,9 +1,9 @@
 {
-  "version": "0.1.0",
-  "source_commit": "03abf47",
-  "ci_run": "https://github.com/Toximiner/DSH-Launcher/actions/runs/42750639831",
+  "version": "0.1.1",
+  "source_commit": "08b9129",
+  "ci_run": "https://github.com/Toximiner/DSH-Launcher/actions/runs/42755881609",
   "sha256": {
-    "dsh-launcher-tui-0.1.0.tgz": "a33eb6f5b8537ca08182db6c3484bb4a16c8b4ecfc53d30831f3d107541ed32d",
-    "dsh-launcher-tui_0.1.0-1_all.deb": "1fdc67d58cc21ea9589c138b88b11e14b7c86792ea5cf4addb9d4748e28f7a4e"
+    "dsh-launcher-tui-0.1.1.tgz": "bc8d67022ec3d7f18d2de9beb799b764357547feffe682be60b72d9cb210e5be",
+    "dsh-launcher-tui_0.1.1-1_all.deb": "515c77411988cb4a5d71da9642f88a5be97c62c94765a7520f2e913a4e62dc57"
   }
 }
