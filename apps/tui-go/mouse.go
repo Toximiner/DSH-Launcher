@@ -108,6 +108,12 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 		}
 	}
 	composer := area{mainX, bodyTop + bodyHeight - composerHeight - 1, width, composerHeight}
+	if m.page == chatPage && m.session != nil && !m.browserPreview && msg.Y == composer.y+4 {
+		x := mainX + 2 + len([]rune("Enter — отправить · "))
+		if (area{x, msg.Y, len([]rune("[F8 Стоп]")), 1}).contains(msg.X, msg.Y) {
+			return m.cancelChat()
+		}
+	}
 	if m.page == chatPage && msg.Y == composer.y+2 {
 		x := mainX + 2 + len([]rune("Режим: "))
 		for i, name := range []string{"Обычный", "План", "Цель"} {

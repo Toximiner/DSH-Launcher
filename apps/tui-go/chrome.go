@@ -133,6 +133,9 @@ func (m *model) chromeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if msg.Paste {
 		return nil, active
 	}
+	if msg.Type == tea.KeyF8 {
+		return nil, false
+	}
 	if msg.Type == tea.KeyRunes && !msg.Alt && key != " " {
 		return nil, active
 	}
@@ -258,7 +261,11 @@ func (m *model) dialogBox() (area, string) {
 		}
 		lines = append(lines, "", muted.Render("F4 / Alt+T — открыть · Esc — закрыть"), muted.Render("↑/↓ — выбор · Enter/Пробел — изменить"), "", ansi.Truncate(m.preferencesNote, inner, "…"), "", selectedRow("[ Закрыть ]", m.chrome.selection == 2, inner))
 	case "help":
-		lines = []string{heading.Render("Горячие клавиши"), "", "F10 / Alt+F/V/H — верхнее меню", "F4 / Alt+T — настройки TUI", "Tab — разделы · Esc — чат", "Alt+C/S/D/L/M — разделы", "F2 / Alt+1/2/3 — режим агента", "↑/↓ — история · PgUp/PgDn — прокрутка", "Ctrl+D / Ctrl+C — выход", "", "Чат пока локальный. /help — команды.", "", "[ Закрыть · Enter / Esc ]"}
+		chatHint := "Чат локальный. /help — команды."
+		if m.settingsLogin != "" && !m.browserPreview {
+			chatHint = "Enter — отправить · F8 — остановить"
+		}
+		lines = []string{heading.Render("Горячие клавиши"), "", "F10 / Alt+F/V/H — верхнее меню", "F4 / Alt+T — настройки TUI", "Tab — разделы · Esc — чат", "Alt+C/S/D/L/M — разделы", "F2 / Alt+1/2/3 — режим агента", "↑/↓ — история · PgUp/PgDn — прокрутка", "Ctrl+D / Ctrl+C — выход", "", chatHint, "", "[ Закрыть · Enter / Esc ]"}
 	default:
 		lines = []string{heading.Render("О программе"), "", "DSH Launcher TUI · " + version, "Go + Bubble Tea · Linux", "Интерфейс: русский · тёмная тема", fmt.Sprintf("Терминал: %d × %d", m.width, m.height), "", "Рабочая папка:", clean(m.workspace), "", "[ Закрыть · Enter / Esc ]"}
 	}

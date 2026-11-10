@@ -23,11 +23,13 @@ are persisted. dsh settings remain a separate section. Pass a running dsh login 
 `DSH_TUI_URL` or `--url` to read its settings without editing them.
 Session attachment/creation and agent modes are available. `--start` launches dsh
 and offers dshmarket preinstallation into its profile. The Marketplace page provides
-search and confirmed plugin install/update/remove actions. Chat is still local;
-the dsh installer and streamed chat will be ported incrementally. The legacy JS terminal client is removed.
+search and confirmed plugin install/update/remove actions. Attached sessions support
+streamed text chat: Enter sends, F8 stops. Offline input remains a local draft.
+Actual replies require a configured LLM provider in dsh. The dsh installer and
+tool interaction dialogs remain pending. The legacy JS terminal client is removed.
 
-Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.8/dsh-launcher-tui-go_linux_amd64) ·
-[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.8/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.8/SHA256SUMS).
+Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.9/dsh-launcher-tui-go_linux_amd64) ·
+[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.9/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.9/SHA256SUMS).
 The Go client runs without Node.js; the dsh backend requires Node.js 24.9+.
 
 ## How it works

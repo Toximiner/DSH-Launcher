@@ -36,6 +36,16 @@ jobs:
           python3 -m venv build/go-pty-env
           build/go-pty-env/bin/pip install pyte==0.8.2
           build/go-pty-env/bin/python apps/tui-go/test/terminal_preview.py build/tui-go/dsh-launcher-tui-go_linux_amd64
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.1'
+      - name: Install pinned dsh for protocol integration
+        run: npm install --prefix build/chat-test-runtime --ignore-scripts --no-audit --no-fund @deepseek-ai/dsh@0.2.2-rc.1
+      - name: Actual dsh chat with a controlled local model
+        run: |
+          build/go-pty-env/bin/python apps/tui-go/test/real_chat.py \
+            --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
+            --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh"
       - name: Build static browser preview
         run: python3 apps/tui-go/web/build.py
       - uses: actions/upload-artifact@v7

@@ -34,7 +34,9 @@ The terminal app lives in `apps/tui-go` and uses Go/Bubble Tea. Run
 `apps/tui-go/test/terminal.py` and run through `test/terminal_preview.py` with
 a built binary; install pyte in a project-local Python environment first.
 The `tui-go-preview` workflow checks amd64/arm64 builds, PTY behavior without Node,
-and the static WebAssembly browser preview. See `apps/tui-go/web/README.md`.
+and the static WebAssembly browser preview. It also runs actual dsh against a
+controlled local model endpoint (`apps/tui-go/test/real_chat.py`), using an isolated
+profile and no paid model calls. See `apps/tui-go/web/README.md`.
 The legacy JavaScript terminal app and its npm/Debian packaging are removed.
 
 ## CI

@@ -24,13 +24,14 @@
   document.getElementById('reload').onclick=()=>location.reload();
   term.onData(data=>send('0',data));
   for(const button of document.querySelectorAll('[data-key]'))button.onclick=()=>{send('0','\x1b'+button.dataset.key);if(button.dataset.key==='c')term.focus();else host.querySelector('textarea')?.blur();};
-  for(const button of document.querySelectorAll('[data-input]'))button.onclick=()=>send('0',button.dataset.input);
+  const actions={up:'\x1b[A',down:'\x1b[B',enter:'\r',esc:'\x1b',stop:'\x1b[19~'};
+  for(const button of document.querySelectorAll('[data-action]'))button.onclick=()=>send('0',actions[button.dataset.action]);
   resize();
   try{
     const response=await fetch('token');if(!response.ok)throw new Error('Не удалось авторизовать терминал');
     const auth=await response.json();const url=new URL('ws',location.href);url.protocol=location.protocol==='https:'?'wss:':'ws:';
     socket=new WebSocket(url,['tty']);socket.binaryType='arraybuffer';
-    socket.onopen=()=>{socket.send(encoder.encode(JSON.stringify({AuthToken:auth.token,columns:term.cols,rows:term.rows})));status.textContent='Живой сервер · настоящие dsh и маркет · текст чата TUI пока локальный';window.liveReady=true;};
+    socket.onopen=()=>{socket.send(encoder.encode(JSON.stringify({AuthToken:auth.token,columns:term.cols,rows:term.rows})));status.textContent='Живой сервер · dsh и маркет · для ответов нужен настроенный провайдер LLM';window.liveReady=true;};
     socket.onmessage=event=>{const bytes=new Uint8Array(event.data);if(bytes[0]===48)term.write(bytes.slice(1));};
     socket.onclose=()=>{status.textContent='Соединение закрыто. Нажмите «Переподключить».';};
     socket.onerror=()=>{status.textContent='Ошибка подключения к серверу.';};

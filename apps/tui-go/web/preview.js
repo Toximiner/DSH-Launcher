@@ -75,7 +75,7 @@
     }
     window.visualViewport?.addEventListener('resize',visualResize);
     new ResizeObserver(resize).observe(host);
-    const keys = {'\r':'enter','\t':'tab','\x1b':'esc','\x7f':'backspace','\x04':'ctrl+d','\x03':'ctrl+c','\x15':'ctrl+u','\x01':'ctrl+a','\x05':'ctrl+e','\x1b[A':'up','\x1b[B':'down','\x1b[C':'right','\x1b[D':'left','\x1b[5~':'pgup','\x1b[6~':'pgdown','\x1b[H':'home','\x1b[F':'end','\x1b[3~':'delete','\x1bOP':'f1','\x1bOS':'f4','\x1b[21~':'f10','\x1b[Z':'shift+tab'};
+    const keys = {'\r':'enter','\t':'tab','\x1b':'esc','\x7f':'backspace','\x04':'ctrl+d','\x03':'ctrl+c','\x15':'ctrl+u','\x01':'ctrl+a','\x05':'ctrl+e','\x1b[A':'up','\x1b[B':'down','\x1b[C':'right','\x1b[D':'left','\x1b[5~':'pgup','\x1b[6~':'pgdown','\x1b[H':'home','\x1b[F':'end','\x1b[3~':'delete','\x1bOP':'f1','\x1bOS':'f4','\x1b[19~':'f8','\x1b[21~':'f10','\x1b[Z':'shift+tab'};
     term.onData(data => {
       if (keys[data]) {render(dshTui.key(keys[data]));return;}
       if (data.startsWith('\x1b')) return;

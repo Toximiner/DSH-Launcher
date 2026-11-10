@@ -1,4 +1,4 @@
-# Go TUI preview — checkpoint 8
+# Go TUI preview — checkpoint 9
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
@@ -14,28 +14,31 @@ text selection. Many terminals also allow selection with Shift held down.
 Dragging and positioning the text cursor by click are not implemented.
 The minimum terminal size is 44 columns by 18 rows.
 
-It can read settings from an already running dsh 0.2.2-rc.1. Chat does not connect
-to dsh or send messages yet. Submitted text appears as a
-local draft card; it is never represented as an assistant reply. Tab focuses the sidebar, Up/Down selects a page, Enter focuses
-its content, and Esc returns to chat without losing the draft. Sessions lists backend
-sessions (refresh with `r`, select with arrows and Enter); Log shows local client
-information. **Настройки dsh** remains a separate read-only backend section.
-**Настройки TUI** opens from **Файл → Настройки TUI…**, F4, or Alt+T; it is no
-longer in the sidebar. F10 (or Alt+F/V/H) opens File/View/Help; arrows and Enter
-navigate, Esc closes. Settings dialogs preserve the current page, scroll, draft,
-and focus. Menu controls and settings checkboxes also support mouse clicks.
+With a dsh session attached, ordinary text is sent to dsh and assistant text is
+streamed over its authenticated WebSocket API. F8 or `/stop` requests cancellation
+of the current turn. User messages are reconciled with authoritative history;
+service context is not displayed as user-authored text. Without a backend, input
+remains a clearly labeled local draft. The static WASM adapter remains offline.
+
+Tab focuses the sidebar, arrows select a page, and Enter focuses its content.
+Esc returns to chat without losing the draft. Sessions supports refresh (`r`),
+selection, and attachment; Log shows local client information. **Настройки dsh**
+remains a separate read-only backend section. **Настройки TUI** opens from
+**Файл → Настройки TUI…**, F4, or Alt+T. F10 or Alt+F/V/H opens File/View/Help.
+Dialogs preserve page, scroll, draft, and focus. Mouse clicks work on menus and
+settings controls. Help → About works offline.
 
 Mouse and input-history preferences apply immediately and are saved atomically
 in `${XDG_CONFIG_HOME:-~/.config}/dsh-launcher-tui/preferences.json`. Disabling
-history clears recall entries, keeps the current draft, and does not erase visible
-chat records; message history itself is not saved to this file. `--no-mouse`
-overrides the saved preference for the current run. Use F4 to restore mouse
-reporting after disabling it. A failed write keeps the previous setting and shows
-an error. Help → About shows the version, terminal size, and workspace even when
-offline. Settings contain no Wayland, Ozone, GPU, Chromium, or tray controls.
-The local WASM adapter applies preferences only for its current browser session.
-`/help` lists local commands, `/clear` clears the view, and `/exit` or Ctrl+D exits. Node.js is not needed for attaching the Go client to an existing backend.
-Starting dsh locally requires Node.js 24.9+.
+history clears recall entries without erasing the current draft or chat records.
+Chat messages are not stored in this preferences file. `--no-mouse` overrides the
+saved preference for this run; use F4 to restore mouse reporting otherwise.
+A failed write leaves the old setting active. Electron graphics/window controls
+are excluded. The local WASM adapter applies settings for its current session.
+
+`/help` lists commands, `/clear` clears the local view without deleting backend
+history, and `/exit` or Ctrl+D exits. Attaching the Go client needs no local Node;
+starting dsh requires Node.js 24.9+.
 
 Build with Go 1.24.2+:
 
@@ -73,6 +76,50 @@ and marks it stale. Reads have a timeout and are cancelled on client shutdown.
 Settings remain a point-in-time read-only view without automatic change subscriptions.
 An attached dsh is left running when the client exits.
 
+## Streamed text chat
+
+Use `--url` / `DSH_TUI_URL` with `--new` or `--session ID`, or run `/new` after
+attaching. Wait for chat readiness, then press Enter to send. Text entered before
+readiness, during a session switch, or while generation is running stays in the
+composer. This milestone does not provide general queue editing or steering.
+
+The client signs in through `/connect`, sends `session/prompt` with a unique
+requestId, and subscribes to `session/follow` through `/api/remote.mux` with
+assistantStream enabled. It restores a bounded recent history window (50 messages),
+reassembles partial output after reconnect, and checks event cursors/chunk indexes.
+Duplicate frames do not duplicate text; a committed answer replaces its partial
+view. Missing frames trigger a fresh snapshot. Scrolling up disables following the
+tail; statuses and new text stay visible when already following the tail.
+
+Read reconnection is automatic, with bounded backoff. Prompt submission is never
+automatically retried. A lost acknowledgement is labeled unknown; durable user
+history can resolve it. `/retry-send` explicitly retries the original immutable
+request with the same requestId, using dsh's deduplication. An explicit rejection
+restores the text if the composer is empty. Pending receipt state is retained
+across session switches in this client process, not across client restarts.
+Changing sessions closes only the old subscription, not the remote agent.
+
+F8, the composer Stop button, or `/stop` calls `session/cancel`; it does not remove queued backend messages.
+The client displays confirmed turn completion/cancellation and safe error hints.
+Provider error bodies are not copied into logs or chat. Input questions/approvals
+are reported as pending, but answering them is the next milestone; F8 remains
+available. Rich tool cards, Markdown, attachments, and full paginated history are
+later work. Replacements referencing history outside the loaded window may require
+a new session; the client reports this instead of guessing an order.
+
+The supported API was verified against actual dsh 0.2.2-rc.1 with a controlled
+local model endpoint. This tests protocol integration, not an actual cloud LLM.
+No working cloud model credential is configured in the private live deployment.
+
+Optional integration check (Node 24.9+, installed dsh, Python environment with pyte):
+
+```sh
+python apps/tui-go/test/real_chat.py --binary /path/to/dsh-launcher-tui-go --dsh /path/to/dsh
+```
+
+It uses an isolated temporary profile and a local test endpoint, performs no paid
+model calls, and does not alter the user's profile. CI also runs this check.
+
 ## Sessions and agent modes
 
 Attach a session or explicitly create a new one:
@@ -89,7 +136,7 @@ Inside the client, `/sessions` lists sessions, `/session ID` attaches one, and
 `/goal ` in the composer; entering an objective and pressing Enter explicitly
 creates the goal. `/goal pause`, `/goal resume`, and `/goal clear` control it.
 Goal mode can start autonomous work in dsh; it is not just an appearance setting.
-The text chat itself is still local and does not send ordinary messages.
+Ordinary text is sent through the chat API when the session subscription is ready.
 
 The client reads actual session projections/state every two seconds and after
 commands. It shows the backend-confirmed mode, pending plan transitions, goal
@@ -173,8 +220,9 @@ compatibility.
 Work proceeds in small, reviewable checkpoints with user feedback. The
 [roadmap](../../docs/tui-roadmap/README.en.md) is the maintained capability inventory
 and milestone order. Milestone 1 is complete: TUI preferences live in the top menu,
-while dsh settings remain separate. The next checkpoint is minimal actual streamed
-chat. Later checkpoints cover interaction, settings, workspace features, plugins,
-and launcher lifecycle. Those are planned features, not shipped behavior. No
+while dsh settings remain separate. Streamed text chat is implemented in preview.9; validation with an actual cloud
+model remains pending working provider access. The next functional checkpoint is
+tool results, permissions, and user questions. Settings editing, workspace features,
+additional plugin support, and launcher lifecycle remain planned. No
 full-parity claim is made by this preview. The legacy JS client and its packaging
-have been removed; its streamed chat and dsh installation remain pending in Go.
+have been removed; its dsh installation flow remains pending in Go.

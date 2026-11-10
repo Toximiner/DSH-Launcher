@@ -23,11 +23,13 @@
 клиент читает его настройки без редактирования.
 Доступны подключение/создание сессии и режимы агента. `--start` запускает dsh
 и предлагает предустановку dshmarket в профиль. В разделе «Маркет» доступны
-поиск и подтверждаемые установка, обновление и удаление плагинов. Чат пока локальный; установка
-самого dsh и потоковый чат переносятся постепенно. Устаревшая терминальная JS-версия удалена.
+поиск и подтверждаемые установка, обновление и удаление плагинов. В подключённой сессии
+работает текстовый потоковый чат: Enter — отправить, F8 — остановить. Без подключения
+сохраняется локальный черновик. Для настоящих ответов нужен настроенный провайдер LLM
+в dsh. Установка самого dsh и диалоги инструментов ещё не перенесены. JS-версия TUI удалена.
 
-Готовые Go-сборки: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.8/dsh-launcher-tui-go_linux_amd64) ·
-[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.8/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.8/SHA256SUMS).
+Готовые Go-сборки: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.9/dsh-launcher-tui-go_linux_amd64) ·
+[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.9/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.9/SHA256SUMS).
 Go-клиенту не нужен Node.js; самому бэкенду dsh нужен Node.js 24.9+.
 
 ## Как работает

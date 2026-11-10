@@ -41,7 +41,11 @@ func (m *model) sidebar(height int) string {
 		}
 		lines = append(lines, text)
 	}
-	lines = append(lines, "", muted.Bold(true).Render("СЕССИИ"), " ○ Локальный черновик")
+	chatLink := " ○ Локальный черновик"
+	if m.session != nil {
+		chatLink = " ● Текущая сессия"
+	}
+	lines = append(lines, "", muted.Bold(true).Render("СЕССИИ"), chatLink)
 	target := height - 2
 	if len(lines) > target-2 {
 		lines = lines[:max(0, target-2)]
@@ -90,6 +94,12 @@ func (m *model) View() string {
 	if m.sessionBusy {
 		status = accent.Render("◌ Запрос сессии dsh")
 	}
+	if m.chat != nil && !m.chat.ready {
+		status = accent.Render("◌ Подключение чата")
+		if m.chat.streamError != "" {
+			status = muted.Render("! Чат: нет связи")
+		}
+	}
 	header := bar(brand, status, width) + "\n" + m.menuBar(width)
 	title := pages[m.page]
 	if m.page == 0 {
@@ -106,7 +116,8 @@ func (m *model) View() string {
 		if !m.navFocused {
 			border = "#58a6ff"
 		}
-		composer := heading.Render("Сообщение") + muted.Render(" · локальный черновик") + "\n" + m.modeControls() + "\n" + m.input.View() + "\n" + muted.Render("Enter — сохранить · ↑/↓ — история")
+		label, hint := m.composerText()
+		composer := heading.Render("Сообщение") + muted.Render(label) + "\n" + m.modeControls() + "\n" + m.input.View() + "\n" + muted.Render(hint)
 		right = chat + "\n" + panel(w, composerHeight, composer, border)
 	}
 	body := right

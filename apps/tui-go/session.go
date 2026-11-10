@@ -33,6 +33,8 @@ type sessionView struct {
 	Goal          *goalState
 	GoalSupported bool
 	Running       bool
+	PendingInput  []string
+	StateCursor   int
 }
 type sessionItem struct {
 	ID      string `json:"sessionId"`
@@ -76,12 +78,16 @@ func readSession(ctx context.Context, api *dshAPI, id string) (*sessionView, err
 		}
 	}
 	var state struct {
-		Running bool `json:"running"`
+		Cursor       int      `json:"cursor"`
+		Running      bool     `json:"running"`
+		PendingInput []string `json:"pendingInput"`
 	}
 	if err := api.rpc(ctx, "session/state", map[string]any{"request": map[string]any{"sessionId": id}}, &state); err != nil {
 		return nil, err
 	}
 	view.Running = state.Running
+	view.PendingInput = state.PendingInput
+	view.StateCursor = state.Cursor
 	return view, nil
 }
 
@@ -196,6 +202,7 @@ func (m *model) sessionOperation(action, value string) tea.Cmd {
 		return nil
 	}
 	m.sessionBusy = true
+	m.sessionAction = action
 	m.sessionError = ""
 	m.sessionSequence++
 	sequence := m.sessionSequence
@@ -318,6 +325,9 @@ func (m *model) modeDescription() string {
 			label += "\nАгент: выполняется"
 		} else {
 			label += "\nАгент: не выполняется"
+		}
+		if len(m.session.PendingInput) > 0 {
+			label += "\nОжидается подтверждение/ответ. Эти диалоги пока недоступны в TUI; F8 — отмена."
 		}
 	}
 	if m.sessionBusy {

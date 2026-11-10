@@ -37,7 +37,7 @@ func run(args []string, out io.Writer) error {
 		return fmt.Errorf("unexpected positional arguments")
 	}
 	if *helpFlag {
-		fmt.Fprintln(out, "dsh-launcher-tui-go [--help] [--version] [--no-mouse] [--url URL]\nGo-прототип: F10 — меню, F4 — настройки TUI, Tab — разделы, Esc — чат. /help, /clear, /exit.\nНастройки dsh доступны только для чтения через --url или DSH_TUI_URL.\nПодключение: --session ID или --new. Режимы: /mode default|plan|goal.\nЛокальный запуск: --start [--dsh PATH] [--profile web] [--port 3080] [--market ask|install|skip].\nТекст чата пока сохраняется локально. Node.js нужен только бэкенду dsh.")
+		fmt.Fprintln(out, "dsh-launcher-tui-go [--help] [--version] [--no-mouse] [--url URL]\nGo-прототип: F10 — меню, F4 — настройки TUI, Tab — разделы, Esc — чат. /help, /clear, /exit.\nНастройки dsh доступны только для чтения через --url или DSH_TUI_URL.\nПодключение: --session ID или --new. Режимы: /mode default|plan|goal.\nЛокальный запуск: --start [--dsh PATH] [--profile web] [--port 3080] [--market ask|install|skip].\nС сессией dsh: Enter — отправить, F8 — остановить. Без подключения — локальный черновик.\nNode.js нужен только бэкенду dsh.")
 		return nil
 	}
 	if *versionFlag {
@@ -101,6 +101,7 @@ func run(args []string, out io.Writer) error {
 		return fmt.Errorf("a login URL or --start is required for sessions")
 	}
 	m := newModel()
+	defer m.stopChat()
 	m.mouseForcedOff = *noMouseFlag
 	if path, prefErr := clientPreferencesPath(); prefErr == nil {
 		m.prefs, prefErr = readClientPreferences(path)

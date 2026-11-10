@@ -6,6 +6,8 @@ import threading
 from pathlib import Path
 import signal
 import socket
+import select
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -124,6 +126,45 @@ class TerminalPreview(unittest.TestCase):
         self.assertIn(b'\x1b[?1002h', self.app.raw)
         self.app.send('\x1b[B\r')
         wait_for(lambda: saved(True, True))
+
+    def test_chat_stream_cancel_and_reconnect_without_resubmission(self):
+        self.app.close(Path(self.temp.name) / 'offline.log')
+        root = Path(self.temp.name)
+        with socket.socket() as sock:
+            sock.bind(('127.0.0.1', 0))
+            port = sock.getsockname()[1]
+        env = {**os.environ, 'DSH_TEST_ROOT': str(root), 'DSH_HOME': str(root / 'dsh')}
+        server = subprocess.Popen(['/usr/bin/python3', str(Path(__file__).with_name('fake_dsh.py')),
+                                   '--profile', 'web', '--port', str(port)], env=env,
+                                  stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        try:
+            self.assertTrue(select.select([server.stdout], [], [], 5)[0], 'Fixture did not start')
+            login = server.stdout.readline().strip().split('dsh web: ')[1]
+            self.app = Terminal(BINARY, ['--url', login, '--new'], self.env)
+            self.app.wait('Введите сообщение.')
+            self.app.command('enter')
+            self.app.wait('Потоковый ')
+            self.assertNotIn('из тестового dsh', self.app.text)
+            self.app.wait('Потоковый ответ из тестового dsh')
+            self.app.wait('Агент: не выполняется')
+            self.app.command('cancel test')
+            self.app.wait('Частичный ответ до отмены')
+            self.mouse(0, 48, 26)
+            self.app.wait('Выполнение остановлено.')
+            self.app.command('reconnect test')
+            self.app.wait('соединение с чатом потеряно')
+            self.app.wait('Потоковый ответ из тестового dsh')
+            self.app.send('\x04')
+            self.app.exited()
+            calls = [json.loads(line) for line in (root / 'requests.jsonl').read_text().splitlines()]
+            prompts = [call['args']['request'] for call in calls if call['method'] == 'session/prompt']
+            self.assertEqual([p['content'][0]['text'] for p in prompts], ['enter', 'cancel test', 'reconnect test'])
+            self.assertEqual(len({p['requestId'] for p in prompts}), 3)
+            self.assertTrue(any(call['method'] == 'session/cancel' for call in calls))
+        finally:
+            server.terminate()
+            server.wait(timeout=5)
+            server.stdout.close()
 
     def test_settings_snapshot_navigation_and_refresh(self):
         state = {'reads': 0, 'fail': False, 'paths': []}

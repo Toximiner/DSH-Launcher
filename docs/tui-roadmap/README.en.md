@@ -2,7 +2,7 @@
 
 [Русский](README.md) | **English**
 
-Baseline: November 10, 2026, Go client `0.2.0-preview.8`.
+Baseline: November 10, 2026, Go client `0.2.0-preview.9`.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.
 
@@ -22,22 +22,24 @@ disabled; private Codespaces supports live inspection.
 - File/View/Help menu, modal TUI settings, persisted mouse/input-history preferences.
 - Sidebar navigation, panels, local draft input/history, mouse, and scrolling.
 - dsh attachment and read-only settings with secret masking.
+- Session text chat: submission, streaming, cancellation, read reconnection without automatic resubmission.
 - Session creation/list/attachment, backend-confirmed modes, and goal commands.
 - Starting an installed dsh with `--start`, and offering dshmarket preinstallation.
 - Marketplace catalog/search/installed packages and confirmed install/update/remove
   actions, with progress read from the API.
 - Go/PTY/CI checks and a live Codespaces configuration with actual dsh.
 
-Ordinary chat messages remain local; agent chat is not implemented.
-No cloud LLM is connected to the live deployment. Registration attempts produced
-no API key; actual model responses and agent tool execution remain unverified.
+Offline input stays local. Chat was verified against actual dsh with a controlled
+local model endpoint; this establishes protocol integration, not a real LLM reply.
+No cloud LLM is connected to the live deployment. Milestone 2 acceptance against
+an actual cloud model awaits working access. Full tool interaction is milestone 3.
 
 ## Capability inventory
 
 | Area | Current state | Remaining work | Milestone |
 |---|---|---|---|
 | Application menu | Top menu and modal client settings | Basic milestone complete; further polish at milestone 14 | 1 ✓ |
-| Chat | Local drafts | Submission, streaming, cancellation, reconnection | 2 |
+| Chat | Submission, streaming, cancellation, reconnection implemented | Actual cloud model verification awaits access | 2, LLM acceptance pending |
 | Tools and questions | No dedicated views | Execution/results, permissions, user answers | 3 |
 | Sessions and history | Create/list/attach | History, search, rename, fork, supported archive operations | 4 |
 | Message rendering | Plain local records | Markdown, code, tables, folding, copying | 4 |
@@ -62,7 +64,7 @@ no API key; actual model responses and agent tool execution remain unverified.
    Initial editable preferences: mouse and input history, persisted between runs;
    include client information and help. Done: keyboard/mouse and narrow terminals
    work; opening/closing preserves the page, draft, and focus.
-2. **Minimal actual chat.** Session submission, streamed assistant text,
+2. **Minimal actual chat — implemented in preview.9; cloud LLM acceptance awaits access.** Session submission, streamed assistant text,
    cancellation, errors, reconnection without resubmitting accepted messages.
    Done: an actual model answers through actual dsh; exit restores the terminal.
 3. **Tools and interaction.** Tool progress/results, permission decisions,

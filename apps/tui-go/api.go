@@ -19,6 +19,12 @@ type dshAPI struct {
 	client *http.Client
 }
 
+type rpcRejected struct{ method string }
+
+func (e *rpcRejected) Error() string {
+	return fmt.Sprintf("dsh отказал в операции %s", e.method)
+}
+
 func openAPI(ctx context.Context, login string) (*dshAPI, error) {
 	u, err := settingsURL(login)
 	if err != nil {
@@ -83,7 +89,7 @@ func (api *dshAPI) rpc(ctx context.Context, method string, args map[string]any, 
 		return errors.New("неподдерживаемый ответ API dsh")
 	}
 	if !*envelope.Result.OK {
-		return fmt.Errorf("dsh отказал в операции %s", method)
+		return &rpcRejected{method: method}
 	}
 	if target != nil {
 		if len(envelope.Result.Value) == 0 || json.Unmarshal(envelope.Result.Value, target) != nil {

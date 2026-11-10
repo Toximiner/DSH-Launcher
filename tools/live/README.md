@@ -16,9 +16,9 @@ Codespace from https://github.com/codespaces; closing the browser alone does not
 stop it. Choose a 20-minute idle timeout when creating the Codespace. Stored
 Codespaces also consume storage quota until deleted.
 
-The backend and marketplace are live. Ordinary text in the current TUI chat is
-still a local draft/history; streaming agent chat is not implemented yet. Model
-operations need your own provider configuration in dsh. Never commit API keys.
+The backend, marketplace, and native chat are live. Enter sends to the attached
+session; F8 or the touch toolbar Stop button requests cancellation. Model replies need your own provider
+configuration in dsh; this deployment bundles no provider key. Never commit API keys.
 
 Outside Codespaces, set `DSH_LIVE_PASSWORD` before starting: HTTP Basic auth uses
 the username `demo`. Put HTTPS in front of any non-local deployment.

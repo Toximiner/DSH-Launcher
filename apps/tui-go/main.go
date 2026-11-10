@@ -15,8 +15,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const version = "0.2.0-preview.8"
-const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/help — справка\n/clear — очистить экран\n/exit — выйти\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
+const version = "0.2.0-preview.9"
+const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/help — справка\n/clear — очистить экран\n/exit — выйти\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
 	chatPage = iota
@@ -33,6 +33,9 @@ var navigationPages = []int{chatPage, sessionsPage, dshSettingsPage, logPage, ma
 type quitMsg struct{}
 
 type model struct {
+	chat                *chatState
+	chatEpoch           int
+	prompts             map[string]*pendingPrompt
 	chrome              chromeState
 	prefs               clientPreferences
 	mouseForcedOff      bool
@@ -60,6 +63,7 @@ type model struct {
 	session             *sessionView
 	sessionItems        []sessionItem
 	sessionBusy         bool
+	sessionAction       string
 	sessionError        string
 	sessionSequence     int
 	sessionStale        bool
@@ -93,6 +97,7 @@ func newModel() *model {
 	cwd, _ := os.Getwd()
 	m := &model{prefs: defaultClientPreferences(), input: input, viewport: viewport.New(78, 17), width: 80, height: 24, workspace: clean(cwd), events: []string{"Открыт интерфейс клиента. Подключение к dsh отсутствует."}}
 	m.marketSearch = newMarketSearch()
+	m.prompts = make(map[string]*pendingPrompt)
 	m.resize()
 	return m
 }
@@ -107,6 +112,7 @@ func clean(value string) string {
 }
 
 func (m *model) rebuild() {
+	followTail := m.chat != nil && m.page == chatPage && m.viewport.AtBottom()
 	var lines []string
 	for _, line := range m.lines {
 		label := "СПРАВКА"
@@ -124,8 +130,16 @@ func (m *model) rebuild() {
 		content = lipgloss.Place(m.viewport.Width, m.viewport.Height, lipgloss.Center, lipgloss.Center, welcome)
 	}
 	if m.session != nil || m.sessionBusy || m.sessionError != "" {
+		if m.chat != nil {
+			content = m.chatView()
+			if len(m.lines) > 0 {
+				content += "\n\n" + strings.Join(m.lines, "\n")
+			}
+		}
 		if len(m.lines) == 0 {
-			content = "Текст чата пока сохраняется локально.\nСмена режима применяется к подключённой сессии.\n/mode default|plan|goal · /goal <описание>"
+			if m.chat == nil {
+				content = "Ожидание подключения чата. /new — создать сессию.\n/mode default|plan|goal · /goal <описание>"
+			}
 		}
 		content = accent.Render(m.modeDescription()) + "\n\n" + content
 	}
@@ -140,6 +154,9 @@ func (m *model) rebuild() {
 		content = heading.Render("Журнал клиента · локально") + "\n\n" + strings.Join(m.events, "\n")
 	}
 	m.viewport.SetContent(ansi.Hardwrap(content, max(1, m.viewport.Width), true))
+	if followTail {
+		m.viewport.GotoBottom()
+	}
 }
 
 func (m *model) append(line string) {
@@ -190,6 +207,24 @@ func (m *model) Init() tea.Cmd {
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case chatUpdate:
+		return m, m.handleChatUpdate(msg)
+	case promptResult:
+		m.handlePromptResult(msg)
+		return m, nil
+	case cancelResult:
+		if m.chat != nil && m.chat.id == msg.sessionID {
+			if m.chat.note == "Выполнение остановлено." {
+				return m, nil
+			}
+			if msg.err != nil {
+				m.chat.note = "Не удалось подтвердить отмену. Проверьте состояние dsh."
+			} else {
+				m.chat.note = "Запрос отмены принят dsh; состояние обновляется."
+			}
+			m.rebuild()
+		}
+		return m, nil
 	case marketResult:
 		if msg.sequence != m.marketSequence {
 			return m, nil
@@ -255,8 +290,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.sessionError = ""
 			m.sessionStale = false
 		}
+		var chatCmd tea.Cmd
 		if msg.view != nil {
+			if m.session != nil && m.chat != nil && m.chat.id == msg.view.ID && m.session.ID == msg.view.ID && msg.view.StateCursor < m.chat.cursor {
+				msg.view.Running = m.session.Running
+			}
+			if m.session == nil || m.session.ID != msg.view.ID {
+				m.lines = nil
+			}
 			m.session = msg.view
+			chatCmd = m.startChat(msg.view.ID)
 		}
 		if msg.list {
 			m.sessionItems = msg.items
@@ -270,9 +313,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.sessionQueue) > 0 {
 			next := m.sessionQueue[0]
 			m.sessionQueue = m.sessionQueue[1:]
-			return m, m.sessionOperation(next.action, next.value)
+			nextCmd := m.sessionOperation(next.action, next.value)
+			if chatCmd != nil {
+				return m, tea.Batch(chatCmd, nextCmd)
+			}
+			return m, nextCmd
 		}
 		if m.session != nil {
+			if chatCmd != nil {
+				return m, tea.Batch(chatCmd, m.sessionTimer())
+			}
 			return m, m.sessionTimer()
 		}
 		return m, nil
@@ -298,6 +348,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.rebuild()
 		return m, nil
 	case quitMsg:
+		m.stopChat()
 		return m, tea.Quit
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -307,6 +358,32 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if cmd, handled := m.chromeKey(msg); handled {
 			return m, cmd
+		}
+		if msg.Type == tea.KeyF8 {
+			return m, m.cancelChat()
+		}
+		// A burst of ordinary text is not a named control key such as "enter".
+		if msg.Type == tea.KeyRunes && !msg.Alt && len(msg.Runes) > 1 {
+			if m.page == marketPage && !m.navFocused {
+				if !m.marketEditing && !msg.Paste && m.marketConfirm == nil && msg.Runes[0] == '/' {
+					cmd, _ := m.marketKey(msg)
+					return m, cmd
+				}
+				if !m.marketEditing {
+					return m, nil
+				}
+				msg.Paste = true
+				cmd, _ := m.marketKey(msg)
+				return m, cmd
+			}
+			// Bubbles also matches key names by String; mark this burst as literal text.
+			msg.Paste = true
+			if m.page == chatPage && !m.navFocused {
+				var cmd tea.Cmd
+				m.input, cmd = m.input.Update(msg)
+				return m, cmd
+			}
+			return m, nil
 		}
 		if page, ok := map[string]int{"alt+c": chatPage, "alt+s": sessionsPage, "alt+d": dshSettingsPage, "alt+l": logPage, "alt+m": marketPage}[msg.String()]; ok && msg.Alt {
 			m.page = page
@@ -423,7 +500,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			case "/clear":
 				m.lines = nil
+				if m.chat != nil {
+					m.chat.clearedThrough = m.chat.cursor
+				}
 				m.rebuild()
+			case "/stop":
+				return m, m.cancelChat()
+			case "/retry-send":
+				return m, m.retryPrompt()
 			case "/help":
 				m.append(help)
 			default:
@@ -447,11 +531,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, m.sessionOperation(action, value)
 				}
-				m.append("Введено: " + line)
-				m.events = append(m.events, "Сохранён локальный черновик: "+clean(line))
-				if len(m.events) > 50 {
-					m.events = m.events[len(m.events)-50:]
+				if strings.HasPrefix(line, "/") {
+					m.append("Неизвестная команда. /help — список команд.")
+					return m, nil
 				}
+				return m, m.submitText(line)
 			}
 			return m, nil
 		case "up", "down":
