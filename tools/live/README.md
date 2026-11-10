@@ -17,7 +17,8 @@ stop it. Choose a 20-minute idle timeout when creating the Codespace. Stored
 Codespaces also consume storage quota until deleted.
 
 The backend, marketplace, and native chat are live. Enter sends to the attached
-session; F8 or the touch toolbar Stop button requests cancellation. Tool cards
+session, or queues a follow-up while the agent runs. Pending tasks appear in chat.
+F8 or the touch toolbar Stop button cancels the current turn and retains the queue. Tool cards
 show arguments, state, and results. F6 or the touch toolbar Tools button selects
 cards; Enter/click expands details and Esc restores composer focus. Permission
 dialogs support Left/Right + Enter or mouse allow/reject. F7 or the Permission

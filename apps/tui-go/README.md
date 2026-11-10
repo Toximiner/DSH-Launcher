@@ -1,4 +1,4 @@
-# Go TUI preview — checkpoint 12
+# Go TUI preview — checkpoint 13
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
@@ -111,6 +111,25 @@ DSH_TUI_URL='http://127.0.0.1:3080/?token=YOUR_TOKEN' ./dsh-launcher-tui-go
 ```
 
 Only loopback HTTP(S) URLs are accepted; remote hosts can use an SSH tunnel.
+Chat displays server-confirmed queued tasks, preserving dsh order, with up to
+three preview lines per item. Internal context entries are hidden; steering
+entries created by other clients are labeled separately. An RPC acknowledgement
+is shown as accepted while waiting for queue/history evidence. One unconfirmed
+submission per session is allowed; further input remains in the composer until
+that receipt is reconciled. A state refresh follows each receipt, and passive
+refreshes run every two seconds. A matching queue rpcId or durable user message
+confirms receipt; queue absence alone never resolves an uncertain submission.
+A later queue sample and caught-up history can retire an accepted receipt that
+left the queue outside the recent-history window, without claiming execution.
+
+As each follow-up enters history, its queue item is hidden even if a passive
+queue sample arrives late. Reconnecting reads the backend inbox and does not
+resend tasks. An unavailable queue is distinct from a known empty queue; cached
+entries are labeled if connection/state refresh fails. F8 cancels the current
+turn and retains pending inbox work; it does not clear the queue. Actual dsh
+integration verifies two waiting follow-ups, client reconnection, and three
+individual FIFO turns with no duplicate model requests.
+
 The client signs in through `/connect` and reads `/api/settings/describe`.
 It never calls settings write endpoints or loads the settings document from disk.
 Open **Настройки dsh** with the mouse or sidebar keyboard navigation. Left/Right switches
@@ -126,8 +145,10 @@ An attached dsh is left running when the client exits.
 
 Use `--url` / `DSH_TUI_URL` with `--new` or `--session ID`, or run `/new` after
 attaching. Wait for chat readiness, then press Enter to send. Text entered before
-readiness, during a session switch, or while generation is running stays in the
-composer. This milestone does not provide general queue editing or steering.
+readiness or during a session switch stays in the composer. While generation is
+running, Enter queues a follow-up through session/prompt with mode=queue. The
+composer hint changes to explain this. This increment does not expose queue
+cancellation, editing, or submission as steering.
 
 The client signs in through `/connect`, sends `session/prompt` with a unique
 requestId, and subscribes to `session/follow` through `/api/remote.mux` with
@@ -267,7 +288,9 @@ Work proceeds in small, reviewable checkpoints with user feedback. The
 and milestone order. Milestone 1 is complete: TUI preferences live in the top menu,
 while dsh settings remain separate. Streamed text chat is implemented in preview.9; validation with an actual cloud
 model remains pending working provider access. Tool-result cards are implemented in preview.10. Agent questions are implemented in preview.12, including timed waits and continued
-answers. The next functional checkpoint is queue controls. Permission dialogs
+answers. Queue submission and observation are implemented in preview.13. The next
+functional checkpoint is cancelling pending queue items, followed by editing
+and steering controls. Permission dialogs
 are implemented in preview.11 and tested through the actual dsh approval service. Settings editing, workspace features,
 additional plugin support, and launcher lifecycle remain planned. No
 full-parity claim is made by this preview. The legacy JS client and its packaging

@@ -29,14 +29,17 @@ type goalState struct {
 	Rounds int `json:"roundsStarted"`
 }
 type sessionView struct {
-	Questions     []continuedQuestion
-	ID            string
-	Plan          *planState
-	Goal          *goalState
-	GoalSupported bool
-	Running       bool
-	PendingInput  []string
-	StateCursor   int
+	Queue          []queuedMessage
+	QueueKnown     bool
+	QueueFetchedAt time.Time
+	Questions      []continuedQuestion
+	ID             string
+	Plan           *planState
+	Goal           *goalState
+	GoalSupported  bool
+	Running        bool
+	PendingInput   []string
+	StateCursor    int
 }
 type sessionItem struct {
 	ID      string `json:"sessionId"`
@@ -89,12 +92,18 @@ func readSession(ctx context.Context, api *dshAPI, id string) (*sessionView, err
 		view.Questions = questions.Active
 	}
 	var state struct {
-		Cursor       int      `json:"cursor"`
-		Running      bool     `json:"running"`
-		PendingInput []string `json:"pendingInput"`
+		Queue        *[]queuedMessage `json:"queue"`
+		Cursor       int              `json:"cursor"`
+		Running      bool             `json:"running"`
+		PendingInput []string         `json:"pendingInput"`
 	}
+	view.QueueFetchedAt = time.Now()
 	if err := api.rpc(ctx, "session/state", map[string]any{"request": map[string]any{"sessionId": id}}, &state); err != nil {
 		return nil, err
+	}
+	view.QueueKnown = state.Queue != nil
+	if state.Queue != nil {
+		view.Queue = *state.Queue
 	}
 	view.Running = state.Running
 	view.PendingInput = state.PendingInput

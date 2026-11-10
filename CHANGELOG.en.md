@@ -13,6 +13,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Added
 
+- Go preview 0.2.0-preview.13 queues follow-up tasks while the agent is running, using the dsh server inbox. Chat shows pending tasks and submission receipts; authoritative history removes admitted items without duplicates. Queue state restores on reconnect and uncertain submissions never retry automatically. F8 retains pending work. Queue cancellation/editing and steering remain subsequent increments. Actual dsh with a controlled provider verifies three individual FIFO turns and client reconnection.
+
 - Go preview 0.2.0-preview.12 adds a dedicated agent-question dialog with single/multiple choice, multiline custom answers, explicit skip, and batch navigation. F5 submits the complete batch through the dsh question channel without changing the chat draft. F7 reopens deferred requests; F8 cancels. Connected clients hold timed questions; continued questions restore from the session projection and use userQuestions/answer. Actual ask_user_question integration with a controlled provider and UI captures are included.
 
 - Go preview 0.2.0-preview.11 adds explicit one-shot permission dialogs with reason, arguments, scrolling, and allow/reject controls. Esc defers, F7 reopens, F8 cancels, and the composer draft survives. Answers use the receiving Peer; disconnected actions are disabled and uncertain answers never retry automatically. Decisions restore from dsh history. Actual dsh integration covers execution only after approval, rejection, cancellation, and reconnection using a controlled test model provider.

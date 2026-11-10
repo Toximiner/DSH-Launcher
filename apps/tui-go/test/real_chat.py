@@ -18,12 +18,14 @@ from terminal import Terminal, wait_for
 parser = argparse.ArgumentParser()
 parser.add_argument('--binary', required=True)
 parser.add_argument('--dsh', required=True, help='Installed dsh 0.2.2-rc.1; Node 24.9+ must be in PATH')
+parser.add_argument('--capture-queue', help='Optional terminal-cell JSON of real queued follow-up tasks')
 parser.add_argument('--capture-question', help='Optional terminal-cell JSON of an actual question form')
 parser.add_argument('--capture-approval', help='Optional terminal-cell JSON of an actual pending permission')
 parser.add_argument('--capture-tools', help='Optional terminal-cell JSON of actual tool results')
 parser.add_argument('--capture-cells', help='Optional terminal-cell JSON for an actual UI screenshot')
 args = parser.parse_args()
 model_calls = []
+queue_turns = {17: threading.Event(), 18: threading.Event()}
 
 
 class Model(BaseHTTPRequestHandler):
@@ -98,8 +100,10 @@ class Model(BaseHTTPRequestHandler):
                 self.wfile.write(b'data: [DONE]\n\n')
                 self.wfile.flush()
                 return
-            for text in [f'Ответ {number}: ', 'проверка транспорта ', 'настоящего dsh.']:
+            for index, text in enumerate([f'Ответ {number}: ', 'проверка транспорта ', 'настоящего dsh.']):
                 send({'role': 'assistant', 'content': text})
+                if number in queue_turns and index == 0:
+                    assert queue_turns[number].wait(30), 'Queue test did not release the held model turn'
                 time.sleep(0.7)
             send({}, 'stop')
             self.wfile.write(b'data: [DONE]\n\n')
@@ -340,6 +344,46 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.send('\x1b[19~')
         app.wait('Выполнение остановлено.', timeout=20)
         assert len(model_calls) == 16, 'Unexpected question retry or duplicate reply'
+        wait_for(question_deferred)
+        app.command('QUEUE FIRST')
+        app.wait('Ответ 17: ', timeout=20)
+        app.wait('Enter — в очередь')
+        app.command('QUEUE SECOND')
+        app.wait('ОЧЕРЕДЬ DSH · 1', timeout=15)
+        app.wait('QUEUE SECOND')
+        app.command('QUEUE THIRD')
+        app.wait('ОЧЕРЕДЬ DSH · 2', timeout=15)
+        app.wait('QUEUE THIRD')
+        assert len(model_calls) == 17, 'Queued prompt interrupted the running model turn'
+        previous_app, app = app, None
+        previous_app.close(root / 'before-queue-reconnect.ansi')
+        app = Terminal(str(Path(args.binary).resolve()), ['--session', session_id], {**env, 'DSH_TUI_URL': login})
+        app.resize(120, 42)
+        app.wait('ОЧЕРЕДЬ DSH · 2', timeout=20)
+        app.wait('Ответ 17: ', timeout=10)
+        assert len(model_calls) == 17, 'Queue reconnection resent a prompt'
+        for _ in range(3):
+            app.pump()
+        if args.capture_queue:
+            capture_cells(app, args.capture_queue)
+        queue_turns[17].set()
+        app.wait('Ответ 18: ', timeout=20)
+        app.wait('ОЧЕРЕДЬ DSH · 1', timeout=10)
+        queue_turns[18].set()
+        app.wait('Ответ 19: проверка транспорта настоящего dsh.', timeout=20)
+        def queue_drained():
+            app.pump()
+            return 'ОЧЕРЕДЬ DSH ·' not in app.text
+        wait_for(queue_drained)
+        app.send('\x1b[5~' * 20)
+        app.wait('Агент: не выполняется', timeout=20)
+        assert len(model_calls) == 19, 'Queue execution retried or lost a model turn'
+        markers = ['QUEUE FIRST', 'QUEUE SECOND', 'QUEUE THIRD']
+        for number, expected in zip([17, 18, 19], markers):
+            seen = [marker for message in model_calls[number - 1]['messages'] if message.get('role') == 'user'
+                    for marker in markers if marker in json.dumps(message.get('content', ''))]
+            assert seen[-1] == expected, f'Queued tasks executed out of order at turn {number}: {seen}'
+        print('Actual dsh queue: two follow-ups while streaming, server queue confirmation, individual FIFO turns, no duplicates OK')
         print('Actual dsh questions: single/multi-select, multiline custom answer, draft preservation, timed hold, continued reply, cancellation OK')
         print('Actual dsh approvals: explicit grant executes, rejection/cancellation do not; audit restored OK')
         print('Actual dsh + controlled model: file-read success/failure, result cards, expansion, draft preservation OK')
@@ -348,6 +392,8 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.send('\x04')
         app.exited()
     finally:
+        for release in queue_turns.values():
+            release.set()
         if app:
             app.close(root / 'terminal.ansi')
         if process.poll() is None:

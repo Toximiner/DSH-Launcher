@@ -31,8 +31,11 @@
 Инструменты отображаются карточками со статусом и результатом; F6 выбирает карточку,
 Enter или клик раскрывает детали, Esc возвращает к вводу. Разрешения открываются отдельным окном: выбор кнопки и Enter либо клик; F7 повторно открывает запрос. Вопросы агента поддерживают варианты, множественный выбор и многострочный ответ: F5 отправляет весь набор, F7 возвращает отложенное окно.
 
-Готовые Go-сборки: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.12/dsh-launcher-tui-go_linux_amd64) ·
-[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.12/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.12/SHA256SUMS).
+Во время работы агента Enter отправляет следующее задание в очередь dsh.
+В чате видны ожидающие задания; F8 останавливает текущую задачу и сохраняет очередь.
+
+Готовые Go-сборки: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.13/dsh-launcher-tui-go_linux_amd64) ·
+[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.13/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.13/SHA256SUMS).
 Go-клиенту не нужен Node.js; самому бэкенду dsh нужен Node.js 24.9+.
 
 ## Как работает

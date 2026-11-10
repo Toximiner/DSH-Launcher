@@ -1,6 +1,9 @@
 package main
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+	"strings"
+)
 
 const (
 	sidebarWidth   = 24
@@ -126,7 +129,12 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	}
 	composer := area{mainX, bodyTop + bodyHeight - composerHeight - 1, width, composerHeight}
 	if m.page == chatPage && m.session != nil && !m.browserPreview && msg.Y == composer.y+4 {
-		x := mainX + 2 + len([]rune("Enter — отправить · "))
+		_, hint := m.composerText()
+		index := strings.Index(hint, "[F8 Стоп]")
+		if index < 0 {
+			return nil
+		}
+		x := mainX + 2 + len([]rune(hint[:index]))
 		if (area{x, msg.Y, len([]rune("[F8 Стоп]")), 1}).contains(msg.X, msg.Y) {
 			return m.cancelChat()
 		}

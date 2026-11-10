@@ -30,8 +30,11 @@ Actual replies require a configured LLM provider in dsh. The dsh installer remai
 Tool cards show execution state and results; F6 selects a card, Enter or click
 expands its details, and Esc restores composer focus. Permission dialogs support explicit one-shot allow/reject; F7 reopens a deferred request. Agent questions support options, multiple selections, and multiline custom text; F5 submits the batch and F7 reopens deferred requests.
 
-Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.12/dsh-launcher-tui-go_linux_amd64) ·
-[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.12/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.12/SHA256SUMS).
+While the agent runs, Enter queues the next task in dsh. Pending tasks appear
+in chat; F8 stops the current task and retains the queue.
+
+Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.13/dsh-launcher-tui-go_linux_amd64) ·
+[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.13/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.13/SHA256SUMS).
 The Go client runs without Node.js; the dsh backend requires Node.js 24.9+.
 
 ## How it works

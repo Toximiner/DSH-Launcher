@@ -98,7 +98,10 @@ type chatMessage struct {
 	approvalID   string
 	approvalTool string
 }
-type pendingPrompt struct{ ID, Text, Status string }
+type pendingPrompt struct {
+	ID, Text, Status string
+	AcceptedAt       time.Time
+}
 type chatState struct {
 	id             string
 	epoch          int
@@ -115,6 +118,7 @@ type chatState struct {
 	streamError    string
 	clearedThrough int
 	expandedTools  map[string]bool
+	admitted       map[string]int
 	selectedTool   string
 }
 type promptResult struct {
@@ -191,14 +195,7 @@ func (m *model) submitText(text string) tea.Cmd {
 	if pending := m.prompts[m.session.ID]; pending != nil && pending.Status != "rejected" {
 		m.input.SetValue(text)
 		m.input.CursorEnd()
-		m.chat.note = "Предыдущее сообщение ещё не подтверждено. При неизвестном результате: /retry-send."
-		m.rebuild()
-		return nil
-	}
-	if m.session.Running || m.chat.live != nil {
-		m.input.SetValue(text)
-		m.input.CursorEnd()
-		m.chat.note = "Агент ещё выполняется. F8 — остановить; новое сообщение сохранено в поле ввода."
+		m.chat.note = "Дождитесь появления предыдущего сообщения в очереди или истории. Новый текст сохранён. При неизвестном результате: /retry-send."
 		m.rebuild()
 		return nil
 	}
@@ -452,6 +449,7 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	var tool *chatTool
 	switch event.Type {
 	case "user/message":
+		s.recordAdmission(data.Source.RPCID, event.Seq)
 		if data.Source.Kind == "user-question-reply" {
 			role = "ВЫ · ОТВЕТЫ НА ВОПРОС"
 			text = questionReplyText(contentText(data.Content))
@@ -651,6 +649,7 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 		}
 		next := *s
 		next.messages = nil
+		next.admitted = nil
 		next.surface = nil
 		next.live = nil
 		next.cursor = frame.Cursor
@@ -793,11 +792,14 @@ func (m *model) chatView() string {
 		row += strings.Count(ansi.Hardwrap(part, max(1, m.viewport.Width), true), "\n")
 	}
 	if p := m.prompts[s.id]; p != nil {
-		label := map[string]string{"sending": "ОТПРАВЛЯЕТСЯ", "accepted": "ПРИНЯТО DSH · ОЖИДАНИЕ ИСТОРИИ", "unknown": "РЕЗУЛЬТАТ ОТПРАВКИ НЕИЗВЕСТЕН · /retry-send", "rejected": "НЕ ОТПРАВЛЕНО"}[p.Status]
+		label := map[string]string{"sending": "ОТПРАВЛЯЕТСЯ", "accepted": "ПРИНЯТО DSH · ОЖИДАНИЕ СОСТОЯНИЯ", "unknown": "РЕЗУЛЬТАТ ОТПРАВКИ НЕИЗВЕСТЕН · /retry-send", "rejected": "НЕ ОТПРАВЛЕНО"}[p.Status]
 		lines = append(lines, heading.Render("ВЫ · "+label)+"\n"+clean(p.Text)+"\n")
 	}
 	if s.live != nil {
 		lines = append(lines, accent.Bold(true).Render("АГЕНТ · ПОТОКОВЫЙ ОТВЕТ")+"\n"+s.live.text()+"\n")
+	}
+	if queue := m.queueView(); queue != "" {
+		lines = append(lines, queue+"\n")
 	}
 	if len(s.messages) == 0 && s.live == nil && s.ready {
 		lines = append(lines, "Введите сообщение. Enter — отправить в dsh, F8 — остановить агента.")
@@ -829,6 +831,7 @@ func (m *model) handleChatUpdate(msg chatUpdate) tea.Cmd {
 			cmd := m.startChat(id)
 			m.chat.messages = s.messages
 			m.chat.live = s.live
+			m.chat.admitted = s.admitted
 			m.chat.clearedThrough = s.clearedThrough
 			m.chat.expandedTools = s.expandedTools
 			m.chat.selectedTool = s.selectedTool
@@ -847,6 +850,7 @@ func (m *model) handleChatUpdate(msg chatUpdate) tea.Cmd {
 			}
 		}
 	}
+	m.reconcileQueuedPrompt()
 	m.rebuild()
 	if bottom && m.page == chatPage {
 		m.viewport.GotoBottom()
@@ -861,6 +865,7 @@ func (m *model) handlePromptResult(msg promptResult) {
 	}
 	if msg.err == nil {
 		p.Status = "accepted"
+		p.AcceptedAt = time.Now()
 	} else if msg.rejected {
 		p.Status = "rejected"
 	} else {
@@ -874,6 +879,7 @@ func (m *model) handlePromptResult(msg promptResult) {
 				m.input.CursorEnd()
 			}
 		}
+		m.reconcileQueuedPrompt()
 		m.rebuild()
 	}
 }
@@ -882,6 +888,9 @@ func (m *model) composerText() (string, string) {
 	if m.settingsLogin != "" && !m.browserPreview {
 		if m.session == nil {
 			return " · dsh", "Сначала /new или /session <id>"
+		}
+		if m.session.Running || m.chat != nil && m.chat.live != nil {
+			return " · dsh", "Enter — в очередь · [F8 Стоп]"
 		}
 		return " · dsh", "Enter — отправить · [F8 Стоп]"
 	}
