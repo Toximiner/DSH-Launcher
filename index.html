@@ -19,24 +19,6 @@
   <li><a href="go-preview/0.2.0-preview.5/dsh-launcher-tui-go_linux_arm64">Linux arm64: отдельный исполняемый файл</a></li>
   <li><a href="go-preview/0.2.0-preview.5/README.md">Возможности прототипа</a> · <a href="go-preview/0.2.0-preview.5/SHA256SUMS">SHA-256</a></li>
 </ul>
-<h2>Рабочая JS-версия</h2>
-<p>Временная страница загрузки экспериментальной терминальной версии 0.1.1.</p>
-<p>Для локального запуска с dsh нужен <strong>Node.js 24.9+ с npm</strong>.</p>
-<h2>Установить через npm</h2>
-<pre>npm install -g https://toximiner.github.io/DSH-Launcher/dsh-launcher-tui-0.1.1.tgz
-dsh-launcher-tui</pre>
-<p>Если dsh отсутствует, приложение предложит <code>/install</code> — установку в каталог текущего пользователя без sudo. <code>/cancel</code> отменяет установку.</p>
-<p>Во время установки видны анимированный индикатор, этап, время и счётчик завершённых загрузок npm. Общий процент не показывается, поскольку полный объём заранее неизвестен.</p>
-<p>При установленном клиенте и Node.js 22 можно временно запустить его под Node.js 24: <code>npx --yes --package=node@24 --call 'dsh-launcher-tui'</code>.</p>
-<h2>Готовые пакеты</h2>
-<ul>
-  <li><a href="dsh-launcher-tui_0.1.1-1_all.deb">Debian / Ubuntu: .deb</a> — требует системный пакет nodejs 22+; для самого dsh нужен Node.js 24.9+.</li>
-  <li><a href="dsh-launcher-tui-0.1.1.tgz">npm: .tgz</a> — подходит в том числе для Node.js через nvm.</li>
-  <li><a href="SHA256SUMS">Контрольные суммы SHA-256</a></li>
-  <li><a href="build.json">Сведения о сборке</a></li>
-</ul>
-<p class="note">Сборка из <a href="https://github.com/Toximiner/DSH-Launcher/commit/08b9129">коммита 08b9129</a>.
-<a href="https://github.com/Toximiner/DSH-Launcher/actions/runs/42755881609">Проверки TUI и Docker</a> прошли на Ubuntu 24.04, Ubuntu 26.04 и Debian 13.
-Это тестовая сборка; файлы на временной странице могут быть удалены.</p>
-<p><a href="https://github.com/Toximiner/DSH-Launcher/pull/39">PR с исходным кодом и описанием</a></p>
+<p class="note">Экспериментальный Go-клиент: чат пока остаётся локальным черновиком. Установку и запуск dsh, потоковый чат и остальные функции переносим постепенно. Для чтения настоящих настроек в Linux-клиенте нужен URL входа уже работающего dsh.</p>
+<p><a href="https://github.com/Toximiner/DSH-Launcher/pull/39">Исходники и проверки в PR</a></p>
 </html>
