@@ -1,21 +1,14 @@
 <!doctype html>
 <html lang="ru">
-<head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,interactive-widget=resizes-content">
-<meta name="referrer" content="no-referrer">
-<title>DSH Launcher — браузерный просмотр TUI</title>
-<link rel="stylesheet" href="xterm.css">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DSH Launcher — демо-просмотр отключён</title>
 <style>
-*{box-sizing:border-box}html,body{height:100%;margin:0;background:#101318;color:#e6edf3;font:14px/1.4 system-ui,sans-serif}body{height:var(--viewport-height,100dvh);display:flex;flex-direction:column;overflow:hidden}header{display:flex;gap:12px;align-items:center;padding:10px 16px;background:#18212d;border-bottom:1px solid #303d4d;flex-shrink:0}header strong{font-size:16px;white-space:nowrap}a{color:#79c0ff}button{border:1px solid #47576c;border-radius:6px;padding:7px 10px;background:#233044;color:#e6edf3;cursor:pointer;min-height:34px}.zoom{display:flex;gap:4px;margin-left:auto}.note{padding:7px 16px;color:#b4bdca;background:#141b24;font-size:13px;flex-shrink:0}.touch-controls{display:none}#terminal{flex:1;min-height:0;margin:8px 10px;padding:0;overflow:auto;overscroll-behavior:contain}#loading{position:absolute;inset:45% 10% auto;text-align:center;color:#79c0ff}.xterm{height:100%}button:focus-visible,a:focus-visible{outline:2px solid #58a6ff;outline-offset:3px}@media(max-width:650px){header{flex-wrap:wrap;gap:6px;padding:6px 8px}header strong{font-size:14px}.desktop-title,.source-link,.long-note{display:none}.note{font-size:11px;padding:5px 8px}.zoom{gap:3px}button{padding:5px 8px}.touch-controls{display:flex;gap:4px;padding:4px 8px;overflow-x:auto;flex-shrink:0;white-space:nowrap}.touch-controls button{flex-shrink:0}.touch-controls button[aria-pressed=true]{border-color:#58a6ff;color:#79c0ff}#terminal{margin:4px}}
+body { max-width: 680px; margin: 64px auto; padding: 0 24px; font: 17px/1.6 system-ui, sans-serif; color: #172333; background: #f8fafc; }
+a { color: #155ecc; }
 </style>
-</head>
-<body>
-<header><strong>◆ DSH Launcher<span class="desktop-title"> · Go TUI в браузере</span></strong><div class="zoom" role="group" aria-label="Масштаб терминала"><button id="zoom-out" type="button" aria-label="Уменьшить шрифт">−</button><button id="fit" type="button">Вписать</button><button id="zoom-in" type="button" aria-label="Увеличить шрифт">+</button></div><a class="source-link" href="https://github.com/Toximiner/DSH-Launcher/pull/39" target="_blank" rel="noopener">Исходники</a><button id="reset" type="button">Сброс</button></header>
-<div class="note">Демо: чат локальный, настройки и каталог маркета — примеры. Реальные операции доступны в Linux-клиенте.<span class="long-note"> Go-модель работает в браузере. Настройки от 10.11.2026, без обновления. Shift + мышь — выделение текста.</span></div>
-<nav class="touch-controls" aria-label="Разделы TUI"><button data-page="0" aria-pressed="true">Чат</button><button data-page="1" aria-pressed="false">Сессии</button><button data-page="2" aria-pressed="false">dsh</button><button data-page="3" aria-pressed="false">TUI</button><button data-page="4" aria-pressed="false">Журнал</button><button data-page="5" aria-pressed="false">Маркет</button><button data-key="left" aria-label="Предыдущий раздел настроек">←</button><button data-key="right" aria-label="Следующий раздел настроек">→</button></nav>
-<div id="terminal" aria-label="Интерактивный терминал DSH Launcher"></div>
-<div id="loading" role="status">Загрузка Go-клиента…</div>
-<script src="xterm.js"></script><script src="addon-fit.js"></script><script src="wasm_exec.js"></script><script src="preview.js?v=market-7"></script>
-</body>
+<h1>Демо-просмотр отключён</h1>
+<p>Публичная демонстрация TUI больше не запускается. Живое приложение с настоящим dsh можно развернуть в приватном GitHub Codespaces.</p>
+<p><a href="https://github.com/Toximiner/DSH-Launcher/blob/feature/terminal-ui/tools/live/README.md">Инструкция для живого стенда</a></p>
+<p><a href="../">Готовые Go-сборки для Linux</a></p>
 </html>

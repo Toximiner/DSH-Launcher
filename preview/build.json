@@ -1,6 +1,0 @@
-{
-  "source_commit": "0da30cb187d9b65b790bb39dded28eca7c17ad80",
-  "type": "shared Go model in WebAssembly",
-  "backend": "sample settings and marketplace catalog only; no backend writes",
-  "mobile": "auto-fit, zoom, touch navigation"
-}
