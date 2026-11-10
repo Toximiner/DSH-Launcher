@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0-preview.10",
+  "source_commit": "ac8ddd59349b49f4bd955e059ab0b7c6bbf781d5",
+  "stage": "tool execution cards, expandable arguments/results, history recovery; permissions and questions remain pending",
+  "sha256": {
+    "dsh-launcher-tui-go_linux_amd64": "688cdce0eede1b1999456c0aa87a3f911c6db1c936be12f982b611953cf3d17d",
+    "dsh-launcher-tui-go_linux_arm64": "f4beb14eddf6d8bce548cecdf4e96b18859c65b20e70b69976a52b4b1be5846d"
+  }
+}
