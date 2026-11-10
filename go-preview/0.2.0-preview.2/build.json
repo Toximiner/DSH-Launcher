@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0-preview.2",
+  "source_commit": "80001275d677b4431fb911b79a0d478ba6c1e955",
+  "stage": "panel layout and local navigation; no backend connection",
+  "sha256": {
+    "dsh-launcher-tui-go_linux_amd64": "50b9e3939a9c62ec78f992aecf5de84325b5748458c214b275cf4b8324e7e2f8",
+    "dsh-launcher-tui-go_linux_arm64": "fe5af4197a7e0a199c07cd8d8912ae85c1b083aa7b2102a8f3cbccb500b49460"
+  }
+}
