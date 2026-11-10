@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0-preview.11",
+  "source_commit": "f7ef35341feec44526242e69256731a091434f19",
+  "stage": "one-shot approval dialogs, rejection/cancellation, authenticated event answers, pending request recovery; question forms remain pending",
+  "sha256": {
+    "dsh-launcher-tui-go_linux_amd64": "1e1d7d2017f96409ffaae8c3f2834394756210b87ae5f78d0e1eb47d03ff3381",
+    "dsh-launcher-tui-go_linux_arm64": "0874c73e3beefe08f33338e500eb30994176a8884ca49234687b0f203bf7afdc"
+  }
+}
