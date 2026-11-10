@@ -9,7 +9,7 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Changed
 
-- Disabled the public GitHub Pages demo by removing its browser runtime and advertised links. Native Go downloads remain available on the landing page; live usage is documented for private Codespaces.
+- Disabled the public GitHub Pages demo by removing its browser runtime and advertised links. The landing page and demo placeholder are also removed. Native Go downloads remain available through direct links; live usage is documented for private Codespaces.
 
 ### Added
 

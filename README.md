@@ -23,7 +23,8 @@
 поиск и подтверждаемые установка, обновление и удаление плагинов. Чат пока локальный; установка
 самого dsh и потоковый чат переносятся постепенно. Устаревшая терминальная JS-версия удалена.
 
-[Готовые Go-сборки Linux amd64/arm64](https://toximiner.github.io/DSH-Launcher/).
+Готовые Go-сборки: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.7/dsh-launcher-tui-go_linux_amd64) ·
+[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.7/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.7/SHA256SUMS).
 Go-клиенту не нужен Node.js; самому бэкенду dsh нужен Node.js 24.9+.
 
 ## Как работает
