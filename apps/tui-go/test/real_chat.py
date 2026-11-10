@@ -18,6 +18,7 @@ from terminal import Terminal, wait_for
 parser = argparse.ArgumentParser()
 parser.add_argument('--binary', required=True)
 parser.add_argument('--dsh', required=True, help='Installed dsh 0.2.2-rc.1; Node 24.9+ must be in PATH')
+parser.add_argument('--capture-queue-remove', help='Optional terminal-cell JSON of the queue removal confirmation')
 parser.add_argument('--capture-queue', help='Optional terminal-cell JSON of real queued follow-up tasks')
 parser.add_argument('--capture-question', help='Optional terminal-cell JSON of an actual question form')
 parser.add_argument('--capture-approval', help='Optional terminal-cell JSON of an actual pending permission')
@@ -25,7 +26,7 @@ parser.add_argument('--capture-tools', help='Optional terminal-cell JSON of actu
 parser.add_argument('--capture-cells', help='Optional terminal-cell JSON for an actual UI screenshot')
 args = parser.parse_args()
 model_calls = []
-queue_turns = {17: threading.Event(), 18: threading.Event()}
+queue_turns = {17: threading.Event(), 18: threading.Event(), 20: threading.Event()}
 
 
 class Model(BaseHTTPRequestHandler):
@@ -244,6 +245,10 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('> ▸ read · ! Ошибка', timeout=10)
         app.send('\x1b')
         app.wait('> preserved draft')
+        def input_has_focus():
+            app.pump()
+            return '> ▸ read · ! Ошибка' not in app.text and '> ▾ read · ! Ошибка' not in app.text
+        wait_for(input_has_focus)
         app.send('\x15')
         app.command('Request permission to create the grant marker.')
         app.wait('Запрос разрешения dsh', timeout=20)
@@ -383,6 +388,51 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
             seen = [marker for message in model_calls[number - 1]['messages'] if message.get('role') == 'user'
                     for marker in markers if marker in json.dumps(message.get('content', ''))]
             assert seen[-1] == expected, f'Queued tasks executed out of order at turn {number}: {seen}'
+        app.command('REMOVE TEST ACTIVE')
+        app.wait('Ответ 20: ', timeout=20)
+        app.command('REMOVE THIS PENDING TASK')
+        app.wait('ОЧЕРЕДЬ DSH · 1', timeout=15)
+        app.command('KEEP THIS PENDING TASK')
+        app.wait('ОЧЕРЕДЬ DSH · 2', timeout=15)
+        app.send('\x1b[20~')
+        app.wait('Очередь заданий dsh')
+        app.send('\r')
+        app.wait('Удалить задание из очереди?')
+        app.send('\r')
+        app.wait('Удаление отменено.')
+        app.send('\r')
+        app.wait('Удалить задание из очереди?')
+        if args.capture_queue_remove:
+            capture_cells(app, args.capture_queue_remove)
+        app.send('\x1b[C\r')
+        app.wait('Задание удалено.', timeout=15)
+        app.send('\x1b')
+        app.wait('ОЧЕРЕДЬ DSH · 1', timeout=15)
+        assert 'REMOVE THIS PENDING TASK' not in app.text, 'Removed task remained in the queue'
+        assert len(model_calls) == 20, 'Queue removal interrupted or started another model turn'
+        previous_app, app = app, None
+        previous_app.close(root / 'after-queue-removal.ansi')
+        app = Terminal(str(Path(args.binary).resolve()), ['--session', session_id], {**env, 'DSH_TUI_URL': login})
+        app.resize(80, 24)
+        app.wait('ОЧЕРЕДЬ DSH · 1', timeout=20)
+        app.send('\x1b[20~')
+        app.wait('Очередь заданий dsh')
+        app.wait('KEEP THIS PENDING TASK')
+        app.resize(44, 18)
+        app.wait('Очередь заданий dsh')
+        app.wait('[ Удалить выбранное ]')
+        assert 'REMOVE THIS PENDING TASK' not in app.text, 'Reconnection restored a removed task'
+        app.send('\x1b')
+        app.resize(120, 42)
+        queue_turns[20].set()
+        app.wait('Ответ 21: проверка транспорта настоящего dsh.', timeout=20)
+        wait_for(queue_drained)
+        app.send('\x1b[5~' * 20)
+        app.wait('Агент: не выполняется', timeout=20)
+        assert len(model_calls) == 21, 'Removed task executed or a retained task was lost'
+        assert not any('REMOVE THIS PENDING TASK' in json.dumps(message) for message in model_calls[20]['messages']), 'Removed prompt leaked into model history'
+        assert any('KEEP THIS PENDING TASK' in json.dumps(message) for message in model_calls[20]['messages']), 'Remaining queued task was not executed'
+        print('Actual dsh queue removal: explicit confirmation, cancellation preserves active turn and other item, reconnect and minimum layout OK')
         print('Actual dsh queue: two follow-ups while streaming, server queue confirmation, individual FIFO turns, no duplicates OK')
         print('Actual dsh questions: single/multi-select, multiline custom answer, draft preservation, timed hold, continued reply, cancellation OK')
         print('Actual dsh approvals: explicit grant executes, rejection/cancellation do not; audit restored OK')

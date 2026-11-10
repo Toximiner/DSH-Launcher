@@ -329,6 +329,10 @@ class TerminalPreview(unittest.TestCase):
         self.assertIsNone(self.app.proc.poll())
         self.app.send('\x15')
         self.app.resize(60, 20)
+        def resized():
+            self.app.pump()
+            return 'Ctrl+D выход' in self.app.screen.display[18]
+        wait_for(resized)
         self.app.command('/help')
         self.app.wait('колесо — прокрутка')
         self.app.send('\x04')

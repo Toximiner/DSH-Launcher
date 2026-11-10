@@ -159,6 +159,7 @@ func (m *model) startChat(id string) tea.Cmd {
 }
 
 func (m *model) stopChat() {
+	m.queueDialog = queueDialog{}
 	if m.chat != nil {
 		m.chat.cancel()
 	}

@@ -28,6 +28,9 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if cmd, handled := m.approvalMouse(msg); handled {
 		return cmd
 	}
+	if cmd, handled := m.queueMouse(msg); handled {
+		return cmd
+	}
 	if cmd, handled := m.chromeMouse(msg); handled {
 		return cmd
 	}
@@ -80,6 +83,11 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 		}
 	}
 	if m.page == chatPage && m.chat != nil && conversation.contains(msg.X, msg.Y) {
+		viewLines := strings.Split(clean(m.viewport.View()), "\n")
+		screenRow := msg.Y - conversation.y
+		if screenRow >= 0 && screenRow < len(viewLines) && strings.Contains(viewLines[screenRow], "ОЧЕРЕДЬ DSH ·") {
+			return m.openQueue()
+		}
 		row := msg.Y - conversation.y + m.viewport.YOffset
 		for _, hit := range m.chatToolHits {
 			if row >= hit.row && row < hit.end {

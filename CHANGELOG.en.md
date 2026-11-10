@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- Go preview 0.2.0-preview.14 adds a queue dialog via F9, `/queue`, or the inline heading. Individual removal requires explicit confirmation and uses dsh item identity, preserving the active turn and remaining work. Uncertain mutations never retry automatically; stale state disables removal. Actual dsh with a controlled provider verifies retained work, reconnect, mouse handling, and the minimum 44×18 layout.
+
 ### Changed
 
 - Disabled the public GitHub Pages demo by removing its browser runtime and advertised links. The landing page and demo placeholder are also removed. Native Go downloads remain available through direct links; live usage is documented for private Codespaces.

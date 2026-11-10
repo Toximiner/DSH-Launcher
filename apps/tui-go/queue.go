@@ -90,7 +90,7 @@ func (m *model) queueView() string {
 	if len(items) == 0 {
 		return ""
 	}
-	lines := []string{heading.Render("ОЧЕРЕДЬ DSH · " + strconv.Itoa(len(items))), muted.Render("F8: остановить текущую задачу; очередь сохранится.")}
+	lines := []string{heading.Render("ОЧЕРЕДЬ DSH · " + strconv.Itoa(len(items))), muted.Render("F9: управление очередью · F8: остановить текущую задачу.")}
 	if m.sessionStale || m.chat == nil || !m.chat.ready {
 		lines = append(lines, muted.Render("Последнее полученное состояние; связь восстанавливается."))
 	}

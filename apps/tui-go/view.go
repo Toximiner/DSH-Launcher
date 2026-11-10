@@ -134,8 +134,11 @@ func (m *model) View() string {
 	if m.approvals != nil && len(m.approvals.requests) > 0 {
 		hints = "F7 запросы · F8 остановить агента"
 	}
+	if m.page == chatPage && len(m.visibleQueue()) > 0 {
+		hints = "F9 очередь · F8 остановить задачу"
+	}
 	footer := bar(muted.Render(hints), muted.Render("Ctrl+D выход"), width)
-	return m.approvalView(m.chromeView(header + "\n" + body + "\n" + footer))
+	return m.approvalView(m.queueDialogView(m.chromeView(header + "\n" + body + "\n" + footer)))
 }
 
 func (m *model) modeControls() string {

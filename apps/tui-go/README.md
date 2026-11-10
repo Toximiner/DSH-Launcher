@@ -130,6 +130,19 @@ turn and retains pending inbox work; it does not clear the queue. Actual dsh
 integration verifies two waiting follow-ups, client reconnection, and three
 individual FIFO turns with no duplicate model requests.
 
+F9, `/queue`, or clicking the inline queue heading opens the queue dialog.
+Up/Down selects an item; Enter opens removal confirmation, defaulting to Back.
+Right/Tab selects Remove and Enter confirms. Mouse selection and buttons work;
+Escape backs out without changing the draft. Removal uses `session/updateQueue`
+with the original immutable item ID, leaving the active turn and other items
+alone. If an item starts before confirmation, dsh may reject removal; the client
+refreshes instead of targeting another item. Stale/disconnected state disables
+mutations. An uncertain result never retries automatically; reopen the refreshed
+queue and explicitly choose again if necessary. Acknowledgement does not remove
+items optimistically from cached server state. Session changes discard the dialog,
+and late responses from old stream epochs cannot change the new dialog.
+Actual-dsh checks verify cancellation, retained work, reconnect, and 44×18 sizing.
+
 The client signs in through `/connect` and reads `/api/settings/describe`.
 It never calls settings write endpoints or loads the settings document from disk.
 Open **Настройки dsh** with the mouse or sidebar keyboard navigation. Left/Right switches
@@ -147,8 +160,8 @@ Use `--url` / `DSH_TUI_URL` with `--new` or `--session ID`, or run `/new` after
 attaching. Wait for chat readiness, then press Enter to send. Text entered before
 readiness or during a session switch stays in the composer. While generation is
 running, Enter queues a follow-up through session/prompt with mode=queue. The
-composer hint changes to explain this. This increment does not expose queue
-cancellation, editing, or submission as steering.
+composer hint changes to explain this. Queue editing and submission as steering
+remain subsequent increments.
 
 The client signs in through `/connect`, sends `session/prompt` with a unique
 requestId, and subscribes to `session/follow` through `/api/remote.mux` with
@@ -288,9 +301,9 @@ Work proceeds in small, reviewable checkpoints with user feedback. The
 and milestone order. Milestone 1 is complete: TUI preferences live in the top menu,
 while dsh settings remain separate. Streamed text chat is implemented in preview.9; validation with an actual cloud
 model remains pending working provider access. Tool-result cards are implemented in preview.10. Agent questions are implemented in preview.12, including timed waits and continued
-answers. Queue submission and observation are implemented in preview.13. The next
-functional checkpoint is cancelling pending queue items, followed by editing
-and steering controls. Permission dialogs
+answers. Queue submission and observation are implemented in preview.13; individual
+queue removal is implemented in preview.14. The next functional checkpoint is
+editing and steering controls. Permission dialogs
 are implemented in preview.11 and tested through the actual dsh approval service. Settings editing, workspace features,
 additional plugin support, and launcher lifecycle remain planned. No
 full-parity claim is made by this preview. The legacy JS client and its packaging
