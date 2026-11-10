@@ -3,9 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-	"strings"
 )
 
 const toolArgumentsLimit = 64 << 10
@@ -13,6 +14,9 @@ const toolArgumentsLimit = 64 << 10
 type chatTool struct {
 	ID, Name, Arguments, Result, ErrorCode, State string
 	Turn                                          int
+	ParentID, RootID                              string
+	Nested                                        bool
+	StartSeq                                      int
 }
 type chatToolHit struct {
 	id  string
@@ -30,11 +34,12 @@ func boundedToolText(text string, limit int) string {
 func (message chatMessage) byteSize() int {
 	size := len(message.text)
 	if t := message.tool; t != nil {
-		size += len(t.ID) + len(t.Name) + len(t.Arguments) + len(t.Result) + len(t.ErrorCode)
+		size += len(t.ID) + len(t.ParentID) + len(t.RootID) + len(t.Name) + len(t.Arguments) + len(t.Result) + len(t.ErrorCode)
 	}
 	return size
 }
-func (m *model) toolView(t *chatTool) string {
+func (m *model) toolView(t *chatTool) string { return m.toolViewWidth(t, m.viewport.Width) }
+func (m *model) toolViewWidth(t *chatTool, width int) string {
 	labels := map[string]string{"running": "◌ Выполняется", "done": "✓ Готово", "error": "! Ошибка", "stopped": "■ Остановлено", "unknown": "? Результат не получен"}
 	state := labels[t.State]
 	if t.State == "running" && !m.chat.ready {
@@ -69,7 +74,10 @@ func (m *model) toolView(t *chatTool) string {
 		label = "> " + label
 		style = heading
 	}
-	lines := []string{style.Render(ansi.Truncate(label, max(1, m.viewport.Width), "…"))}
+	lines := []string{style.Render(ansi.Truncate(label, max(1, width), "…"))}
+	if t.Nested {
+		lines = append(lines, muted.Render(ansi.Truncate(m.nestedRelation(t), max(1, width), "…")))
+	}
 	args := t.Arguments
 	var pretty bytes.Buffer
 	if args != "" && toolJSONDepthOK(args) && json.Indent(&pretty, []byte(args), "", "  ") == nil {
@@ -79,7 +87,7 @@ func (m *model) toolView(t *chatTool) string {
 		if m.chat.expandedTools[t.ID] {
 			lines = append(lines, muted.Render("Аргументы:"), args)
 		} else {
-			lines = append(lines, muted.Render(ansi.Truncate("  "+strings.Join(strings.Fields(args), " "), max(1, m.viewport.Width), "…")))
+			lines = append(lines, muted.Render(ansi.Truncate("  "+strings.Join(strings.Fields(args), " "), max(1, width), "…")))
 		}
 	}
 	if t.ErrorCode != "" {
@@ -88,7 +96,7 @@ func (m *model) toolView(t *chatTool) string {
 	if t.Result != "" {
 		result := t.Result
 		if !m.chat.expandedTools[t.ID] {
-			wrapped := strings.Split(ansi.Hardwrap(result, max(1, m.viewport.Width), true), "\n")
+			wrapped := strings.Split(ansi.Hardwrap(result, max(1, width), true), "\n")
 			if len(wrapped) > 3 {
 				result = strings.Join(wrapped[:3], "\n") + "\n… [Раскрыть]"
 			}
@@ -105,9 +113,9 @@ func (m *model) toolView(t *chatTool) string {
 func (m *model) toolIDs() []string {
 	var ids []string
 	if m.chat != nil {
-		for _, message := range m.chat.messages {
-			if message.tool != nil && message.seq > m.chat.clearedThrough {
-				ids = append(ids, message.tool.ID)
+		for _, display := range m.displayMessages() {
+			if display.message.tool != nil {
+				ids = append(ids, display.message.tool.ID)
 			}
 		}
 	}

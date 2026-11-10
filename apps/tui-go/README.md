@@ -28,8 +28,37 @@ they have focus; PgUp/PgDn scroll long output. Reconnection restores cards and
 expansion choices without duplicating results. If a call predates the history
 window, the result is explicitly labeled rather than assigned an invented name.
 Arguments are bounded to 64 KiB, result text to 1 MiB, and retained chat to 4 MiB;
-truncation is labeled. Non-text results remain placeholders. Incremental stdout,
-nested PTC/subagent trees are not implemented.
+truncation is labeled. Non-text results remain placeholders. Incremental stdout
+and subagent session trees remain planned. Nested PTC tool cards are implemented
+in preview.17.
+
+Nested calls use actual `tool/ptc-dispatch-start` and `tool/ptc-dispatch`
+events. The client pairs `subCallId`, `parentCallId`, and `rootCallId`; it does not
+infer parents from names, ID punctuation, or timing. Descendants appear under their
+parent in submission order with their own state, arguments, result/error, F6
+navigation, expansion, and mouse hit areas. Folding a parent folds only that card's
+details. Indentation is capped to keep narrow terminals readable. Missing parents
+and invalid/cyclic chains are explicitly labeled instead of inventing a tree.
+Reconnect restores the hierarchy from durable events without rerunning tools.
+Replacing a retained parent removes its obsolete descendants. Unknown-turn orphan
+calls remain unknown when a turn closes; cancellation is claimed only from a
+structured abort or a known cancelled owning turn. Generic plugin wrappers that
+emit no PTC relationship events have no inferred hierarchy. This is not the
+subagent session UI planned for milestone 10.
+
+The pinned dsh 0.2.2-rc.1 npm package omits its advertised `lib/process.js` PTC
+worker. For integration checks only, `test/prepare_ptc.py` downloads the official
+source commit `fcc0ad462172522aaf5c93a7b2e01f6b9f0b0159`, verifies the archive SHA-256
+and package version, and preserves its MIT license/provenance. Pass its
+`process-entry.ts` with `--ptc-bootstrap` to `test/real_chat.py`; the test copies
+that worker and four installed dependencies into its isolated workspace so dsh's
+file sandbox can load them. Node 24 runs this official TypeScript bootstrap.
+The actual dsh executor, sandbox, and event pipeline remain active; no nested
+events or outcomes are synthesized by the client. The live stand and distributed
+TUI contain no worker workaround. Actual PTC use needs a complete dsh worker
+installation; an incomplete backend reports its native failure in the root card.
+Checks cover actual nested reads (success/error), a held test tool, client restart,
+and cancellation of a real nested bash command. No paid model calls are made.
 
 dsh permission requests open a separate scrollable dialog containing the tool,
 reason, and available call arguments. No action is selected on arrival: use
@@ -342,7 +371,7 @@ model remains pending working provider access. Tool-result cards are implemented
 answers. Queue submission and observation are implemented in preview.13; individual
 queue removal is implemented in preview.14 and multiline editing in preview.15.
 Queue-to-steering promotion is implemented in preview.16. The next checkpoints
-cover nested tool calls and incremental stdout. Permission dialogs
+cover incremental stdout; nested PTC calls are implemented in preview.17. Permission dialogs
 are implemented in preview.11 and tested through the actual dsh approval service. Settings editing, workspace features,
 additional plugin support, and launcher lifecycle remain planned. No
 full-parity claim is made by this preview. The legacy JS client and its packaging

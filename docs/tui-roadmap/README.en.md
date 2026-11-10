@@ -2,7 +2,7 @@
 
 [Русский](README.md) | **English**
 
-Baseline: November 10, 2026, Go client `0.2.0-preview.16`.
+Baseline: November 10, 2026, Go client `0.2.0-preview.17`.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.
 
@@ -25,7 +25,7 @@ disabled; private Codespaces supports live inspection.
 - dsh task queue: submission while running, server-confirmed pending items, individual removal/editing, queue-to-steering promotion, admission into history, and reconnect recovery.
 - Agent questions: choices, multi-select, multiline answers, skip, batches, timed holds, and continued replies.
 - Permission dialogs: reason, arguments, one-shot allow/reject, F7, cancellation, and pending request recovery.
-- Tool cards: state, arguments, result/error, mouse or F6 → Enter expansion, history restoration.
+- Tool cards: state, arguments, result/error, mouse or F6 → Enter expansion, history restoration, and explicit nested PTC relationships.
 - Session text chat: submission, streaming, cancellation, read reconnection without automatic resubmission.
 - Session creation/list/attachment, backend-confirmed modes, and goal commands.
 - Starting an installed dsh with `--start`, and offering dshmarket preinstallation.
@@ -44,7 +44,7 @@ an actual cloud model awaits working access. Full tool interaction is milestone 
 |---|---|---|---|
 | Application menu | Top menu and modal client settings | Basic milestone complete; further polish at milestone 14 | 1 ✓ |
 | Chat | Submission, streaming, cancellation, reconnection implemented | Actual cloud model verification awaits access | 2, LLM acceptance pending |
-| Tools and questions | Tool cards, permissions, questions, queue submission/view/removal/editing/steering | Nested calls and incremental stdout | 3, partial |
+| Tools and questions | Tool cards, permissions, questions, queue submission/view/removal/editing/steering, nested PTC calls | Incremental stdout | 3, partial |
 | Sessions and history | Create/list/attach | History, search, rename, fork, supported archive operations | 4 |
 | Message rendering | Plain local records | Markdown, code, tables, folding, copying | 4 |
 | Models and accounts | No configuration UI | Providers, authorization, model and parameter selection | 5 |
@@ -71,8 +71,8 @@ an actual cloud model awaits working access. Full tool interaction is milestone 
 2. **Minimal actual chat — implemented in preview.9; cloud LLM acceptance awaits access.** Session submission, streamed assistant text,
    cancellation, errors, reconnection without resubmitting accepted messages.
    Done: an actual model answers through actual dsh; exit restores the terminal.
-3. **Tools and interaction — first increment implemented in preview.10.** Tool cards, results/errors, cancellation state, folding, and history restoration; verified with actual dsh file reads. Permissions implemented in preview.11: explicit one-shot allow/reject, cancellation, reconnection, and decision history. Questions implemented in preview.12: choices, free text, batches, timed holds, and continued replies. Queue submission/view implemented in preview.13, verified with three tasks and reconnection. Individual queue removal implemented in preview.14; multiline editing in preview.15; queue-to-steering promotion in preview.16. Next:
-   nested tool calls and incremental stdout.
+3. **Tools and interaction — first increment implemented in preview.10.** Tool cards, results/errors, cancellation state, folding, and history restoration; verified with actual dsh file reads. Permissions implemented in preview.11: explicit one-shot allow/reject, cancellation, reconnection, and decision history. Questions implemented in preview.12: choices, free text, batches, timed holds, and continued replies. Queue submission/view implemented in preview.13, verified with three tasks and reconnection. Individual queue removal implemented in preview.14; multiline editing in preview.15; queue-to-steering promotion in preview.16; nested PTC cards in preview.17. Next:
+   incremental stdout.
    Done: the agent completes a tool task; rejection/cancellation reaches dsh,
    and a question answer is not submitted as an ordinary chat message.
 4. **History and sessions.** Transcript loading, search, rename, fork, supported

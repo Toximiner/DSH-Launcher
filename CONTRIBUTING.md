@@ -45,6 +45,11 @@ task while preserving the active turn and other work. Queue editing checks cover
 discarding a draft, saving multiline text, model input, and retained FIFO order.
 Steering checks promote a queued item to the next step of the same turn, verify
 actual session journal events, and preserve remaining work across reconnect.
+Nested PTC checks cover real file reads, errors, restart, and bash cancellation.
+Run `python3 apps/tui-go/test/prepare_ptc.py build/ptc-bootstrap` first, then pass
+`--ptc-bootstrap "$PWD/build/ptc-bootstrap/process-entry.ts"` to `real_chat.py`.
+This verified official source worker is needed only because the pinned npm
+package omits its advertised PTC bootstrap; it is not shipped with the client.
 The test-only approval probe is never enabled by the live deployment. See `apps/tui-go/web/README.md`.
 The legacy JavaScript terminal app and its npm/Debian packaging are removed.
 

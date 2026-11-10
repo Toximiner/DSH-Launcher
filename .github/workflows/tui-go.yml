@@ -41,11 +41,14 @@ jobs:
           node-version: '24.22.1'
       - name: Install pinned dsh for protocol integration
         run: npm install --prefix build/chat-test-runtime --ignore-scripts --no-audit --no-fund @deepseek-ai/dsh@0.2.2-rc.1
+      - name: Prepare official PTC source bootstrap missing from pinned npm package
+        run: python3 apps/tui-go/test/prepare_ptc.py build/ptc-bootstrap
       - name: Actual dsh chat with a controlled local model
         run: |
           build/go-pty-env/bin/python apps/tui-go/test/real_chat.py \
             --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
-            --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh"
+            --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh" \
+            --ptc-bootstrap "$PWD/build/ptc-bootstrap/process-entry.ts"
       - name: Build static browser preview
         run: python3 apps/tui-go/web/build.py
       - uses: actions/upload-artifact@v7

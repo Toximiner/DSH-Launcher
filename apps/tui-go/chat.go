@@ -479,7 +479,13 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 		if data.CallID == "" {
 			return errors.New("вызов инструмента без идентификатора")
 		}
-		tool = &chatTool{ID: data.CallID, Name: boundedToolText(data.Name, 256), Arguments: boundedToolText(data.Arguments, toolArgumentsLimit), State: "running", Turn: data.Turn}
+		tool = &chatTool{ID: data.CallID, Name: boundedToolText(data.Name, 256), Arguments: boundedToolText(data.Arguments, toolArgumentsLimit), State: "running", Turn: data.Turn, StartSeq: event.Seq}
+	case "tool/ptc-dispatch-start", "tool/ptc-dispatch":
+		var err error
+		tool, err = nestedTool(s, event)
+		if err != nil {
+			return err
+		}
 	case "tool/result":
 		id := data.Message.Source.CallID
 		if id == "" {
@@ -544,12 +550,25 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	case "turn/end":
 		for i := range s.messages {
 			previous := s.messages[i].tool
-			if previous == nil || previous.Turn != data.Turn || previous.State != "running" {
+			if previous == nil || previous.State != "running" {
+				continue
+			}
+			turn := previous.Turn
+			if previous.Nested && turn < 0 {
+				for _, candidate := range s.messages {
+					if root := candidate.tool; root != nil && !root.Nested && root.ID == previous.RootID {
+						turn = root.Turn
+						break
+					}
+				}
+			}
+			if turn >= 0 && turn != data.Turn {
 				continue
 			}
 			next := *previous
+			next.Turn = turn
 			next.State = "unknown"
-			if reason.Kind == "aborted" {
+			if reason.Kind == "aborted" && turn == data.Turn {
 				next.State = "stopped"
 			}
 			s.messages[i].tool = &next
@@ -596,9 +615,22 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	} else if len(event.SurfaceOp) > 0 || role != "" || tool != nil {
 		s.surface = append(s.surface, event.Seq)
 	}
+	removedTools := make(map[string]bool)
+	for _, message := range s.messages {
+		if message.tool != nil && removed[message.seq] {
+			removedTools[message.tool.ID] = true
+		}
+	}
+	for i := 0; i < len(s.messages); i++ {
+		for _, message := range s.messages {
+			if t := message.tool; t != nil && t.Nested && (removedTools[t.RootID] || removedTools[t.ParentID]) {
+				removedTools[t.ID] = true
+			}
+		}
+	}
 	kept := s.messages[:0]
 	for _, message := range s.messages {
-		if !removed[message.seq] && !(tool != nil && message.tool != nil && tool.ID == message.tool.ID) && !(approvalID != "" && message.approvalID == approvalID) {
+		if !removed[message.seq] && !(message.tool != nil && removedTools[message.tool.ID]) && !(tool != nil && message.tool != nil && tool.ID == message.tool.ID) && !(approvalID != "" && message.approvalID == approvalID) {
 			kept = append(kept, message)
 		}
 	}
@@ -774,16 +806,14 @@ func (m *model) chatView() string {
 		lines = append(lines, muted.Render("Показан последний фрагмент истории; полная навигация появится позже."))
 	}
 	row := strings.Count(ansi.Hardwrap(strings.Join(lines, "\n"), max(1, m.viewport.Width), true), "\n")
-	for _, message := range s.messages {
-		if message.seq <= s.clearedThrough {
-			continue
-		}
+	for _, display := range m.displayMessages() {
+		message := display.message
 		if len(lines) > 0 {
 			row++
 		}
 		part := ""
 		if message.tool != nil {
-			card := m.toolView(message.tool)
+			card := m.displayTool(message.tool, display.depth)
 			m.chatToolHits = append(m.chatToolHits, chatToolHit{id: message.tool.ID, row: row, end: row + strings.Count(ansi.Hardwrap(card, max(1, m.viewport.Width), true), "\n") + 1})
 			part = card + "\n"
 		} else {

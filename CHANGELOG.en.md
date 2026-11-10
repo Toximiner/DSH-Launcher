@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- Go preview 0.2.0-preview.17 groups nested PTC tool cards under their explicit parents with independent states, arguments, results/errors, F6 navigation, expansion, and mouse handling. Missing parents and invalid chains are labeled; reconnect restores the tree. Actual PTC integration uses a pinned official source bootstrap only in the isolated test profile because dsh 0.2.2-rc.1 npm packaging omits its worker file.
+
 - Go preview 0.2.0-preview.16 promotes a pending task to steering via F9 → Ctrl+G with explicit confirmation. dsh consumes it on the next step of the same turn without interrupting the current response; remaining tasks stay queued. Idle/stale state and observed content changes block promotion; uncertain results never retry automatically. Actual dsh with a controlled provider verifies same-turn journal events, retained FIFO work, and reconnect recovery.
 
 - Go preview 0.2.0-preview.15 adds multiline editing of pending tasks via F9 → F3. Enter inserts a line, F5 saves through the dsh API, and Esc discards the edit while preserving the chat draft. Observed conflicts, already admitted items, and stale state block saving; failed saves retain the draft without automatic retries. Actual dsh with a controlled provider verifies edited model input, FIFO order, reconnect, and the minimum 44×18 layout.

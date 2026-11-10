@@ -6,6 +6,7 @@ import re
 from pathlib import Path
 import select
 import signal
+import shutil
 import socket
 import subprocess
 import tempfile
@@ -21,7 +22,9 @@ from terminal import Terminal, wait_for
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--binary', required=True)
+parser.add_argument('--ptc-bootstrap', help='Optional official source bootstrap for the pinned npm package missing process.js')
 parser.add_argument('--dsh', required=True, help='Installed dsh 0.2.2-rc.1; Node 24.9+ must be in PATH')
+parser.add_argument('--capture-nested', help='Optional terminal-cell JSON of actual nested PTC calls')
 parser.add_argument('--capture-queue-steer', help='Optional terminal-cell JSON of actual steering confirmation')
 parser.add_argument('--capture-queue-edit', help='Optional terminal-cell JSON of an actual queue editor')
 parser.add_argument('--capture-queue-remove', help='Optional terminal-cell JSON of the queue removal confirmation')
@@ -56,6 +59,22 @@ class Model(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         try:
+            if number in (28, 30):
+                names = [entry['function']['name'] for entry in body.get('tools', [])]
+                assert names == ['run_code'], f'Actual PTC preset not selected: {names}'
+                if number == 28:
+                    code = ('const values = await Promise.allSettled(['
+                            'tools.read({file_path: ' + json.dumps(str(project / 'notes.txt')) + '}),'
+                            'tools.read({file_path: ' + json.dumps(str(project / 'missing-file.txt')) + '}),'
+                            'tools.tui_nested_wait({marker: "finish"})]); return JSON.stringify(values);')
+                else:
+                    code = 'return await tools.bash({command: "sleep 30", description: "Wait for nested call cancellation"});'
+                send({'role': 'assistant', 'tool_calls': [{'index': 0, 'id': f'nested-{number}', 'type': 'function',
+                      'function': {'name': 'run_code', 'arguments': json.dumps({'code': code, 'description': 'Read isolated files and observe nested tool lifecycle'})}}]})
+                send({}, 'tool_calls')
+                self.wfile.write(b'data: [DONE]\n\n')
+                self.wfile.flush()
+                return
             if number in (11, 13, 16):
                 names = [entry['function']['name'] for entry in body.get('tools', [])]
                 tool = next((name for name in names if name == 'ask_user_question' or name.endswith('__ask_user_question')), None)
@@ -164,7 +183,22 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
             'retryPolicy': {'mode': 'normal', 'maxRetries': 0}}}}},
         {'id': 'agent-default-model', 'config': {'provider': 'tui-fixture', 'model': 'fixture'}},
         {'id': 'session-title-llm', 'disabled': True},
+        {'insert': [{'id': 'preset-tui-ptc-test', 'name': '@deepseek-ai/dsh-agent-preset', 'config': {
+            'id': 'tui-ptc-test', 'order': 99, 'plugins': [
+                {'id': 'tool-fs', 'name': '@deepseek-ai/dsh-tool-fs', 'config': {'applyPatch': False}},
+                {'id': 'tool-bash', 'name': '@deepseek-ai/dsh-tool-bash'},
+                {'id': 'ptc-executor', 'name': '@deepseek-ai/dsh-tool-executor-ptc'},
+            ],
+        }}]},
     ]))
+    if args.ptc_bootstrap:
+        patch_file = profile / 'cordis.patch.yml'
+        patches = json.loads(patch_file.read_text())
+        patches.append({'id': 'ptc-runtime', 'config': {'launch': {
+            'kind': 'node-script', 'executable': shutil.which('node'),
+            'bootstrapPath': str(root / 'project/.ptc-bootstrap/process-entry.ts'),
+        }}})
+        patch_file.write_text(json.dumps(patches))
     # Preset plugins are data inside the preset config, not top-level loader IDs.
     # Preserve the installed standard preset verbatim except for the question mode.
     preset = (modules / '@deepseek-ai/dsh-web-app/presets/standard.patch.yml').read_text()
@@ -179,6 +213,16 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
     patch_file.write_text(''.join('- ' + json.dumps(patch) + '\n' for patch in patches) + overlay.read_text())
     project = root / 'project'
     project.mkdir()
+    if args.ptc_bootstrap:
+        bootstrap = project / '.ptc-bootstrap'
+        shutil.copytree(Path(args.ptc_bootstrap).resolve().parent, bootstrap, ignore=shutil.ignore_patterns('node_modules'))
+        dependency_dir = bootstrap / 'node_modules'
+        if dependency_dir.is_symlink(): dependency_dir.unlink()
+        dependency_dir.mkdir(exist_ok=True)
+        for name in ['@deepseek-ai/dsh-subprocess', 'acorn', 'acorn-walk', 'birpc']:
+            target = dependency_dir / name
+            target.parent.mkdir(exist_ok=True)
+            shutil.copytree(modules / name, target, dirs_exist_ok=True)
     (project / 'notes.txt').write_text('\n'.join(f'Tool output line {i:02d}' for i in range(1, 13)) + '\n')
     env = {key: value for key, value in os.environ.items()
            if key not in ('GH_TOKEN', 'GITHUB_TOKEN', 'CODESPACES_GITHUB_TOKEN', 'DSH_TUI_URL')}
@@ -579,6 +623,46 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
                     if marker in json.dumps(event['data'].get('content', '')):
                         turns[marker] = current_turn
         assert len(turns) == 3 and turns['STEER ACTIVE TASK'] == turns['STEER THIS HINT'] != turns['STEER RETAIN NEXT TASK'], f'Steering did not remain in the active turn: {turns}'
+        create_id = uuid.uuid4().hex
+        create = urllib.request.Request(origin + '/api/session/create', data=json.dumps({
+            'type': 'client-request', 'rpcId': create_id, 'method': 'session/create',
+            'payload': {'args': {'request': {'cwd': str(project), 'agentPreset': 'tui-ptc-test', 'sessionId': 'session-' + uuid.uuid4().hex}}},
+        }).encode(), headers={'Content-Type': 'application/json', 'Origin': origin})
+        with opener.open(create, timeout=10) as response:
+            created = json.load(response)
+        assert created['rpcId'] == create_id and created['result']['ok'], 'Actual PTC session could not be created'
+        nested_session = created['result']['value']['sessionId']
+        app.command('/session ' + nested_session)
+        app.wait('Сессия · ' + nested_session, timeout=20)
+        app.wait('Введите сообщение.', timeout=20)
+        app.command('Run nested file tools in the isolated PTC preset.')
+        app.wait('Внутри: run_code', timeout=25)
+        app.wait('tui_nested_wait · ◌ Выполняется', timeout=20)
+        app.wait('read · ! Ошибка', timeout=20)
+        app.send('\x1b[17~')
+        app.wait('> ▸ run_code ·')
+        previous_app, app = app, None
+        previous_app.close(root / 'before-nested-reconnect.ansi')
+        app = Terminal(str(Path(args.binary).resolve()), ['--session', nested_session], {**env, 'DSH_TUI_URL': login})
+        app.resize(120, 42)
+        app.wait('Внутри: run_code', timeout=20)
+        app.wait('tui_nested_wait · ◌ Выполняется')
+        assert len(model_calls) == 28, 'Nested call reconnect retried the program'
+        if args.capture_nested:
+            capture_cells(app, args.capture_nested)
+        (project / 'nested-release.marker').write_text('release\n')
+        app.wait('Ответ 29: проверка транспорта настоящего dsh.', timeout=25)
+        app.send('\x1b[5~' * 20)
+        app.wait('Агент: не выполняется', timeout=20)
+        app.command('Run another nested call for cancellation.')
+        app.wait('bash · ◌ Выполняется', timeout=20)
+        app.send('\x1b[19~')
+        app.wait('Выполнение остановлено.', timeout=20)
+        assert len(model_calls) == 30, 'Nested cancellation unexpectedly retried the model'
+        app.send('\x1b[6~' * 20)
+        app.wait('run_code · ■ Остановлено', timeout=20)
+        app.wait('bash · ■ Остановлено', timeout=20)
+        print('Actual dsh PTC nesting: real executor, file success/failure, running children, parent links, reconnect and cancellation OK')
         print('Actual dsh steering: explicit confirmation, next step in the same turn, retained FIFO work, reconnect without resending OK')
         print('Actual dsh queue edit: discard, multiline save, minimum layout, reconnect, changed model input and retained FIFO order OK')
         print('Actual dsh queue removal: explicit confirmation, cancellation preserves active turn and other item, reconnect and minimum layout OK')
