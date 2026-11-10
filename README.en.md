@@ -7,6 +7,8 @@
 A small Electron app: a window that opens **DeepSeek Harness**
 (`dsh web`) and manages its process along the way.
 
+Run a private live instance with actual dsh in GitHub Codespaces: [instructions](tools/live/README.md).
+
 ## Terminal version (experimental)
 
 [Open the interactive browser preview](https://toximiner.github.io/DSH-Launcher/preview/).

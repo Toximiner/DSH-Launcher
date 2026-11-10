@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ### Added
 
+- Added a private live Codespaces deployment with Node 24, actual dsh and dshmarket, native Go TUI through ttyd, font fitting, and touch navigation.
+
 - Go preview 0.2.0-preview.7 adds a marketplace TUI with catalog search, installed packages, mouse controls, and confirmed install/update/remove actions. State is reread after operations and progress comes from dshmarket. The browser has a clearly labeled sample catalog without backend writes.
 
 - Go preview 0.2.0-preview.6 adds session attachment/creation/selection, backend-confirmed agent modes, pending plan transitions, and goal commands. `--start` offers profile-local dshmarket preinstallation with skip/remember choices and user-local pnpm. Includes API, full PTY, and real dsh checks; chat text remains local.

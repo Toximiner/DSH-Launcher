@@ -301,6 +301,23 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMsg:
 		return m, m.mouse(msg)
 	case tea.KeyMsg:
+		if page, ok := map[string]int{"alt+c": chatPage, "alt+s": sessionsPage, "alt+d": dshSettingsPage, "alt+t": tuiSettingsPage, "alt+l": logPage, "alt+m": marketPage}[msg.String()]; ok {
+			m.page = page
+			m.navFocused = false
+			m.marketEditing = false
+			m.marketConfirm = nil
+			m.marketSearch.Blur()
+			m.input.Blur()
+			m.resize()
+			m.viewport.GotoTop()
+			if page == chatPage {
+				return m, m.input.Focus()
+			}
+			if page == marketPage {
+				return m, m.loadMarket()
+			}
+			return m, nil
+		}
 		if m.page == marketPage && !m.navFocused && msg.String() != "ctrl+c" && msg.String() != "ctrl+d" && msg.String() != "tab" {
 			if cmd, handled := m.marketKey(msg); handled {
 				return m, cmd

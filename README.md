@@ -7,6 +7,8 @@
 Небольшое Electron-приложение: окно, которое открывает **DeepSeek Harness**
 (`dsh web`) и ведёт его процесс заодно.
 
+Живой приватный стенд с настоящим dsh можно запустить в GitHub Codespaces: [инструкция](tools/live/README.md).
+
 ## Терминальная версия (экспериментальная)
 
 [Открыть интерактивный просмотр в браузере](https://toximiner.github.io/DSH-Launcher/preview/).

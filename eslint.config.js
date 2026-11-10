@@ -18,7 +18,7 @@ module.exports = [
     },
   },
   {
-    files: ['apps/tui-go/web/preview.js'],
+    files: ['apps/tui-go/web/preview.js', 'tools/live/terminal.js'],
     languageOptions: {
       sourceType: 'script',
       globals: { ...globals.browser, Terminal: 'readonly', FitAddon: 'readonly', Go: 'readonly', dshTui: 'readonly' },

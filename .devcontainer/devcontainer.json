@@ -1,0 +1,12 @@
+{
+  "name": "DSH live TUI",
+  "build": {"dockerfile": "Dockerfile", "context": "."},
+  "remoteUser": "node",
+  "postCreateCommand": "python3 tools/live/setup.py",
+  "postStartCommand": "python3 tools/live/start.py --daemon",
+  "forwardPorts": [7681],
+  "portsAttributes": {
+    "7681": {"label": "Live DSH TUI", "onAutoForward": "openBrowser", "protocol": "http"}
+  },
+  "customizations": {"vscode": {"settings": {"terminal.integrated.defaultProfile.linux": "bash"}}}
+}

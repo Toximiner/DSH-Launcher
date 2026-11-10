@@ -58,6 +58,20 @@ func TestPasteCannotExecuteCommand(t *testing.T) {
 	}
 }
 
+func TestPageShortcutsPreserveDraft(t *testing.T) {
+	m := newModel()
+	m.input.SetValue("unfinished draft")
+	for _, key := range []struct {
+		key  rune
+		page int
+	}{{'s', sessionsPage}, {'d', dshSettingsPage}, {'t', tuiSettingsPage}, {'l', logPage}, {'m', marketPage}, {'c', chatPage}} {
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key.key}, Alt: true})
+		if m.page != key.page || m.input.Value() != "unfinished draft" {
+			t.Fatalf("page shortcut %c lost draft or selected wrong page", key.key)
+		}
+	}
+}
+
 func TestSanitizationAndResize(t *testing.T) {
 	if got := clean("A\x1b[2JB\x1b]52;c;secret\x07\x00C"); got != "ABC" {
 		t.Fatalf("unsafe output: %q", got)

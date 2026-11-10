@@ -11,3 +11,5 @@ test/**/.work/
 .pytest_cache/
 __pycache__/
 coverage/
+
+.live-data/
