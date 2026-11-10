@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0-preview.13",
+  "source_commit": "903545fdec645d983bbae39c743b241a541c687d",
+  "stage": "queued follow-ups while streaming, server-confirmed inbox view, admission reconciliation and reconnect recovery; queue mutations and steering remain pending",
+  "sha256": {
+    "dsh-launcher-tui-go_linux_amd64": "bab4ac2574606e9381e678744958e4f4731ee9782a2aa30f15da47e4a2bac44e",
+    "dsh-launcher-tui-go_linux_arm64": "3770d7b5676ca60aae3e7d6dc700b159072d38953cc2036d807ef864520cf506"
+  }
+}
