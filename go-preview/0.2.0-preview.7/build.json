@@ -1,0 +1,9 @@
+{
+  "version": "0.2.0-preview.7",
+  "source_commit": "0da30cb187d9b65b790bb39dded28eca7c17ad80",
+  "stage": "marketplace catalog/search and confirmed install/update/remove; sessions and modes; text chat remains local",
+  "sha256": {
+    "dsh-launcher-tui-go_linux_amd64": "384ab7bfae658b09b57bb2ea36d1e2e00587233bad89fe4b8b8abf082063e10d",
+    "dsh-launcher-tui-go_linux_arm64": "02e2b8c71226745f81cbefc376ee7ee7b76d13485b4d190b476ea0c9cd543151"
+  }
+}

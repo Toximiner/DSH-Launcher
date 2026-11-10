@@ -1,6 +1,6 @@
 {
-  "source_commit": "58924df235b234a3a21842584c75ae132d0ed46e",
-  "type": "Go shared model compiled to WebAssembly; static preview",
-  "backend": "redacted demo snapshot; live sessions and marketplace require the native client",
+  "source_commit": "0da30cb187d9b65b790bb39dded28eca7c17ad80",
+  "type": "shared Go model in WebAssembly",
+  "backend": "sample settings and marketplace catalog only; no backend writes",
   "mobile": "auto-fit, zoom, touch navigation"
 }
