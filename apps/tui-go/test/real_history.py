@@ -296,7 +296,18 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-history-') as directory:
         fork_app.send('/fork\r')
         fork_app.wait('Ветвление сессии')
         fork_app.send('\r')
-        child = wait_for(lambda: next(iter(session_ids() - before_fork), None), timeout=20)
+        def fork_created():
+            # Keep both actual terminals consuming output while polling the API.
+            # Otherwise a full PTY can block a frontend before its request runs.
+            app.pump()
+            fork_app.pump()
+            assert 'Создание не подтверждено.' not in fork_app.text, fork_app.text
+            return next(iter(session_ids() - before_fork), None)
+        try:
+            child = wait_for(fork_created, timeout=20)
+        except AssertionError:
+            print('Fork terminal at failure:', fork_app.text)
+            raise
         # Discovery can expose a child while its fork request is still seeding
         # history. The dialog closes only after the creation RPC acknowledges.
         wait_for(lambda: (fork_app.pump(), 'Ветвление сессии' not in fork_app.text)[1], timeout=20)

@@ -109,7 +109,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-packages-') as directory:
         app = Terminal(str(Path(args.binary).resolve()), ['--new'], {**env, 'DSH_TUI_URL': login[0]}, columns=100, rows=30)
         app.wait('Введите сообщение.', timeout=30)
         app.command('/packages')
-        app.wait('Снимок dsh')
+        app.wait(('Управление пакетами dsh', 'Снимок dsh'), absent=('Чтение снимка dsh…',))
         app.send('\x0e')  # Ctrl+N
         app.wait('Введите npm-пакет')
         if not args.cancel_only:
@@ -171,7 +171,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-packages-') as directory:
             app.send('\x1b')
             app.wait('Введите сообщение.')
             app.command('/packages')
-            app.wait('Снимок dsh')
+            app.wait(('Управление пакетами dsh', 'Снимок dsh'), absent=('Чтение снимка dsh…',))
             app.send('\x15\x0e')
             app.wait('Введите npm-пакет')
         app.send('tui-cancel-fixture@1.0.0')

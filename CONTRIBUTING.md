@@ -36,6 +36,10 @@ The terminal app lives in `apps/tui-go` and uses Go/Bubble Tea. Run
 `go test -race ./...` and `go build` from that directory. PTY scenarios use
 `apps/tui-go/test/terminal.py` and run through `test/terminal_preview.py` with
 a built binary; install pyte in a project-local Python environment first.
+PTY assertions must consume arriving output before checking the screen, and API
+polling while a client is open must keep draining its terminal. A redraw can span
+multiple reads; an undrained PTY can block the frontend before an RPC is sent.
+When panels share status text, wait for the panel title and its ready status together.
 The `tui-go-preview` workflow checks amd64/arm64 builds, PTY behavior without Node,
 and actual dsh against a controlled local model endpoint (`apps/tui-go/test/real_chat.py`), using an isolated
 profile and no paid model calls. This includes actual file reads and the dsh

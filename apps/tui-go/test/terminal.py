@@ -49,19 +49,31 @@ class Terminal:
                                      stderr=self.slave, env=terminal_env, start_new_session=True)
 
     def pump(self):
-        if select.select([self.master], [], [], 0.03)[0]:
+        # A redraw may span several PTY reads. Drain the currently arriving
+        # output before inspecting pyte, rather than mixing a new heading with
+        # the previous frame's ready status. Bound draining for live streams.
+        deadline = time.monotonic() + 0.1
+        pause = 0.03
+        while select.select([self.master], [], [], pause)[0]:
             data = os.read(self.master, 65536)
+            if not data:
+                break
             self.raw.extend(data)
             self.stream.feed(self.decoder.decode(data))
+            if time.monotonic() >= deadline:
+                break
+            pause = 0.01
 
     @property
     def text(self):
         return '\n'.join(self.screen.display)
 
-    def wait(self, text, timeout=10):
+    def wait(self, text, timeout=10, absent=()):
+        expected = (text,) if isinstance(text, str) else tuple(text)
         def visible():
             self.pump()
-            return text in self.text
+            screen = self.text
+            return all(value in screen for value in expected) and not any(value in screen for value in absent)
         try:
             wait_for(visible, timeout)
         except AssertionError:
