@@ -10,10 +10,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"golang.org/x/term"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -118,6 +120,21 @@ func run(args []string, out io.Writer) error {
 			return err
 		}
 		defer func() { cancel(); control.Close() }()
+	}
+	if controlErr == nil {
+		port := control.config.Port
+		if *loginFlag != "" {
+			u, _ := url.Parse(*loginFlag)
+			port = 0
+			if u.Hostname() == "127.0.0.1" || u.Hostname() == "localhost" || u.Hostname() == "::1" {
+				port, _ = strconv.Atoi(u.Port())
+			}
+		}
+		if port > 0 {
+			if err := control.trackBackend(port); err != nil {
+				return err
+			}
+		}
 	}
 	if *startFlag {
 		if controlErr != nil {

@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- GUI and TUI share local dsh client leases: closing one preserves the backend for the other, and the last client stops the managed process. Signals, backend restarts, PID reuse and inherited output are handled. Both clients must be updated. Added package installation cancellation and isolated account checks.
+
 - TUI preview.38: searchable shortcut references in TUI/GUI settings; persisted light/dark theme, RU/EN and sidebar visibility; session search and stable background refresh; DeepSeek account panel; bounded image/PDF/HTML previews; declarative plugin SDK with two actual-dsh examples; package version/build controls and private durable operation receipts. CI adds package lifecycle and three clean Linux installs.
 
 - Remove the static browser/WASM TUI preview, its build job and CI artifacts; use the native Linux binary. Correct the interactive PTY environment in CI checks.

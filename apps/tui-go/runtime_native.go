@@ -32,6 +32,7 @@ type runtimeConfig struct {
 }
 type nativeRuntime struct {
 	owner            *os.File
+	clients          map[int]*backendClient
 	live             io.Writer
 	livePending      string
 	mu               sync.Mutex
@@ -222,7 +223,27 @@ func (c *nativeRuntime) Close() {
 	c.op.Lock()
 	defer c.op.Unlock()
 	c.persistLog()
-	c.stopOwned()
+	// The last client stops only a backend carrying our managed identity.
+	// Attached clients can therefore finish shutdown after the original owner exits.
+	preserve := false
+	for _, client := range c.clients {
+		if client.release() {
+			client.stopManaged()
+		} else {
+			preserve = true
+		}
+	}
+	c.clients = nil
+	if !preserve {
+		c.stopOwned()
+	} else {
+		c.mu.Lock()
+		c.stop = nil
+		c.done = nil
+		c.state.Owned = false
+		c.state.Login = ""
+		c.mu.Unlock()
+	}
 	if c.owner != nil {
 		c.owner.Close()
 		c.owner = nil
@@ -249,7 +270,24 @@ func (c *nativeRuntime) adopt(login string, stop func(), done <-chan struct{}) {
 	c.state.Login = login
 	c.mu.Unlock()
 }
+func (c *nativeRuntime) trackBackend(port int) error {
+	if c.clients == nil {
+		c.clients = make(map[int]*backendClient)
+	}
+	if c.clients[port] != nil {
+		return nil
+	}
+	client, err := joinBackend(port)
+	if err != nil {
+		return err
+	}
+	c.clients[port] = client
+	return nil
+}
 func (c *nativeRuntime) start(ctx context.Context) error {
+	if err := c.trackBackend(c.config.Port); err != nil {
+		return err
+	}
 	if c.Snapshot().Owned {
 		return errors.New(tr("свой dsh уже работает"))
 	}

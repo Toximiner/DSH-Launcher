@@ -1,5 +1,7 @@
 # TUI development roadmap
 
+GUI/TUI now share local dsh client leases: closing either client preserves the backend for the other, and the last client stops a managed backend; external dsh remains external. Actual-dsh checks cover both close orders, with additional GUI Docker scenarios on CI. Ctrl+X cancels the current package request by requestId; account profile/balance opens in a scrollable view.
+
 [Русский](README.md) | **English**
 
 Baseline: November 16, 2026, Go client `0.2.0-preview.38`.

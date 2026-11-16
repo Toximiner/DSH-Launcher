@@ -7,13 +7,16 @@ const state = require('./state');
 const { crashRestart } = require('./ui');
 const i18n = require('./i18n');
 const { tr } = i18n;
-const { DSH_ARGS, CWD, LOG_DIR, LOG_FILE } = require('./env');
+const { DSH_ARGS, CWD, LOG_DIR, LOG_FILE, PORT } = require('./env');
 const { rotateLog, openDshLog } = require('./log');
 const { dshEnv } = require('./dsh-install');
 const { sleep, pushErr, portOpen } = require('./port'); // pure module — direct require, no registry
 const launch = require('./launch');
 const pages = require('./pages');
 const updatesLive = require('./updates-live');
+const { rememberBackend } = require('./backend-clients');
+const { portListenerPid } = require('./system');
+const os = require('os');
 const launcher = require('./launcher'); // shared registry (populated by main.js)
 
 /* ---------------- launch of the dsh process ---------------- */
@@ -38,10 +41,17 @@ function startDsh() {
   const logStream = openDshLog(LOG_FILE);
   state.authUrl = null; // token of the previous process is no longer valid — waiting for a new one
   console.log(`[launcher] starting: ${state.dshBin} ${DSH_ARGS.join(' ')} (cwd=${CWD}, log=${LOG_FILE})`);
+  // A regular inherited descriptor survives the frontend that launched dsh.
+  // Keep the rotating public log, but read the child output from a private spool.
+  const spoolDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-backend-'));
+  const spoolPath = path.join(spoolDir, 'output');
+  const spool = fs.openSync(spoolPath, 'w+', 0o600);
+  fs.unlinkSync(spoolPath);
+  fs.rmdirSync(spoolDir);
   const opts = {
     cwd: CWD,
     env: dshEnv({ DSH_STARTED_BY: 'dsh-launcher' }),
-    stdio: ['ignore', 'pipe', 'pipe'],
+    stdio: ['ignore', spool, spool],
     detached: true, // dsh becomes the leader of its own process group — the whole tree can be killed
   };
   // Via bash (spawnClean) spawn would not return a "no such program" error —
@@ -53,31 +63,44 @@ function startDsh() {
   state.adoptedDsh = false; // our own process again — no "adopted" one left
   state.adoptedOldPgid = null;
   state.dshFatal = false;
-  state.dshProc.stdout.on('data', (d) => {
-    for (const line of d.toString().split('\n')) {
-      if (!line.trim()) continue;
-      console.log('[dsh]', line.trim());
-      logStream.write(line + '\n');
-      const m = /dsh web:\s*(https?:\/\/\S+)/.exec(line) ||
-                /(https?:\/\/[^\s]*\?token=[^\s&]+)/.exec(line);
-      if (m) {
-        console.log('[launcher] captured auth URL');
-        state.authUrl = m[1];
+  let offset = 0;
+  let pending = '';
+  const pollOutput = () => {
+    const buffer = Buffer.alloc(32768);
+    let n;
+    while ((n = fs.readSync(spool, buffer, 0, buffer.length, offset)) > 0) {
+      offset += n;
+      pending += buffer.subarray(0, n).toString();
+      let at;
+      while ((at = pending.indexOf('\n')) >= 0) {
+        const line = pending.slice(0, at);
+        pending = pending.slice(at + 1);
+        if (!line.trim()) continue;
+        logStream.write(line + '\n');
+        pushErr(line);
+        const m = /dsh web:\s*(https?:\/\/\S+)/.exec(line) || /(https?:\/\/[^\s]*\?token=[^\s&]+)/.exec(line);
+        if (m) state.authUrl = m[1];
       }
+      if (pending.length > 1048576) pending = pending.slice(-1048576);
     }
-  });
-  state.dshProc.stderr.on('data', (d) => {
-    for (const line of d.toString().split('\n')) {
-      pushErr(line);
-      logStream.write(line + '\n');
-    }
+  };
+  const outputTimer = setInterval(pollOutput, 50);
+  outputTimer.unref();
+  state.dshProc.once('spawn', () => {
+    try { rememberBackend(PORT, proc.pid); }
+    catch (err) { pushErr(err.message); }
   });
   state.dshProc.on('error', (err) => {
+    clearInterval(outputTimer);
+    fs.closeSync(spool);
+    logStream.end();
     state.dshFatal = true;
     pushErr(tr(`ошибка запуска dsh: ${err.message}`, `failed to start dsh: ${err.message}`));
   });
   const proc = state.dshProc;
   state.dshProc.on('exit', (code, signal) => {
+    clearInterval(outputTimer);
+    try { pollOutput(); fs.closeSync(spool); } catch { /* noop */ }
     try { logStream.end(); } catch { /* noop */ }
     if (proc !== state.dshProc || state.restartingDsh) { // stopped by "Restart dsh" — that is not a crash
       console.log('[launcher] прежний процесс dsh завершился (перезапуск):', { code, signal });
@@ -119,6 +142,8 @@ async function handleDshExit(code, signal) {
     while (!up && Date.now() < deadline) { await sleep(500); up = await portOpen(); }
     if (up && !state.stopping && state.win && !state.win.isDestroyed()) {
       console.log('[launcher] порт снова открыт — dsh перезапустился сам, перехожу в режим подключения');
+      const pid = portListenerPid(PORT);
+      if (pid) rememberBackend(PORT, pid, state.dshProc?.pid);
       state.weStartedDsh = false; // the new process is not our child (we hold no handles on it)
       state.adoptedDsh = true;    // but it is the same dsh of this session — we will stop it on window close
       if (state.dshProc && state.dshProc.pid !== undefined) state.adoptedOldPgid = state.dshProc.pid;

@@ -21,8 +21,11 @@ from terminal import Terminal, wait_for
 parser = argparse.ArgumentParser()
 parser.add_argument('--binary', required=True)
 parser.add_argument('--dsh', required=True)
+parser.add_argument('--cancel-only', action='store_true')
 args = parser.parse_args()
 
+cancel_started = threading.Event()
+cancel_release = threading.Event()
 manifests = {}
 tarballs = {}
 for version in ['1.0.0', '1.1.0', '1.2.0', '2.0.0']:
@@ -43,7 +46,16 @@ class Registry(BaseHTTPRequestHandler):
         pass
     def do_GET(self):
         route = urllib.parse.urlsplit(self.path).path
-        if route.endswith('.tgz'):
+        if route == '/cancel/1.0.0.tgz':
+            cancel_started.set()
+            cancel_release.wait(timeout=30)
+            return
+        if route == '/tui-cancel-fixture':
+            manifest = {**manifests['1.0.0'], 'name': 'tui-cancel-fixture', 'dist': {
+                'tarball': f'http://127.0.0.1:{self.server.server_port}/cancel/1.0.0.tgz'}}
+            data = json.dumps({'name': 'tui-cancel-fixture', 'dist-tags': {'latest': '1.0.0'},
+                               'versions': {'1.0.0': manifest}, 'time': {'1.0.0': '2020-01-01T00:00:00.000Z'}}).encode()
+        elif route.endswith('.tgz'):
             version = route.rsplit('/', 1)[-1][:-4]
             data = tarballs.get(version)
         elif route == '/tui-lifecycle-fixture':
@@ -100,62 +112,79 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-packages-') as directory:
         app.wait('Снимок dsh')
         app.send('\x0e')  # Ctrl+N
         app.wait('Введите npm-пакет')
-        app.send('tui-lifecycle-fixture@1.0.0')
-        app.send('\x1b[15~')  # F5
-        app.wait('Enter — подтвердить')
-        app.send('\r')
-        app.wait('Применение:', timeout=90)
-        assert 'failed' not in app.text, app.text
+        if not args.cancel_only:
+            app.send('tui-lifecycle-fixture@1.0.0')
+            app.send('\x1b[15~')  # F5
+            app.wait('Enter — подтвердить')
+            app.send('\r')
+            app.wait('Применение:', timeout=90)
+            assert 'failed' not in app.text, app.text
+            app.send('\x1b[15~')
+            app.wait('Снимок dsh')
+            app.send('tui-lifecycle-fixture')
+            app.wait('tui-lifecycle-fixture · 1.0.0')
+            app.send('\x1b[17~')  # F6
+            app.wait('Версии пакета')
+            app.wait('1.1.0')
+            app.wait('2.0.0 · несовместима')
+            # The list is newest first. Refuse the incompatible target, then choose 1.1.0.
+            app.send('\r')
+            app.wait('Выбранная версия несовместима')
+            app.send('\x1b[B\x1b[B\r')
+            app.wait('Enter — подтвердить')
+            app.send('\r')
+            app.wait('Применение:', timeout=90)
+            assert 'failed' not in app.text, app.text
+            app.send('\x1b')
+            app.wait('Снимок dsh')
+            app.send('tui-lifecycle-fixture')
+            app.wait('tui-lifecycle-fixture · 1.1.0')
+            app.send('\x1b[17~')
+            app.wait('Версии пакета')
+            app.wait('1.2.0')
+            app.send('\x1b[B\r')
+            app.wait('Enter — подтвердить')
+            app.send('\r')
+            app.wait('Применение: failed', timeout=180)
+            app.send('\x1b')
+            app.wait('Снимок dsh')
+            app.send('tui-lifecycle-fixture')
+            app.wait('tui-lifecycle-fixture · 1.1.0')
+            app.send('\x1b')
+            app.wait('Введите сообщение.')
+            app.command('/operations')
+            app.wait('Журнал операций пакетов')
+            app.wait('confirmed')
+            receipts = list((root / 'data/dsh-launcher-tui/package-operations').glob('*.json'))
+            assert len(receipts) == 3
+            assert all(json.loads(p.read_text())['State'] == 'confirmed' for p in receipts)
+            assert all(p.stat().st_mode & 0o777 == 0o600 for p in receipts)
+            app.send('\x04')
+            app.exited()
+            app = Terminal(str(Path(args.binary).resolve()), [], {**env, 'DSH_TUI_URL': login[0]}, columns=100, rows=30)
+            app.wait('Новый разговор')
+            app.command('/new')
+            app.wait('Введите сообщение.')
+            app.command('/operations')
+            app.wait('Журнал операций пакетов')
+            app.wait('confirmed')
+            app.send('\x1b')
+            app.wait('Введите сообщение.')
+            app.command('/packages')
+            app.wait('Снимок dsh')
+            app.send('\x15\x0e')
+            app.wait('Введите npm-пакет')
+        app.send('tui-cancel-fixture@1.0.0')
         app.send('\x1b[15~')
-        app.wait('Снимок dsh')
-        app.send('tui-lifecycle-fixture')
-        app.wait('tui-lifecycle-fixture · 1.0.0')
-        app.send('\x1b[17~')  # F6
-        app.wait('Версии пакета')
-        app.wait('1.1.0')
-        app.wait('2.0.0 · несовместима')
-        # The list is newest first. Refuse the incompatible target, then choose 1.1.0.
-        app.send('\r')
-        app.wait('Выбранная версия несовместима')
-        app.send('\x1b[B\x1b[B\r')
         app.wait('Enter — подтвердить')
         app.send('\r')
-        app.wait('Применение:', timeout=90)
-        assert 'failed' not in app.text, app.text
-        app.send('\x1b')
-        app.wait('Снимок dsh')
-        app.send('tui-lifecycle-fixture')
-        app.wait('tui-lifecycle-fixture · 1.1.0')
-        app.send('\x1b[17~')
-        app.wait('Версии пакета')
-        app.wait('1.2.0')
-        app.send('\x1b[B\r')
-        app.wait('Enter — подтвердить')
-        app.send('\r')
-        app.wait('Применение: failed', timeout=180)
-        app.send('\x1b')
-        app.wait('Снимок dsh')
-        app.send('tui-lifecycle-fixture')
-        app.wait('tui-lifecycle-fixture · 1.1.0')
-        app.send('\x1b')
-        app.wait('Введите сообщение.')
-        app.command('/operations')
-        app.wait('Журнал операций пакетов')
-        app.wait('confirmed')
-        receipts = list((root / 'data/dsh-launcher-tui/package-operations').glob('*.json'))
-        assert len(receipts) == 3
-        assert all(json.loads(p.read_text())['State'] == 'confirmed' for p in receipts)
-        assert all(p.stat().st_mode & 0o777 == 0o600 for p in receipts)
-        app.send('\x04')
-        app.exited()
-        app = Terminal(str(Path(args.binary).resolve()), [], {**env, 'DSH_TUI_URL': login[0]}, columns=100, rows=30)
-        app.wait('Новый разговор')
-        app.command('/new')
-        app.wait('Введите сообщение.')
-        app.command('/operations')
-        app.wait('Журнал операций пакетов')
-        app.wait('confirmed')
-        print('Actual dsh/pnpm: isolated registry install, compatible update, incompatible refusal and private durable receipts OK')
+        wait_for(cancel_started.is_set, timeout=30)
+        app.send('\x18')  # Ctrl+X cancels the named package request.
+        app.wait('Применение: cancelled', timeout=30)
+        assert 'tui-cancel-fixture' not in json.loads((profile / 'package.json').read_text()).get('dependencies', {})
+        cancel_release.set()
+        print('Actual dsh/pnpm: explicit cancellation OK' if args.cancel_only else
+              'Actual dsh/pnpm: install, compatible update, incompatible refusal, restoration, private receipts and cancellation OK')
     except BaseException:
         print('Backend tail:', ''.join(logs)[-3000:])
         for log in profile.rglob('*.log'):
@@ -174,4 +203,5 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-packages-') as directory:
             except subprocess.TimeoutExpired:
                 os.killpg(backend.pid, signal.SIGKILL)
                 backend.wait(timeout=10)
+        cancel_release.set()
         registry.shutdown()

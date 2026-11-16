@@ -4,9 +4,11 @@
 // cannot be caught — in that case dsh will outlive it (this is a limitation
 // of the detached process, fixable only system-wide — cgroup/supervisor).
 const state = require('./state');
-const { killGroup, dshLeaderExited, adoptedTargets } = require('./dsh-stop');
+const { killGroup, dshLeaderExited, adoptedTargets, mayStopBackendOnExit } = require('./dsh-stop');
 
 function killDshNow() {
+  if (!mayStopBackendOnExit()) return;
+  for (const group of state.backendClient?.targets() || []) killGroup(group, 'SIGKILL', true);
   if (state.weStartedDsh && state.dshProc && state.dshProc.pid !== undefined && !state.dshFatal) {
     killGroup(state.dshProc.pid, 'SIGKILL', dshLeaderExited());
   }

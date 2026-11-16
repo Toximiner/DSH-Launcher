@@ -274,6 +274,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case composeUpload:
 		m.handleComposeUpload(msg)
 		return m, nil
+	case packageCancelResult:
+		m.handlePackageCancel(msg)
+		return m, nil
 	case benchTerminalDone:
 		if m.workbench != nil {
 			m.workbench.note = tr("Терминал отключён. Ввод не повторяется; F5 — перечитать.")

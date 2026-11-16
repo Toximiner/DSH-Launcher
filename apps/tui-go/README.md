@@ -3,6 +3,17 @@
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
 
+## Shared GUI/TUI backend lifetime
+
+Updated GUI and TUI clients record their local backend port and Linux process
+identity in `${XDG_DATA_HOME:-~/.local/share}/dsh-launcher/backends`. Closing either
+client (including SIGTERM/SIGHUP) preserves dsh while the other client is alive.
+The last client stops the backend started by either launcher. Stale client PIDs
+are ignored; PID start ticks prevent signalling reused PIDs. A manually started
+dsh without a launcher ownership record remains external and is left running.
+Both frontends must include this change and use the same user/data directory.
+Explicit Stop/Restart dsh actions remain explicit process operations.
+
 ## Installation, updates and diagnostics (preview.37)
 
 - `/runtime` (also File → dsh): Node/dsh discovery, user-local npm installation

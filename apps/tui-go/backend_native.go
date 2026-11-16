@@ -235,13 +235,49 @@ func startBackendLogged(ctx context.Context, options backendOptions, env []strin
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	ready := make(chan string, 1)
 	writer := &backendLogWriter{out: out, port: options.Port, ready: ready}
-	command.Stdout = writer
-	command.Stderr = writer
+	// The child owns a regular file descriptor, so exiting this client cannot
+	// break a stdout pipe while another frontend still uses the backend.
+	spool, err := os.CreateTemp("", "dsh-backend-*.log")
+	if err != nil {
+		return "", nil, nil, err
+	}
+	defer os.Remove(spool.Name())
+	command.Stdout = spool
+	command.Stderr = spool
 	if err := command.Start(); err != nil {
+		spool.Close()
 		return "", nil, nil, errors.New(tr("не удалось запустить dsh; проверьте путь и Node.js 24.9+"))
 	}
 	done := make(chan struct{})
 	go func() { command.Wait(); close(done) }()
+	go func() {
+		defer spool.Close()
+		var offset int64
+		buffer := make([]byte, 32<<10)
+		poll := func() {
+			for {
+				n, _ := spool.ReadAt(buffer, offset)
+				if n == 0 {
+					return
+				}
+				offset += int64(n)
+				writer.Write(buffer[:n])
+			}
+		}
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				poll()
+			case <-done:
+				poll()
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 	var once sync.Once
 	stop := func() {
 		once.Do(func() {
@@ -259,6 +295,10 @@ func startBackendLogged(ctx context.Context, options backendOptions, env []strin
 				<-done
 			}
 		})
+	}
+	if err := rememberBackend(options.Port, command.Process.Pid); err != nil {
+		stop()
+		return "", nil, nil, err
 	}
 	select {
 	case value := <-ready:

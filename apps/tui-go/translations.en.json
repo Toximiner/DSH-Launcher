@@ -1181,5 +1181,13 @@
   "Разрешить названные скрипты / версии": "Approve named scripts / list versions",
   "Вход / выход / отмена входа / профиль": "Sign in / sign out / cancel sign-in / profile",
   "Правка / логическое поле / вариант": "Edit / boolean field / option",
-  "Декларативная панель плагина": "Declarative plugin panel"
+  "Декларативная панель плагина": "Declarative plugin panel",
+  "Отмена не подтверждена; ожидаем итог операции.": "Cancellation unconfirmed; waiting for the operation outcome.",
+  "Установка отменена; ожидаем итог и восстановление состояния.": "Installation cancelled; waiting for the outcome and restored state.",
+  "Пакет уже применяется; отмена недоступна.": "The package is being applied; cancellation is unavailable.",
+  "Активная установка не найдена; ожидаем итог операции.": "No active installation found; waiting for the outcome.",
+  " · Ctrl+X — отменить установку": " · Ctrl+X — cancel installation",
+  "Отмена запрошена; ожидаем ответ dsh…": "Cancellation requested; waiting for dsh…",
+  "Отменить текущую установку пакета": "Cancel the current package installation",
+  "Установка пакетов": "Package installation"
 }

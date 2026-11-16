@@ -31,6 +31,9 @@ type workbench struct {
 	pendingBuilds                            []string
 	pendingSpec                              string
 	pluginPanel                              *pluginPanel
+	packageRequestID                         string
+	cancelRequested                          bool
+	cancelStatus                             string
 	documentOwner                            string
 	fileBody                                 string
 	ctx                                      context.Context
@@ -375,6 +378,8 @@ func (m *model) handleBench(result benchResult) tea.Cmd {
 	}
 	writing := d.writing
 	d.busy, d.writing = false, false
+	d.packageRequestID = ""
+	d.cancelRequested = false
 	if result.err != nil {
 		d.note = result.err.Error()
 		d.blocked = true
@@ -402,8 +407,14 @@ func (m *model) handleBench(result benchResult) tea.Cmd {
 			d.blocked = false
 			d.note = tr("Панель плагина загружена.")
 		}
-		if d.kind == "account" && result.feedback == "" {
-			return m.loadWorkbench()
+		if d.kind == "account" {
+			if result.feedback == "" {
+				return m.loadWorkbench()
+			}
+			d.document = "account-details"
+			d.fileBody = result.feedback
+			d.view.GotoTop()
+			d.note = tr("Снимок dsh · F5 обновить · Esc назад")
 		}
 		return nil
 	}
@@ -413,7 +424,7 @@ func (m *model) handleBench(result benchResult) tea.Cmd {
 	d.blocked = false
 	d.action = nil
 	d.confirm = false
-	if (d.kind == "files" || d.kind == "jobs" || d.kind == "schedules") && d.document != "" {
+	if (d.kind == "files" || d.kind == "jobs" || d.kind == "schedules" || d.kind == "account") && d.document != "" {
 		d.fileBody = result.document
 		d.view.SetContent(ansi.Hardwrap(clean(result.document), max(1, d.view.Width), true))
 	} else if d.kind == "presets" {
@@ -431,6 +442,9 @@ func (m *model) benchExecute() tea.Cmd {
 		return nil
 	}
 	action := *d.action
+	d.packageRequestID = stringValue(objectValue(action.Args["options"]), "requestId")
+	d.cancelRequested = false
+	d.cancelStatus = ""
 	d.busy, d.writing = true, true
 	d.serial++
 	serial, login := d.serial, m.settingsLogin
@@ -827,6 +841,9 @@ func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, true
 	}
 	if d.busy {
+		if !msg.Paste && msg.Type == tea.KeyCtrlX && d.packageRequestID != "" {
+			return m.cancelPackageOperation(), true
+		}
 		if msg.Type == tea.KeyEsc && !d.writing {
 			return m.closeWorkbench(), true
 		}
@@ -920,6 +937,11 @@ func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if !msg.Paste {
 		switch msg.Type {
 		case tea.KeyEsc, tea.KeyLeft:
+			if d.kind == "account" && d.document != "" {
+				d.document = ""
+				d.lastResult = ""
+				return m.loadWorkbench(), true
+			}
 			if d.kind == "package-versions" {
 				d.kind = "packages"
 				d.location = ""
@@ -944,6 +966,10 @@ func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			}
 			return m.closeWorkbench(), true
 		case tea.KeyF5:
+			if d.kind == "account" {
+				d.document = ""
+				d.lastResult = ""
+			}
 			return m.loadWorkbench(), true
 		case tea.KeyF2:
 			if d.kind == "packages" && len(d.pendingBuilds) > 0 && d.pendingSpec != "" {
@@ -1046,7 +1072,7 @@ func (m *model) benchView(base string) string {
 		d.editor.SetWidth(w)
 		d.editor.SetHeight(max(1, h))
 		lines = append(lines, strings.Split(d.editor.View(), "\n")...)
-	} else if (d.kind == "files" || d.kind == "jobs" || d.kind == "schedules") && d.document != "" {
+	} else if (d.kind == "files" || d.kind == "jobs" || d.kind == "schedules" || d.kind == "account") && d.document != "" {
 		d.view.Width = w
 		d.view.Height = h
 		body := clean(d.fileBody)
@@ -1084,6 +1110,15 @@ func (m *model) benchView(base string) string {
 	note := d.note
 	if d.busy {
 		note = tr("Запрос dsh…")
+		if d.packageRequestID != "" {
+			note += tr(" · Ctrl+X — отменить установку")
+		}
+		if d.cancelRequested {
+			note = tr("Отмена запрошена; ожидаем ответ dsh…")
+		}
+		if d.cancelStatus != "" {
+			note = d.cancelStatus
+		}
 	}
 	notes := strings.Split(ansi.Hardwrap(clean(note), w, true), "\n")
 	for len(notes) < 3 {

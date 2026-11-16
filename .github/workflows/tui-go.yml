@@ -3,11 +3,11 @@ name: tui-go-preview
 on:
   pull_request:
     branches: [main]
-    paths: ['apps/tui-go/**', 'packages/tui-plugin-sdk/**', '.github/workflows/tui-go.yml']
+    paths: ['apps/tui-go/**', 'packages/tui-plugin-sdk/**', 'src/backend-clients.js', 'src/dsh-process.js', 'src/dsh-stop.js', 'src/signals.js', '.github/workflows/tui-go.yml']
   push:
     branches: [main]
     tags: ['tui-v*']
-    paths: ['apps/tui-go/**', 'packages/tui-plugin-sdk/**', '.github/workflows/tui-go.yml']
+    paths: ['apps/tui-go/**', 'packages/tui-plugin-sdk/**', 'src/backend-clients.js', 'src/dsh-process.js', 'src/dsh-stop.js', 'src/signals.js', '.github/workflows/tui-go.yml']
   workflow_dispatch:
 
 permissions:
@@ -75,7 +75,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [chat, history, settings, goals, workbench, background, runtime, packages]
+        suite: [chat, history, settings, goals, workbench, background, runtime, packages, account, clients]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
