@@ -1,12 +1,34 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
+
+const minTerminalWidth = 80
+const minTerminalHeight = 24
+
+func (m *model) terminalFits() bool {
+	return m.width >= minTerminalWidth && m.height >= minTerminalHeight
+}
+
+func (m *model) terminalSizeNotice() string {
+	if m.width <= 0 || m.height <= 0 {
+		return ""
+	}
+	lines := []string{fmt.Sprintf("Увеличьте терминал: минимум %d×%d.", minTerminalWidth, minTerminalHeight), fmt.Sprintf("Сейчас: %d×%d.", m.width, m.height), "Ctrl+D — выход · F8 — остановить агента."}
+	if len(lines) > m.height {
+		lines = lines[:m.height]
+	}
+	for i := range lines {
+		lines[i] = ansi.Truncate(lines[i], max(1, m.width-1), "…")
+	}
+	return strings.Join(lines, "\n")
+}
 
 var (
 	accent  = lipgloss.NewStyle().Foreground(lipgloss.Color("#58a6ff"))
@@ -72,8 +94,8 @@ func (m *model) sidebar(height int) string {
 }
 
 func (m *model) View() string {
-	if m.width < 44 || m.height < 18 {
-		return "Увеличьте терминал (от 44×18). Ctrl+D — выход."
+	if !m.terminalFits() {
+		return m.terminalSizeNotice()
 	}
 	width := m.width - 1
 	w, bodyHeight := m.contentSize()
@@ -105,7 +127,11 @@ func (m *model) View() string {
 	if m.page == 0 {
 		title = "Новый разговор"
 		if m.session != nil {
-			title = "Сессия · " + ansi.Truncate(clean(m.session.ID), max(1, w-15), "…")
+			name := m.session.Title
+			if name == "" {
+				name = m.session.ID
+			}
+			title = "Сессия · " + ansi.Truncate(clean(name), max(1, w-15), "…")
 		}
 	}
 	view := heading.Render(title) + "\n" + muted.Render(strings.Repeat("─", m.viewport.Width)) + "\n" + m.viewport.View()
@@ -125,11 +151,14 @@ func (m *model) View() string {
 		body = lipgloss.JoinHorizontal(lipgloss.Top, m.sidebar(bodyHeight), " ", right)
 	}
 	hints := "F10 меню · Tab разделы · Esc чат"
+	if m.page == chatPage && m.session != nil {
+		hints = "F11 история · F10 меню · Tab разделы"
+	}
 	if m.page == dshSettingsPage && m.settingsLogin != "" {
 		hints = "←/→ раздел · r обновить · PgUp/PgDn"
 	}
 	if m.page == chatPage && len(m.toolIDs()) > 0 {
-		hints = "F6 инструменты · Enter раскрыть · Esc ввод"
+		hints = "F11 история · F6 инструменты · Enter детали"
 	}
 	if m.approvals != nil && len(m.approvals.requests) > 0 {
 		hints = "F7 запросы · F8 остановить агента"
@@ -138,7 +167,7 @@ func (m *model) View() string {
 		hints = "F9 очередь · F8 остановить задачу"
 	}
 	footer := bar(muted.Render(hints), muted.Render("Ctrl+D выход"), width)
-	return m.approvalView(m.queueDialogView(m.chromeView(header + "\n" + body + "\n" + footer)))
+	return m.approvalView(m.queueDialogView(m.archiveView(m.forkView(m.renameView(m.chromeView(m.historyView(header + "\n" + body + "\n" + footer)))))))
 }
 
 func (m *model) modeControls() string {

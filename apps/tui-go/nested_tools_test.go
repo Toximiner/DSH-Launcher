@@ -84,7 +84,7 @@ func TestNestedToolsDoNotInventOrLoopMissingRelationships(t *testing.T) {
 	}
 }
 func TestNestedToolsKeyboardMouseAndSmallScreens(t *testing.T) {
-	for _, size := range [][2]int{{120, 42}, {80, 24}, {44, 18}} {
+	for _, size := range [][2]int{{120, 42}, {100, 30}, {80, 24}} {
 		m := chatModel(t)
 		applyChat(t, m, `{"type":"snapshot","header":{"id":"s"},"cursor":-1}`)
 		toolEvent(t, m, 0, "tool/call", toolCall("root", "run_code", 1))

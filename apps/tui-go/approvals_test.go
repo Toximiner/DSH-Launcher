@@ -110,11 +110,11 @@ func TestApprovalUnknownAnswerNeverAutomaticallyRetries(t *testing.T) {
 	}
 }
 func TestApprovalLayoutAndMouseAtMinimumSize(t *testing.T) {
-	for _, width := range []int{100, 44} {
+	for _, width := range []int{100, 80} {
 		m := approvalModel(t)
 		requestApproval(m, "one", "s")
 		m.approvals.requests[0].Request.Reason = strings.Repeat("detailed reason line\n", 40) + "last reason line"
-		m.Update(tea.WindowSizeMsg{Width: width, Height: 18})
+		m.Update(tea.WindowSizeMsg{Width: width, Height: 24})
 		view := strings.Split(clean(m.View()), "\n")
 		box := m.approvalBox()
 		row := box.y + box.height - 4

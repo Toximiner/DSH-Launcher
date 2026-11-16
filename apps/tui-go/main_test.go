@@ -128,7 +128,7 @@ func TestPanelsFitTerminal(t *testing.T) {
 	m.settingsLogin = "http://localhost/?token=test"
 	m.settings = &settingsSnapshot{Namespaces: []settingsNamespace{{NS: "namespace", Value: map[string]any{"long-field": strings.Repeat("Текст 世界 ", 20)}}}}
 	enter(m, "Длинное сообщение с русским текстом и 世界, которое должно переноситься внутри панели разговора.")
-	for _, size := range []tea.WindowSizeMsg{{Width: 100, Height: 30}, {Width: 80, Height: 24}, {Width: 60, Height: 20}, {Width: 44, Height: 18}} {
+	for _, size := range []tea.WindowSizeMsg{{Width: 120, Height: 42}, {Width: 100, Height: 30}, {Width: 80, Height: 24}} {
 		m.Update(size)
 		for page := range pages {
 			m.page = page
@@ -143,5 +143,37 @@ func TestPanelsFitTerminal(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestUndersizedTerminalPreservesDraftAndBlocksHiddenActions(t *testing.T) {
+	m := newModel()
+	m.input.SetValue("preserved draft")
+	dialog := &sessionFork{id: "source", focused: true}
+	m.forkDialog = dialog
+	for _, size := range []tea.WindowSizeMsg{{Width: 79, Height: 24}, {Width: 80, Height: 23}, {Width: 44, Height: 18}, {Width: 1, Height: 1}} {
+		m.Update(size)
+		view := m.View()
+		if lipgloss.Width(view) > max(1, size.Width-1) || lipgloss.Height(view) > size.Height {
+			t.Fatal("size notice overflowed terminal")
+		}
+		m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("hidden text")})
+		m.Update(tea.KeyMsg{Type: tea.KeyTab})
+		if dialog.attempted || m.input.Value() != "preserved draft" || m.navFocused {
+			t.Fatal("undersized terminal acted on hidden input")
+		}
+	}
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	if strings.Contains(m.View(), "Увеличьте терминал") || m.forkDialog != dialog {
+		t.Fatal("minimum layout did not resume preserved dialog")
+	}
+	m.Update(tea.WindowSizeMsg{Width: 79, Height: 24})
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	if cmd == nil {
+		t.Fatal("exit unavailable in undersized terminal")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("undersized terminal did not quit")
 	}
 }

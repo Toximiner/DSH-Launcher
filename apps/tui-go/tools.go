@@ -93,12 +93,23 @@ func (m *model) toolViewWidth(t *chatTool, width int) string {
 	if t.ErrorCode != "" {
 		lines = append(lines, "Код ошибки: "+t.ErrorCode)
 	}
-	if t.Result != "" {
-		result := t.Result
+	result := t.Result
+	if t.State == "running" {
+		var notice string
+		result, notice = m.liveToolOutput(t)
+		if notice != "" {
+			lines = append(lines, muted.Render(notice))
+		}
+	}
+	if result != "" {
 		if !m.chat.expandedTools[t.ID] {
-			wrapped := strings.Split(ansi.Hardwrap(result, max(1, width), true), "\n")
+			wrapped := strings.Split(ansi.Hardwrap(strings.TrimRight(result, "\n"), max(1, width), true), "\n")
 			if len(wrapped) > 3 {
-				result = strings.Join(wrapped[:3], "\n") + "\n… [Раскрыть]"
+				if t.State == "running" {
+					result = "… [Раскрыть]\n" + strings.Join(wrapped[len(wrapped)-3:], "\n")
+				} else {
+					result = strings.Join(wrapped[:3], "\n") + "\n… [Раскрыть]"
+				}
 			}
 		}
 		lines = append(lines, result)

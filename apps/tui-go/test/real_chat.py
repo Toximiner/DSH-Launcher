@@ -25,6 +25,7 @@ parser.add_argument('--binary', required=True)
 parser.add_argument('--ptc-bootstrap', help='Optional official source bootstrap for the pinned npm package missing process.js')
 parser.add_argument('--dsh', required=True, help='Installed dsh 0.2.2-rc.1; Node 24.9+ must be in PATH')
 parser.add_argument('--capture-nested', help='Optional terminal-cell JSON of actual nested PTC calls')
+parser.add_argument('--capture-stdout', help='Optional terminal-cell JSON of live command output')
 parser.add_argument('--capture-queue-steer', help='Optional terminal-cell JSON of actual steering confirmation')
 parser.add_argument('--capture-queue-edit', help='Optional terminal-cell JSON of an actual queue editor')
 parser.add_argument('--capture-queue-remove', help='Optional terminal-cell JSON of the queue removal confirmation')
@@ -59,7 +60,7 @@ class Model(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         try:
-            if number in (28, 30):
+            if number in (28, 30, 31, 33):
                 names = [entry['function']['name'] for entry in body.get('tools', [])]
                 assert names == ['run_code'], f'Actual PTC preset not selected: {names}'
                 if number == 28:
@@ -67,8 +68,12 @@ class Model(BaseHTTPRequestHandler):
                             'tools.read({file_path: ' + json.dumps(str(project / 'notes.txt')) + '}),'
                             'tools.read({file_path: ' + json.dumps(str(project / 'missing-file.txt')) + '}),'
                             'tools.tui_nested_wait({marker: "finish"})]); return JSON.stringify(values);')
-                else:
+                elif number == 30:
                     code = 'return await tools.bash({command: "sleep 30", description: "Wait for nested call cancellation"});'
+                else:
+                    command = ('printf "LIVE STDOUT FIRST\\n"; printf "LIVE STDERR SECOND\\n" >&2; '
+                               'while [ ! -f stdout-release.marker ]; do sleep 0.1; done; printf "LIVE FINAL OUTPUT\\n"') if number == 31 else 'printf "LIVE BEFORE CANCEL\\n"; sleep 30'
+                    code = 'return await tools.bash(' + json.dumps({'command': command, 'description': 'Observe actual incremental command output', 'timeoutMs': 60000}) + ');'
                 send({'role': 'assistant', 'tool_calls': [{'index': 0, 'id': f'nested-{number}', 'type': 'function',
                       'function': {'name': 'run_code', 'arguments': json.dumps({'code': code, 'description': 'Read isolated files and observe nested tool lifecycle'})}}]})
                 send({}, 'tool_calls')
@@ -142,7 +147,7 @@ def capture_cells(app, path):
     # Resizing can deliver a valid modal before the final screen rows arrive.
     def fully_painted():
         app.pump()
-        return "Ctrl+D" in app.screen.display[-1]
+        return any("Ctrl+D" in line for line in app.screen.display[-2:])
     wait_for(fully_painted)
     cells = []
     for y in range(app.screen.lines):
@@ -187,6 +192,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
             'id': 'tui-ptc-test', 'order': 99, 'plugins': [
                 {'id': 'tool-fs', 'name': '@deepseek-ai/dsh-tool-fs', 'config': {'applyPatch': False}},
                 {'id': 'tool-bash', 'name': '@deepseek-ai/dsh-tool-bash'},
+                {'id': 'tool-jobs', 'name': '@deepseek-ai/dsh-tool-jobs'},
                 {'id': 'ptc-executor', 'name': '@deepseek-ai/dsh-tool-executor-ptc'},
             ],
         }}]},
@@ -261,6 +267,8 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         reader.start()
         app = Terminal(str(Path(args.binary).resolve()), ['--new'], {**env, 'DSH_TUI_URL': login})
         app.wait('Введите сообщение.', timeout=20)
+        # Capture identity before the first prompt generates a display title.
+        session_id = re.search(r'Сессия · (session-[a-z0-9-]+)', app.text).group(1)
         app.command('Reply briefly without invoking any tools.')
         app.wait('Ответ 1: ', timeout=25)
         assert 'настоящего dsh.' not in app.text, 'Intermediate streaming state was not observed'
@@ -308,7 +316,6 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.command('Request permission to create the grant marker.')
         app.wait('Запрос разрешения dsh', timeout=20)
         app.wait('Create grant.marker', timeout=10)
-        session_id = re.search(r'Сессия · (session-[a-z0-9-]+)', app.text).group(1)
         previous_app, app = app, None
         previous_app.close(root / 'before-approval-reconnect.ansi')
         app = Terminal(str(Path(args.binary).resolve()), ['--session', session_id], {**env, 'DSH_TUI_URL': login})
@@ -387,7 +394,6 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         while time.monotonic() < deadline:
             app.pump()
         assert len(model_calls) == 13, 'Timed question expired while the TUI held its wait'
-        session_id = re.search(r'Сессия · (session-[a-z0-9-]+)', app.text).group(1)
         previous_app, app = app, None
         previous_app.close(root / 'before-question-reconnect.ansi')
         wait_for(lambda: len(model_calls) >= 14, timeout=10)
@@ -473,7 +479,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.send('\x1b[20~')
         app.wait('Очередь заданий dsh')
         app.wait('KEEP THIS PENDING TASK')
-        app.resize(44, 18)
+        app.resize(80, 24)
         app.wait('Очередь заданий dsh')
         app.wait('[ Удалить выбранное ]')
         assert 'REMOVE THIS PENDING TASK' not in app.text, 'Reconnection restored a removed task'
@@ -509,7 +515,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.send('\x15')
         app.send('EDIT CHANGED TASK\rsecond line kept')
         app.wait('second line kept')
-        app.resize(44, 18)
+        app.resize(80, 24)
         app.wait('Изменить задание в очереди')
         app.wait('[ Сохранить F5 ]')
         app.resize(120, 42)
@@ -559,7 +565,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Уточнение отменено.')
         app.send('\x07')
         app.wait('Уточнить текущую задачу?')
-        app.resize(44, 18)
+        app.resize(80, 24)
         app.wait('[ Уточнить ]')
         app.resize(120, 42)
         def steering_resized():
@@ -662,6 +668,50 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.send('\x1b[6~' * 20)
         app.wait('run_code · ■ Остановлено', timeout=20)
         app.wait('bash · ■ Остановлено', timeout=20)
+        app.command('Run a command with incremental stdout and stderr.')
+        app.wait('Вывод команды', timeout=25)
+        app.wait('LIVE STDOUT FIRST', timeout=25)
+        app.wait('LIVE STDERR SECOND', timeout=20)
+        # The process is held: these lines cannot have come from a final tool result.
+        assert len(model_calls) == 31, 'Live output was delayed until command completion'
+        assert not (project / 'stdout-release.marker').exists()
+        previous_app, app = app, None
+        previous_app.close(root / 'before-stdout-reconnect.ansi')
+        app = Terminal(str(Path(args.binary).resolve()), ['--session', nested_session], {**env, 'DSH_TUI_URL': login})
+        app.resize(120, 42)
+        app.wait('Вывод команды', timeout=20)
+        app.wait('LIVE STDOUT FIRST', timeout=20)
+        app.wait('LIVE STDERR SECOND')
+        assert len(model_calls) == 31, 'Output reconnect reran the model or command'
+        for columns, rows in [(120, 42), (100, 30), (80, 24)]:
+            # Start at the capture size: pyte does not reflow queued old-size frames.
+            previous_app, app = app, None
+            previous_app.close(root / f'before-stdout-{columns}x{rows}.ansi')
+            app = Terminal(str(Path(args.binary).resolve()), ['--session', nested_session],
+                           {**env, 'DSH_TUI_URL': login}, columns=columns, rows=rows)
+            if columns > 80:
+                app.wait('Вывод команды', timeout=20)
+            app.send('\x1b[6~' * 200)
+            app.wait('LIVE STDERR SECOND')
+            if args.capture_stdout:
+                capture_cells(app, args.capture_stdout + f'-{columns}x{rows}.json')
+        assert len(model_calls) == 31, 'Sized output views reran the model or command'
+        app.resize(120, 42)
+        (project / 'stdout-release.marker').write_text('release\n')
+        app.wait('Ответ 32: проверка транспорта настоящего dsh.', timeout=25)
+        app.send('\x1b[5~' * 20)
+        app.wait('Агент: не выполняется', timeout=20)
+        results = [message for message in model_calls[31]['messages'] if message.get('role') == 'tool']
+        assert any('LIVE FINAL OUTPUT' in json.dumps(message.get('content')) for message in results), 'Observation consumed the model output cursor'
+        app.command('Run an incremental command and cancel it.')
+        app.wait('Вывод команды', timeout=20)
+        app.wait('LIVE BEFORE CANCEL', timeout=20)
+        app.send('\x1b[19~')
+        app.wait('Выполнение остановлено.', timeout=20)
+        app.send('\x1b[6~' * 20)
+        app.wait('bash · ■ Остановлено', timeout=20)
+        assert len(model_calls) == 33, 'Output cancellation retried the model'
+        print('Actual dsh stdout/stderr: live before completion, reconnect without rerun, narrow layouts, final result and cancellation OK')
         print('Actual dsh PTC nesting: real executor, file success/failure, running children, parent links, reconnect and cancellation OK')
         print('Actual dsh steering: explicit confirmation, next step in the same turn, retained FIFO work, reconnect without resending OK')
         print('Actual dsh queue edit: discard, multiline save, minimum layout, reconnect, changed model input and retained FIFO order OK')

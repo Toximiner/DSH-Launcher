@@ -74,9 +74,9 @@ class TerminalPreview(unittest.TestCase):
         for _ in range(30):
             self.mouse(65, 40, 10)
         self.app.wait('message-19')
-        self.app.resize(60, 20)
+        self.app.resize(80, 24)
         self.app.wait('Новый разговор')
-        self.mouse(0, 4, 14)
+        self.mouse(0, 30, 18)
         self.app.command('narrow-click')
         self.app.wait('narrow-click')
         self.app.send('\x04')
@@ -222,6 +222,9 @@ class TerminalPreview(unittest.TestCase):
             self.app.wait('loaded-model-2')
             state['fail'] = True
             self.app.send('r')
+            # The previous snapshot is also shown while loading; wait for the
+            # failed response before inspecting the server request count.
+            self.app.wait('Ошибка:')
             self.app.wait('Показан предыдущий снимок.')
             self.assertIn('loaded-model-2', self.app.text)
             self.assertNotIn('not-for-display', self.app.text)
@@ -328,13 +331,33 @@ class TerminalPreview(unittest.TestCase):
         self.app.wait('> /exit')
         self.assertIsNone(self.app.proc.poll())
         self.app.send('\x15')
-        self.app.resize(60, 20)
+        self.app.resize(80, 24)
         def resized():
             self.app.pump()
-            return 'Ctrl+D выход' in self.app.screen.display[18]
+            return any('Ctrl+D выход' in row for row in self.app.screen.display[-2:])
         wait_for(resized)
         self.app.command('/help')
-        self.app.wait('колесо — прокрутка')
+        self.app.wait('Esc — вернуться в чат')
+        self.app.send('\x04')
+        self.app.exited()
+
+    def test_minimum_size_warning_preserves_dialog_and_draft(self):
+        self.app.send('MINIMUM SIZE DRAFT')
+        self.app.send('\x1bOS')
+        self.app.wait('Мышь в интерфейсе')
+        self.app.resize(79, 24)
+        self.app.wait('Увеличьте терминал: минимум 80×24.')
+        self.app.wait('Сейчас: 79×24.')
+        self.app.send('\rignored text')
+        self.app.resize(80, 23)
+        self.app.wait('Сейчас: 80×23.')
+        self.app.resize(80, 24)
+        self.app.wait('Мышь в интерфейсе')
+        self.close_preferences()
+        self.app.wait('MINIMUM SIZE DRAFT')
+        self.assertNotIn('ignored text', self.app.text)
+        self.app.resize(79, 24)
+        self.app.wait('Увеличьте терминал')
         self.app.send('\x04')
         self.app.exited()
 

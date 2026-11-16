@@ -268,7 +268,7 @@ func (m *model) approvalBox() area {
 }
 func (m *model) approvalView(base string) string {
 	s := m.approvals
-	if s == nil || !s.visible || len(s.requests) == 0 || m.width < 44 || m.height < 18 {
+	if s == nil || !s.visible || len(s.requests) == 0 || !m.terminalFits() {
 		return base
 	}
 	if s.requests[0].Event == "user-questions/request" {

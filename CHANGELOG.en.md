@@ -7,6 +7,24 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- Go preview 0.2.0-preview.26 formats committed assistant messages and history with Markdown headings, emphasis, lists, quotes, links, code, and tables. Wide tables become labeled records without losing cells. Ctrl+R in history toggles source; search and branching retain authoritative text and event identities. Streaming text, user messages, and tool cards stay plain. Uses pinned Goldmark v1.7.8, a bounded cache, and Unicode, control-character, and branch-boundary checks.
+
+- Go preview 0.2.0-preview.25 raises the minimum terminal size to 80×24 and recommends 100×30. Below either dimension, a notice shows the current size. Drafts and dialogs survive resizing; hidden controls ignore input and clicks. Ctrl+C/Ctrl+D exit and F8 cancellation remain available. Tests and browser auto-fit use the new dimensions.
+
+- Go preview 0.2.0-preview.24 adds archive/restore through `/archive`, `/restore`, or Ctrl+X in the list; a switches active and archived sessions. State follows the shared dsh registry with reconnect support. Running activity is never stopped implicitly; refusals retain the dialog without retrying. Archived chats retain history and block sending while preserving the draft. The list fits 44×18. Permanent session deletion is tracked as a backend-dependent task because the current dsh API exposes no deletion operation.
+
+- Go preview 0.2.0-preview.23 adds branching from a selected history message. Tab/Shift+Tab or a click selects a message; Ctrl+B opens confirmation with its event number and excerpt. Search hits are selected automatically. The child inherits the exact inclusive event prefix; dsh closes an unfinished turn. Cancellation preserves the page, selection, and draft. Actual dsh covers user-message and assistant-answer cuts, inherited model context, and independent continuation.
+
+- Go preview 0.2.0-preview.22 adds `/fork` for the current session and Ctrl+B for a selected list entry. A confirmation explains the latest-completed-turn boundary; the API-created session opens afterward. The source keeps running and the draft is preserved. Uncertain creation never retries; the acknowledged child ID remains available if connecting fails. Actual dsh covers an active source, inherited history, and independent continuation.
+
+- Go preview 0.2.0-preview.21 adds `/rename` for the current session and F3 for the selected list entry. Titles come from dsh projections and appear in the session list and chat header. Saving uses the API-confirmed normalized title; errors preserve the editor without automatic retries. Actual dsh covers Unicode, cancellation, and reconnect.
+
+- Go preview 0.2.0-preview.20 adds history message search through Ctrl+F or Search, Enter to submit, and F3 for an older match. Case-insensitive literal search reads beyond the loaded window at one fixed cut and marks the matched message. Esc cancels search while preserving the live draft. Long scans use bounded batches with explicit continuation.
+
+- Go preview 0.2.0-preview.19 adds a separate session-history window via F11 or `/history`, older/newer pages, preserved scroll positions, F5 for newer messages, and mouse controls. Reads share a fixed cut without changing live chat, agent state, or the draft. Actual dsh with a local model covers 27 turns, reconnect, and 120×42, 80×24, 44×18 layouts.
+
+- Go preview 0.2.0-preview.18 adds live command stdout/stderr to tool cards, including nested PTC calls. Reconnection resumes byte offsets without rerunning commands; final results supersede previews. Loss and bounded display tails are labeled. Actual-model chat was verified with the GUI-configured Qwen3.8-27B in an isolated temporary profile.
+
 - Go preview 0.2.0-preview.17 groups nested PTC tool cards under their explicit parents with independent states, arguments, results/errors, F6 navigation, expansion, and mouse handling. Missing parents and invalid chains are labeled; reconnect restores the tree. Actual PTC integration uses a pinned official source bootstrap only in the isolated test profile because dsh 0.2.2-rc.1 npm packaging omits its worker file.
 
 - Go preview 0.2.0-preview.16 promotes a pending task to steering via F9 → Ctrl+G with explicit confirmation. dsh consumes it on the next step of the same turn without interrupting the current response; remaining tasks stay queued. Idle/stale state and observed content changes block promotion; uncertain results never retry automatically. Actual dsh with a controlled provider verifies same-turn journal events, retained FIFO work, and reconnect recovery.

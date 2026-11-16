@@ -226,7 +226,7 @@ func (m *model) queueBox() area {
 }
 func (m *model) queueDialogView(base string) string {
 	s := &m.queueDialog
-	if !s.visible || m.width < 44 || m.height < 18 {
+	if !s.visible || !m.terminalFits() {
 		return base
 	}
 	if s.edit != nil {

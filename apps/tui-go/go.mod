@@ -9,6 +9,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.10.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/muesli/termenv v0.16.0
+	github.com/yuin/goldmark v1.7.8
 	golang.org/x/term v0.30.0
 )
 

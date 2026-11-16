@@ -19,7 +19,7 @@ func (a area) contains(x, y int) bool {
 }
 
 func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
-	if m.width < 44 || m.height < 18 || msg.Action != tea.MouseActionPress {
+	if !m.terminalFits() || msg.Action != tea.MouseActionPress {
 		return nil
 	}
 	if !m.mouseEnabled() {
@@ -31,7 +31,15 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if cmd, handled := m.queueMouse(msg); handled {
 		return cmd
 	}
-	if cmd, handled := m.chromeMouse(msg); handled {
+	if m.archiveDialog != nil || m.renameDialog != nil || m.forkDialog != nil {
+		return nil
+	}
+	if m.historyReader == nil || m.chrome.menuOpen || m.chrome.dialog != "" {
+		if cmd, handled := m.chromeMouse(msg); handled {
+			return cmd
+		}
+	}
+	if cmd, handled := m.historyMouse(msg); handled {
 		return cmd
 	}
 	width, bodyHeight := m.contentSize()

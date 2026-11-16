@@ -2,7 +2,8 @@
 
 [Русский](README.md) | **English**
 
-Baseline: November 10, 2026, Go client `0.2.0-preview.17`.
+Baseline: November 16, 2026, Go client `0.2.0-preview.26`.
+Terminal minimum: 80×24; recommended: 100×30.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.
 
@@ -25,8 +26,9 @@ disabled; private Codespaces supports live inspection.
 - dsh task queue: submission while running, server-confirmed pending items, individual removal/editing, queue-to-steering promotion, admission into history, and reconnect recovery.
 - Agent questions: choices, multi-select, multiline answers, skip, batches, timed holds, and continued replies.
 - Permission dialogs: reason, arguments, one-shot allow/reject, F7, cancellation, and pending request recovery.
-- Tool cards: state, arguments, result/error, mouse or F6 → Enter expansion, history restoration, and explicit nested PTC relationships.
+- Tool cards: live command stdout/stderr, state, arguments, result/error, mouse or F6 → Enter expansion, history restoration, and explicit nested PTC relationships.
 - Session text chat: submission, streaming, cancellation, read reconnection without automatic resubmission.
+- Read-only paginated session history: F11, a fixed cut, older/newer pages, saved scroll positions and drafts; Ctrl+F/F3 message-text search across older pages.
 - Session creation/list/attachment, backend-confirmed modes, and goal commands.
 - Starting an installed dsh with `--start`, and offering dshmarket preinstallation.
 - Marketplace catalog/search/installed packages and confirmed install/update/remove
@@ -35,17 +37,18 @@ disabled; private Codespaces supports live inspection.
 
 Offline input stays local. Chat was verified against actual dsh with a controlled
 local model endpoint; this establishes protocol integration, not a real LLM reply.
-No cloud LLM is connected to the live deployment. Milestone 2 acceptance against
-an actual cloud model awaits working access. Full tool interaction is milestone 3.
+On November 16, the native TUI was also checked against the GUI-configured
+Qwen3.8-27B: a real model reply and command output before completion were observed.
+The check used an isolated temporary profile; credentials are not bundled.
 
 ## Capability inventory
 
 | Area | Current state | Remaining work | Milestone |
 |---|---|---|---|
 | Application menu | Top menu and modal client settings | Basic milestone complete; further polish at milestone 14 | 1 ✓ |
-| Chat | Submission, streaming, cancellation, reconnection implemented | Actual cloud model verification awaits access | 2, LLM acceptance pending |
-| Tools and questions | Tool cards, permissions, questions, queue submission/view/removal/editing/steering, nested PTC calls | Incremental stdout | 3, partial |
-| Sessions and history | Create/list/attach | History, search, rename, fork, supported archive operations | 4 |
+| Chat | Submission, streaming, cancellation, reconnection implemented | Verified with actual Qwen3.8-27B | 2 ✓ |
+| Tools and questions | Tool cards, permissions, questions, queue submission/view/removal/editing/steering, nested PTC calls, command stdout/stderr | Basic milestone complete; arbitrary plugin streams need backend APIs | 3 ✓ |
+| Sessions and history | Create/list/attach; paginated history and message-text search | Rename, fork, supported archive operations; cross-page replacement support | 4, partial |
 | Message rendering | Plain local records | Markdown, code, tables, folding, copying | 4 |
 | Models and accounts | No configuration UI | Providers, authorization, model and parameter selection | 5 |
 | dsh settings | Read-only snapshots | Forms, validation, persistence, revision conflicts | 5 |
@@ -68,15 +71,39 @@ an actual cloud model awaits working access. Full tool interaction is milestone 
    Initial editable preferences: mouse and input history, persisted between runs;
    include client information and help. Done: keyboard/mouse and narrow terminals
    work; opening/closing preserves the page, draft, and focus.
-2. **Minimal actual chat — implemented in preview.9; cloud LLM acceptance awaits access.** Session submission, streamed assistant text,
+2. **Minimal actual chat — implemented in preview.9; verified with actual Qwen3.8-27B on November 16, 2026.** Session submission, streamed assistant text,
    cancellation, errors, reconnection without resubmitting accepted messages.
    Done: an actual model answers through actual dsh; exit restores the terminal.
-3. **Tools and interaction — first increment implemented in preview.10.** Tool cards, results/errors, cancellation state, folding, and history restoration; verified with actual dsh file reads. Permissions implemented in preview.11: explicit one-shot allow/reject, cancellation, reconnection, and decision history. Questions implemented in preview.12: choices, free text, batches, timed holds, and continued replies. Queue submission/view implemented in preview.13, verified with three tasks and reconnection. Individual queue removal implemented in preview.14; multiline editing in preview.15; queue-to-steering promotion in preview.16; nested PTC cards in preview.17. Next:
-   incremental stdout.
+3. **Tools and interaction — first increment implemented in preview.10.** Tool cards, results/errors, cancellation state, folding, and history restoration; verified with actual dsh file reads. Permissions implemented in preview.11: explicit one-shot allow/reject, cancellation, reconnection, and decision history. Questions implemented in preview.12: choices, free text, batches, timed holds, and continued replies. Queue submission/view implemented in preview.13, verified with three tasks and reconnection. Individual queue removal implemented in preview.14; multiline editing in preview.15; queue-to-steering promotion in preview.16; nested PTC cards in preview.17; live command stdout/stderr in preview.18.
+   Durable job registrations bind streams to calls; observation does not consume
+   model output and reconnect resumes byte offsets. Bounds: 16 streams, a 128 KiB
+   tail per stream, with explicit loss markers. Tools without job APIs do not get
+   synthesized streams. Next milestone: history and sessions.
    Done: the agent completes a tool task; rejection/cancellation reaches dsh,
    and a question answer is not submitted as an ordinary chat message.
-4. **History and sessions.** Transcript loading, search, rename, fork, supported
-   archive operations, Markdown, and collapsible details.
+4. **History and sessions — first increment in preview.19.** F11 opens paginated
+   history with a fixed cut, older/newer pages, saved scroll positions, and F5
+   for newer messages; live chat and its draft remain separate. Actual dsh checks
+   cover 27 turns, an active answer, reconnect, and narrow terminals. Page limits:
+   100 displayed records, 4 MiB, 4096 events; cross-page replacements currently
+   report an explicit error. Preview.20 adds case-insensitive literal message-text
+   search via Ctrl+F, jumps to matches, and F3 for an older result. Scans share the
+   fixed cut in batches of up to ten pages; Esc cancels and F5 refreshes the cut.
+   Tool arguments/results are not searched. Preview.21 adds `/rename` for the current
+   session and F3 for a selected list entry; confirmed titles appear in the list
+   and chat header. Preview.22 adds `/fork` and Ctrl+B in the list, branching at
+   the latest completed turn. The source keeps running; the child inherits history
+   and opens with the preserved draft. Independent continuation is verified.
+   Preview.23 selects history messages with Tab/Shift+Tab or a click; Ctrl+B forks
+   the exact inclusive event prefix. Search hits are selected automatically.
+   User-message and assistant-answer boundaries are verified.
+   Preview.24 adds archive/restore through `/archive`, `/restore`, and Ctrl+X; a
+   switches active/archive lists. The shared GUI registry reconnects; running
+   work is never stopped implicitly.
+   Preview.26 adds Markdown for committed replies and history: code, lists, quotes,
+   links, and tables; Ctrl+R toggles source. Wide tables retain cells as labeled
+   records. Search and branching preserve authoritative source event identities.
+   Next: copying, syntax highlighting, and collapsible details; deletion depends on dsh API support.
    Done: reattachment restores actual history without duplicates.
 5. **Models and dsh settings.** Provider authorization, model selection,
    schema-driven forms, revision-checked writes; secrets stay out of transcripts
@@ -114,8 +141,17 @@ an actual cloud model awaits working access. Full tool interaction is milestone 
     state, applicable terminal notifications. Done: a report supports reproducing
     a failure without disclosing keys.
 14. **Polish and release.** Themes/language, search, panes, mouse, shortcut help,
-    clean binary installation, supported Linux verification.
+    plus an active keyboard-shortcut list in both TUI and GUI settings, with
+    each action and its scope. Reflect client differences and update the lists
+    when bindings change. Include clean binary installation and supported Linux
+    verification.
     Done: everyday workflows and known limitations have been reviewed.
+
+## Shared TUI and GUI tasks
+
+- [ ] Add a keyboard-shortcut list to both clients’ settings: binding, action,
+  and scope. Reflect TUI/GUI differences and update the list with binding changes.
+  Requested November 16, 2026.
 
 ## Which Electron settings apply
 
@@ -154,7 +190,7 @@ execute arbitrary plugin HTML/React screens.
 - Protocol/error checks against a controlled HTTP server; PTY checks for keyboard,
   mouse, resize, and terminal restoration.
 - Actual wide/narrow terminal screenshots for UI changes, including 80×24 and
-  minimum 44×18, with draft/focus preservation checks.
+  minimum 80×24, with draft/focus preservation checks.
 - Actual dsh/plugin checks for connected adapters. Fixtures and simulated LLMs
   are not evidence of actual agent operation.
 - Verify the shipped Linux binary; add TUI installation Docker scenarios when
@@ -162,3 +198,7 @@ execute arbitrary plugin HTML/React screens.
   CONTRIBUTING.md.
 - Small commits on `feature/terminal-ui`, CI checks, and a reviewable result;
   merging and releasing remain separate actions.
+
+## Session deletion
+
+- [ ] Add permanent session deletion in TUI with a dedicated confirmation. The pinned dsh API exposes no deletion operation; a backend contract must cover persisted history, workspace links, descendants, and active work. Archive retains history and supports restoration.

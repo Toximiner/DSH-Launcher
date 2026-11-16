@@ -133,7 +133,7 @@ func TestQueueEditRPCReceiptAndManualRecovery(t *testing.T) {
 	}
 }
 func TestQueueEditorMinimumLayoutKeysAndMouse(t *testing.T) {
-	for _, size := range [][2]int{{120, 42}, {80, 24}, {44, 18}} {
+	for _, size := range [][2]int{{120, 42}, {100, 30}, {80, 24}} {
 		m := queueModel(t)
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		key(m, tea.KeyF9)

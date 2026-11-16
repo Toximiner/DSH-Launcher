@@ -49,6 +49,11 @@ jobs:
             --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
             --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh" \
             --ptc-bootstrap "$PWD/build/ptc-bootstrap/process-entry.ts"
+      - name: Actual dsh session history, search, rename, fork and archive
+        run: |
+          build/go-pty-env/bin/python apps/tui-go/test/real_history.py \
+            --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
+            --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh"
       - name: Build static browser preview
         run: python3 apps/tui-go/web/build.py
       - uses: actions/upload-artifact@v7

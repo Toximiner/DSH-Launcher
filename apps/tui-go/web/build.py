@@ -45,7 +45,8 @@ goroot = Path(run(args.go, 'env', 'GOROOT'))
 shutil.copy2(goroot / 'lib/wasm/wasm_exec.js', output / 'wasm_exec.js')
 for name in ('index.html', 'preview.js', 'snapshot.json', 'market-demo.json'):
     shutil.copy2(source / name, output / name)
-licenses = [tea_dir.joinpath('LICENSE').read_text()]
+goldmark_dir = Path(run(args.go, 'list', '-m', '-f', '{{.Dir}}', 'github.com/yuin/goldmark'))
+licenses = [tea_dir.joinpath('LICENSE').read_text(), goldmark_dir.joinpath('LICENSE').read_text()]
 for package, version, files in [
     ('@xterm/xterm', '5.5.0', {'package/lib/xterm.js': 'xterm.js', 'package/css/xterm.css': 'xterm.css'}),
     ('@xterm/addon-fit', '0.10.0', {'package/lib/addon-fit.js': 'addon-fit.js'}),

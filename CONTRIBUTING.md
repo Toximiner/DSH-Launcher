@@ -29,6 +29,9 @@ node test/markers.js   # marker-block integrity (also run by npm test)
 npm run coverage  # unit coverage with the gates in package.json
 ```
 
+The terminal minimum is 80×24; 100×30 is recommended. Resize tests also verify
+that undersized windows retain drafts/dialogs and block hidden controls.
+
 The terminal app lives in `apps/tui-go` and uses Go/Bubble Tea. Run
 `go test -race ./...` and `go build` from that directory. PTY scenarios use
 `apps/tui-go/test/terminal.py` and run through `test/terminal_preview.py` with
@@ -46,6 +49,26 @@ discarding a draft, saving multiline text, model input, and retained FIFO order.
 Steering checks promote a queued item to the next step of the same turn, verify
 actual session journal events, and preserve remaining work across reconnect.
 Nested PTC checks cover real file reads, errors, restart, and bash cancellation.
+Command-output checks cover live stdout/stderr before completion, reconnect,
+100×30/80×24 layouts, preserved model output, and cancellation.
+`test/real_history.py` uses another isolated actual-dsh profile to check paginated
+history, fixed read cuts, page scroll positions, draft preservation, and reads
+while the live model runs. Search checks cover oldest Unicode text beyond the
+loaded window, next/no matches, query cancellation, pinned cuts, and refresh.
+Session rename checks cover normalized Unicode titles, durable projections, list
+display, cancellation, and reconnect at three terminal sizes. Fork checks cover
+an active source, latest completed-turn history, cancelled actions, no automatic
+model calls, independent child continuation, inherited model input, and refusal
+when the source has no completed turn. Exact-message fork checks cover older
+search hits, keyboard selection, inclusive user/assistant boundaries, synthetic
+turn closers, retained drafts, and independent model input. Archive checks cover
+active-session refusal, cancellation, durable membership across reconnect,
+active/archive filters, a blocked composer, restored continuation, and changes
+from another client. Markdown checks cover code and Unicode tables, source search,
+raw/formatted toggling, preserved drafts, and unchanged committed text at three
+terminal sizes. Go WebSocket checks cover fresh archive baselines, increments,
+disconnection, replacement on reconnect, and cancellation.
+It uses a local controlled provider and no paid calls.
 Run `python3 apps/tui-go/test/prepare_ptc.py build/ptc-bootstrap` first, then pass
 `--ptc-bootstrap "$PWD/build/ptc-bootstrap/process-entry.ts"` to `real_chat.py`.
 This verified official source worker is needed only because the pinned npm

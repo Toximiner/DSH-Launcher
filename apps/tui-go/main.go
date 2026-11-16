@@ -15,8 +15,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const version = "0.2.0-preview.17"
-const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
+const version = "0.2.0-preview.26"
+const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/rename — название текущей · F3 в списке\n/archive · /restore — архив и возврат\nВ списке: a — архив · Ctrl+X — перенести\n/fork — новая ветка · Ctrl+B в списке\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/history — история сессии · F11\nCtrl+F в истории — поиск · F3 — ещё\nTab в истории — выбор · Ctrl+B — ветка\nCtrl+R в истории — Markdown/исходник\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
 	chatPage = iota
@@ -33,6 +33,14 @@ var navigationPages = []int{chatPage, sessionsPage, dshSettingsPage, logPage, ma
 type quitMsg struct{}
 
 type model struct {
+	markdown            *markdownCache
+	archive             *archiveState
+	archiveDialog       *sessionArchive
+	showArchived        bool
+	forkDialog          *sessionFork
+	renameDialog        *sessionRename
+	titleRevision       int
+	historyReader       *historyReader
 	queueDialog         queueDialog
 	approvals           *approvalState
 	chat                *chatState
@@ -228,6 +236,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case chatUpdate:
 		return m, m.handleChatUpdate(msg)
+	case historyResult:
+		m.handleHistoryResult(msg)
+		return m, nil
+	case historySearchResult:
+		m.handleHistorySearch(msg)
+		return m, nil
+	case toolOutputUpdate:
+		return m, m.handleToolOutput(msg)
 	case promptResult:
 		m.handlePromptResult(msg)
 		if m.session != nil && m.session.ID == msg.sessionID && !m.sessionBusy {
@@ -301,6 +317,14 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.rebuild()
 		return m, m.marketTimer()
+	case archiveUpdate:
+		return m, m.handleArchiveUpdate(msg)
+	case sessionArchiveResult:
+		return m, m.handleSessionArchive(msg)
+	case sessionForkResult:
+		return m, m.handleSessionFork(msg)
+	case sessionRenameResult:
+		return m, m.handleSessionRename(msg)
 	case sessionTick:
 		if msg.sequence == m.sessionSequence && m.session != nil && !m.sessionBusy {
 			return m, m.sessionOperation("refresh", "")
@@ -326,16 +350,32 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.session == nil || m.session.ID != msg.view.ID {
 				m.lines = nil
 			}
+			if msg.titleRevision != m.titleRevision && m.session != nil && m.session.ID == msg.view.ID {
+				msg.view.Title = m.session.Title
+			}
 			m.session = msg.view
 			chatCmd = m.startChat(msg.view.ID)
 			m.syncContinuedQuestions()
 			m.reconcileQueuedPrompt()
 		}
 		if msg.list {
+			if msg.titleRevision != m.titleRevision {
+				for i := range msg.items {
+					for _, current := range m.sessionItems {
+						if current.ID == msg.items[i].ID {
+							msg.items[i].Projections.Values.Title = current.Projections.Values.Title
+						}
+					}
+				}
+			}
 			m.sessionItems = msg.items
+			chatCmd = tea.Batch(chatCmd, m.ensureArchive())
 			m.sessionListIndex = 0
 		}
 		m.rebuild()
+		if msg.list {
+			m.revealSelectedSession()
+		}
 		if msg.err != nil && len(m.sessionQueue) > 0 {
 			m.sessionQueue = nil
 			m.append("Ожидающие запросы не выполнены из-за ошибки dsh.")
@@ -383,16 +423,38 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.resize()
+		m.resizeHistory()
 	case tea.MouseMsg:
 		return m, m.mouse(msg)
 	case tea.KeyMsg:
+		if !m.terminalFits() {
+			switch msg.Type {
+			case tea.KeyCtrlC, tea.KeyCtrlD:
+				return m, tea.Quit
+			case tea.KeyF8:
+				return m, m.cancelChat()
+			}
+			return m, nil
+		}
 		if cmd, handled := m.approvalKey(msg); handled {
 			return m, cmd
 		}
 		if cmd, handled := m.queueKey(msg); handled {
 			return m, cmd
 		}
+		if cmd, handled := m.archiveKey(msg); handled {
+			return m, cmd
+		}
+		if cmd, handled := m.forkKey(msg); handled {
+			return m, cmd
+		}
+		if cmd, handled := m.renameKey(msg); handled {
+			return m, cmd
+		}
 		if cmd, handled := m.chromeKey(msg); handled {
+			return m, cmd
+		}
+		if cmd, handled := m.historyKey(msg); handled {
 			return m, cmd
 		}
 		if msg.Type == tea.KeyF8 {
@@ -489,8 +551,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			return m, m.showChat()
 		case "enter":
-			if m.page == sessionsPage && !m.navFocused && len(m.sessionItems) > 0 {
-				id := m.sessionItems[m.sessionListIndex].ID
+			if m.page == sessionsPage && !m.navFocused && len(m.visibleSessions()) > 0 {
+				id := m.visibleSessions()[m.sessionListIndex].ID
 				m.showChat()
 				return m, m.sessionOperation("connect", id)
 			}
@@ -546,6 +608,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.rebuild()
 			case "/queue":
 				return m, m.openQueue()
+			case "/archive":
+				return m, m.openSessionArchive(true, false)
+			case "/restore":
+				return m, m.openSessionArchive(true, true)
+			case "/fork":
+				return m, m.openSessionFork(true)
+			case "/rename":
+				return m, m.openSessionRename(true)
+			case "/history":
+				return m, m.openHistory()
 			case "/stop":
 				return m, m.cancelChat()
 			case "/retry-send":
@@ -597,12 +669,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.resize()
 				return m, nil
 			}
-			if m.page == sessionsPage && len(m.sessionItems) > 0 {
+			if m.page == sessionsPage && len(m.visibleSessions()) > 0 {
 				delta := 1
 				if msg.String() == "up" {
 					delta = -1
 				}
-				m.sessionListIndex = (m.sessionListIndex + delta + len(m.sessionItems)) % len(m.sessionItems)
+				m.sessionListIndex = (m.sessionListIndex + delta + len(m.visibleSessions())) % len(m.visibleSessions())
 				m.rebuild()
 				return m, nil
 			}
@@ -633,6 +705,16 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport, cmd = m.viewport.Update(msg)
 			return m, cmd
 		}
+	}
+	if d := m.renameDialog; d != nil {
+		var cmd tea.Cmd
+		d.editor, cmd = d.editor.Update(msg)
+		return m, cmd
+	}
+	if h := m.historyReader; h != nil && h.search != nil && h.search.editing {
+		var cmd tea.Cmd
+		h.search.editor, cmd = h.search.editor.Update(msg)
+		return m, cmd
 	}
 	if cmd, handled := m.questionMessage(msg); handled {
 		return m, cmd

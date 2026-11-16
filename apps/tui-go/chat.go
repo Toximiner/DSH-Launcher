@@ -120,6 +120,8 @@ type chatState struct {
 	expandedTools  map[string]bool
 	admitted       map[string]int
 	selectedTool   string
+	jobs           map[string]toolJob
+	observers      map[string]*toolOutputObserver
 }
 type promptResult struct {
 	sessionID, requestID string
@@ -155,10 +157,11 @@ func (m *model) startChat(id string) tea.Cmd {
 	s := &chatState{id: id, epoch: m.chatEpoch, ctx: ctx, cancel: cancel, inbox: make(chan chatNotice, 32), cursor: -1, clearedThrough: -1}
 	m.chat = s
 	login := m.settingsLogin
-	return tea.Batch(func() tea.Msg { go followChat(ctx, login, id, s.inbox); return waitChat(s)() }, m.startApprovals(ctx, id, s.epoch))
+	return tea.Batch(func() tea.Msg { go followChat(ctx, login, id, s.inbox); return waitChat(s)() }, m.startApprovals(ctx, id, s.epoch), m.ensureArchive())
 }
 
 func (m *model) stopChat() {
+	m.closeHistory()
 	m.queueDialog = queueDialog{}
 	if m.chat != nil {
 		m.chat.cancel()
@@ -177,6 +180,12 @@ func waitChat(s *chatState) tea.Cmd {
 }
 
 func (m *model) submitText(text string) tea.Cmd {
+	if m.session != nil && m.isSessionArchived(m.session.ID) {
+		m.input.SetValue(text)
+		m.input.CursorEnd()
+		m.append("Сессия в архиве. /restore — восстановить; текст оставлен в поле ввода.")
+		return nil
+	}
 	if m.settingsLogin == "" || m.browserPreview {
 		m.append("Введено: " + text)
 		return nil
@@ -480,6 +489,10 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 			return errors.New("вызов инструмента без идентификатора")
 		}
 		tool = &chatTool{ID: data.CallID, Name: boundedToolText(data.Name, 256), Arguments: boundedToolText(data.Arguments, toolArgumentsLimit), State: "running", Turn: data.Turn, StartSeq: event.Seq}
+	case "job/registered":
+		if err := s.registerToolJob(event.Data); err != nil {
+			return err
+		}
 	case "tool/ptc-dispatch-start", "tool/ptc-dispatch":
 		var err error
 		tool, err = nestedTool(s, event)
@@ -685,6 +698,7 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 		next.admitted = nil
 		next.surface = nil
 		next.live = nil
+		next.jobs = nil
 		next.cursor = frame.Cursor
 		next.hasMore = frame.HasMore
 		next.note = ""
@@ -803,7 +817,7 @@ func (m *model) chatView() string {
 		lines = append(lines, "◌ Подключение чата…")
 	}
 	if s.hasMore {
-		lines = append(lines, muted.Render("Показан последний фрагмент истории; полная навигация появится позже."))
+		lines = append(lines, muted.Render("Показан последний фрагмент истории; F11 — более ранние сообщения."))
 	}
 	row := strings.Count(ansi.Hardwrap(strings.Join(lines, "\n"), max(1, m.viewport.Width), true), "\n")
 	for _, display := range m.displayMessages() {
@@ -817,7 +831,7 @@ func (m *model) chatView() string {
 			m.chatToolHits = append(m.chatToolHits, chatToolHit{id: message.tool.ID, row: row, end: row + strings.Count(ansi.Hardwrap(card, max(1, m.viewport.Width), true), "\n") + 1})
 			part = card + "\n"
 		} else {
-			part = accent.Bold(true).Render(message.role) + "\n" + message.text + "\n"
+			part = accent.Bold(true).Render(message.role) + "\n" + m.messageText(message, m.viewport.Width, false) + "\n"
 		}
 		lines = append(lines, part)
 		row += strings.Count(ansi.Hardwrap(part, max(1, m.viewport.Width), true), "\n")
@@ -886,7 +900,7 @@ func (m *model) handleChatUpdate(msg chatUpdate) tea.Cmd {
 	if bottom && m.page == chatPage {
 		m.viewport.GotoBottom()
 	}
-	return waitChat(s)
+	return tea.Batch(waitChat(s), m.syncToolOutputs())
 }
 
 func (m *model) handlePromptResult(msg promptResult) {
@@ -916,6 +930,9 @@ func (m *model) handlePromptResult(msg promptResult) {
 }
 
 func (m *model) composerText() (string, string) {
+	if m.session != nil && m.isSessionArchived(m.session.ID) {
+		return " · архив", "/restore — восстановить перед отправкой"
+	}
 	if m.settingsLogin != "" && !m.browserPreview {
 		if m.session == nil {
 			return " · dsh", "Сначала /new или /session <id>"

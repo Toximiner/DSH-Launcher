@@ -1,18 +1,23 @@
-# Go TUI preview — checkpoint 13
+# Go TUI preview — 0.2.0-preview.26
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
 
 The terminal client is implemented in Go/Bubble Tea, with read-only dsh settings
 and a panel layout: a workspace sidebar, conversation panel, separate
-message composer, connection status, and keyboard hints. The sidebar hides below
-78 columns. Input history restores drafts; scrolling, resizing, and clean shutdown
+message composer, connection status, and keyboard hints. The sidebar remains
+visible throughout the supported size range. Input history restores drafts; scrolling, resizing, and clean shutdown
 remain available. Mouse clicks select sidebar pages and the local draft, and
 focus the composer. The wheel scrolls only the content under the pointer.
 Mouse capture is enabled by default; `--no-mouse` disables it for native terminal
 text selection. Many terminals also allow selection with Shift held down.
 Dragging and positioning the text cursor by click are not implemented.
-The minimum terminal size is 44 columns by 18 rows.
+The minimum terminal size is **80 columns by 24 rows**; **100×30** is recommended.
+At 80×24 the sidebar, composer, and dialogs remain visible, with about 50 columns
+for conversation text. Below either minimum dimension, a size notice replaces the
+interface. Drafts and open dialogs are retained, and hidden controls ignore keys
+and mouse input. Ctrl+C/Ctrl+D still exit; F8 can stop the live agent. Backend
+subscriptions continue and the interface returns when the window is enlarged.
 
 With a dsh session attached, ordinary text is sent to dsh and assistant text is
 streamed over its authenticated WebSocket API. F8 or `/stop` requests cancellation
@@ -28,9 +33,20 @@ they have focus; PgUp/PgDn scroll long output. Reconnection restores cards and
 expansion choices without duplicating results. If a call predates the history
 window, the result is explicitly labeled rather than assigned an invented name.
 Arguments are bounded to 64 KiB, result text to 1 MiB, and retained chat to 4 MiB;
-truncation is labeled. Non-text results remain placeholders. Incremental stdout
-and subagent session trees remain planned. Nested PTC tool cards are implemented
-in preview.17.
+truncation is labeled. Non-text results remain placeholders. Subagent session trees
+remain planned. Nested PTC tool cards are implemented in preview.17.
+
+Preview.18 adds live command stdout/stderr through non-consuming `job/follow`
+streams. Durable `job/registered` events bind each job to its exact tool call and
+root, including PTC children; copied history never transfers execution ownership.
+The folded card follows the latest output; F6 → Enter expands it. The final tool
+result supersedes the preview. Reconnection resumes original UTF-8 byte offsets
+without rerunning the command or consuming the model's output cursor. Missing
+bytes, the 128 KiB display tail, and disconnected output are labeled. At most 16
+running calls are observed concurrently. This requires a backend job registry,
+job controller, and tool-emitted job association; arbitrary plugin output and PTC
+console logs without a job stream are not synthesized. Streams are process-local:
+a dsh restart loses their rings; completed output is restored from tool results.
 
 Nested calls use actual `tool/ptc-dispatch-start` and `tool/ptc-dispatch`
 events. The client pairs `subCallId`, `parentCallId`, and `rootCallId`; it does not
@@ -170,7 +186,7 @@ mutations. An uncertain result never retries automatically; reopen the refreshed
 queue and explicitly choose again if necessary. Acknowledgement does not remove
 items optimistically from cached server state. Session changes discard the dialog,
 and late responses from old stream epochs cannot change the new dialog.
-Actual-dsh checks verify cancellation, retained work, reconnect, and 44×18 sizing.
+Actual-dsh checks verify cancellation, retained work, reconnect, and 80×24 sizing.
 
 F3 or the Edit button opens a multiline editor for the selected queue item.
 Enter inserts a newline; F5 or Save sends `session/updateQueue` with action=edit;
@@ -249,13 +265,15 @@ Changing sessions closes only the old subscription, not the remote agent.
 F8, the composer Stop button, or `/stop` calls `session/cancel`; it does not remove queued backend messages.
 The client displays confirmed turn completion/cancellation and safe error hints.
 Provider error bodies are not copied into logs or chat. Permissions use their
-own dialogs; agent question forms are available and F8 stays available. Rich Markdown,
-attachments, and full paginated history remain later work. Replacements referencing history outside the loaded window may require
+own dialogs; agent question forms are available and F8 stays available. Additional Markdown features,
+attachments, and richer history rendering remain later work. Replacements referencing history outside the loaded window may require
 a new session; the client reports this instead of guessing an order.
 
-The supported API was verified against actual dsh 0.2.2-rc.1 with a controlled
-local model endpoint. This tests protocol integration, not an actual cloud LLM.
-No working cloud model credential is configured in the private live deployment.
+The supported API is covered by actual dsh 0.2.2-rc.1 with a controlled local
+model endpoint in CI. On November 16, 2026, the native client was also checked
+with the GUI-configured Qwen3.8-27B provider in an isolated temporary profile:
+a committed model reply and live command output before completion were observed.
+Credentials are not included in the client, tests, or private deployment.
 
 Optional integration check (Node 24.9+, installed dsh, Python environment with pyte):
 
@@ -265,6 +283,149 @@ python apps/tui-go/test/real_chat.py --binary /path/to/dsh-launcher-tui-go --dsh
 
 It uses an isolated temporary profile and a local test endpoint, performs no paid
 model calls, and does not alter the user's profile. CI also runs this check.
+
+## Paginated session history
+
+F11 or `/history` opens a separate, read-only history window. Left reads an older
+page; Right returns to a newer visited page at its saved scroll position. Up/Down,
+PgUp/PgDn, Home/End, and the mouse wheel scroll within a page. The toolbar buttons
+also support clicks. Esc or F11 closes the window and restores the composer focus
+and draft. F8 remains available to stop the live agent.
+
+Each page requests 20 user/assistant messages through `session/events`, with one
+fixed `throughSeq` cut across older/newer navigation. Live streaming continues
+behind the window without moving its history. F5 (New) explicitly reads the newest
+page at the live chat's current cut and clears the navigation trail. Switching
+sessions or closing the window cancels outstanding reads; late responses cannot
+reopen it. Historical replay uses isolated state and never acknowledges a pending
+prompt, changes the live agent mode, or starts a tool/output subscription.
+
+The client retains one rendered page and the last 128 return locations. Search
+also retains its most recent matching API page (bounded to 8 MiB). A page
+is limited to 100 displayed records, 4 MiB of displayed content, and 4096 events;
+the API response limit is 8 MiB. Oversized pages and unsupported surface replacements
+across a page boundary are reported explicitly while retaining the previous page.
+Missing tool calls are labeled; unfinished calls at the cut have an unknown result.
+History does not yet persist navigation across client restarts.
+
+Preview.21 adds **`/rename`** for the connected session and **F3** on the Sessions
+page for the selected entry. The editor starts with the current title, Enter
+saves through `session/rename`, and Esc discards the edit. Chat drafts remain
+intact. Names in the list and chat header come from dsh's `title` projection;
+untitled sessions use their IDs. The backend normalizes titles, including spaces
+and its configured byte limit. Only its confirmed title is shown as saved.
+A failed or uncertain request retains the editor and never retries automatically;
+check the refreshed list before resubmitting. Browser demo mode cannot rename.
+This operation sends no model prompt and persists in the shared dsh profile.
+
+Preview.22 adds **`/fork`** for the connected session and **Ctrl+B** on the
+Sessions page for the selected entry. A confirmation describes the boundary:
+Enter creates through `session/fork`; Esc cancels. dsh chooses the latest
+completed-turn prefix at request time. An active, unfinished turn stays in the
+source session, which continues running. A session with no completed turn cannot
+use this action. Preview.23 adds exact committed-message boundaries from history.
+
+The confirmed child opens automatically and retains the composer draft. Its
+inherited messages become context when you submit a new prompt; creating the
+branch itself sends no model request. dsh resolves the child's workspace, preset,
+and default model. The request uses `allowMigration: false` so a cold source that
+needs migration must first be opened in dsh. Failed or uncertain creation does
+not retry, including repeated Enter: close the dialog and refresh the list before
+trying again. If creation succeeds but connecting fails, the acknowledged child
+ID and `/session <id>` recovery command remain visible. Browser demo mode cannot
+fork. Actual-dsh tests cover an active source, excluded unfinished output,
+independent child continuation, inherited model input, and a source without a
+completed turn.
+
+Preview.23 adds **Tab/Shift+Tab** in history to select committed user/assistant
+messages, or click the message body. **Ctrl+B** opens an exact-boundary fork
+confirmation with the immutable event seq and a short excerpt. Search hits that
+are committed conversation messages are selected automatically. The request adds
+`atSeq` with the selected event's inclusive seq, independent of later live output.
+Only conversation messages are selectable: tool/approval cards, attempt previews,
+and hidden service context are excluded. Paging resets selection; resize retains
+it. Selection stays within the current page; use older/newer pages or search to
+reach other messages. Search editing consumes its own keys, and an outstanding
+history read blocks selection and branching.
+
+An exact child includes the selected message and excludes later source events.
+dsh appends its seed marker and synthetic closers for open steps/turns. Creating
+it stays idle until a new prompt is submitted. Esc returns to the same reader,
+selection, scroll position, and composer draft. A successful creation closes the
+reader before connecting to the child, including when connection must be retried.
+Event numbers are source log positions, rather than message indexes. Selecting
+arbitrary service/tool events is not exposed by this UI.
+
+Preview.24 adds **`/archive`** and **`/restore`** for the connected session.
+On the Sessions page, **a** switches active/archive lists, and **Ctrl+X** archives
+or restores the selected entry with confirmation. Both filters share the complete
+session list; actions use the visible entry's identity. History remains readable,
+including search and branching. Archived sessions keep unsent composer text;
+sending and mode changes are blocked until restoration. Restoring itself submits
+no model prompt. Selection scrolls into view in longer lists, including at 80×24.
+
+Archive membership comes from `workspace/follow` baselines and increments, shared
+with GUI clients on the same dsh profile. Reconnect replaces membership from a
+fresh baseline; disconnected state is labeled while the last observed archive
+set continues to guard sending. Archive/restore call `workspace/archiveSession`
+and `workspace/unarchiveSession`. Archiving explicitly sets `stopActivity: false`:
+the backend refuses if turns, subagents, jobs, or schedules still run. Stop their
+work first and retry explicitly. API-confirmed membership replaces local state;
+a new stream supersedes updates captured before that confirmation. Uncertain
+results preserve the dialog and never retry automatically. Esc closes it so the
+archive list can be checked. Browser demo mode cannot mutate archive membership.
+
+**Permanent deletion is planned.** The pinned dsh API has no session-deletion
+verb. Implementation needs an authoritative backend operation covering persisted
+history, workspace membership, descendants, and active work, plus a dedicated
+confirmation in TUI. Archiving remains reversible and retains saved history.
+
+Preview.26 formats **committed assistant messages** in live chat and history:
+headings, emphasis/strikethrough, nested lists, quotes, visible link destinations,
+fenced/indented code, inline code, and tables. Code keeps indentation and blank
+lines; tabs use four spaces. Code syntax highlighting is not implemented. Tables
+use terminal cell widths for Unicode alignment; a table wider than its container
+becomes labeled records with all cell content retained. Images show their alt text
+and destination; HTML remains literal text. Rendering opens no links or files.
+Streaming attempts, user messages, and tool cards keep their plain display.
+
+**Ctrl+R in history** switches between formatted assistant text and its source.
+The title and footer show the current mode. Source search remains literal and
+selects the same event even if markup is hidden by formatting. Message selection,
+mouse hit regions, and fork boundaries follow rendered row positions and retain
+source event identities. Toggling preserves the selected message and draft; while
+a query is being edited, its input handles keys independently.
+
+The parser is pinned to Goldmark v1.7.8. Source text is never rewritten. Renderer
+input over 256 KiB, nesting over 64 nodes deep, more than 20,000 AST nodes, oversized
+tables (over 32 columns or 2,048 cells), or output over 2 MiB falls
+back to plain text. Cached renders retain at most 128 entries / 8 MiB, including
+source bytes. ANSI/control sequences are removed from source and decoded entities;
+only renderer-generated text styling reaches the terminal. Clipboard copying,
+syntax highlighting, and collapsible history tool details remain planned.
+
+Preview.20 adds **Ctrl+F / Search** inside history. Enter submits a literal,
+case-insensitive query (up to 256 characters). The reader searches user/assistant
+message text from newest to oldest, including older pages beyond the live chat's
+50-message window. Tool arguments/results, permission records, and hidden service
+context are outside this search. The matched message is marked and scrolled into
+view. F3 moves to an older match; matches within the same validated page are kept
+together so later replacements cannot resurrect removed text during navigation.
+
+A batch reads at most ten pages with a 20-second timeout. If more history remains,
+the reader offers F3 to continue; it only reports exhaustion after reaching the
+start. Esc cancels a running search, exits query editing, or closes history, in
+that order. Ctrl+F cancels any pending search before editing another query. Late
+results are ignored. Searches use the history window's fixed cut; F5 loads newer
+messages and resets the search continuation. Existing page-size and cross-page
+replacement limits apply; failures preserve the page instead of claiming no
+matches. Queries, results, and navigation are local to this history window.
+
+Actual-dsh check with a local controlled model, no paid calls:
+
+```sh
+python apps/tui-go/test/real_history.py --binary /path/to/dsh-launcher-tui-go --dsh /path/to/dsh
+```
 
 ## Sessions and agent modes
 
@@ -366,13 +527,18 @@ compatibility.
 Work proceeds in small, reviewable checkpoints with user feedback. The
 [roadmap](../../docs/tui-roadmap/README.en.md) is the maintained capability inventory
 and milestone order. Milestone 1 is complete: TUI preferences live in the top menu,
-while dsh settings remain separate. Streamed text chat is implemented in preview.9; validation with an actual cloud
-model remains pending working provider access. Tool-result cards are implemented in preview.10. Agent questions are implemented in preview.12, including timed waits and continued
+while dsh settings remain separate. Streamed text chat is implemented in preview.9;
+actual-model acceptance was checked with Qwen3.8-27B on November 16, 2026. Tool-result cards are implemented in preview.10. Agent questions are implemented in preview.12, including timed waits and continued
 answers. Queue submission and observation are implemented in preview.13; individual
 queue removal is implemented in preview.14 and multiline editing in preview.15.
-Queue-to-steering promotion is implemented in preview.16. The next checkpoints
-cover incremental stdout; nested PTC calls are implemented in preview.17. Permission dialogs
-are implemented in preview.11 and tested through the actual dsh approval service. Settings editing, workspace features,
+Queue-to-steering promotion is implemented in preview.16; nested PTC calls in
+preview.17 and live command stdout/stderr in preview.18. Preview.19 adds read-only
+paginated history; preview.20 adds message search and preview.21 adds renaming.
+Preview.22 branches at the latest completed turn; preview.23 branches at selected
+messages. Preview.24 adds archive/restore, preview.25 raises the minimum to 80×24,
+and preview.26 formats Markdown. Next: copying, syntax highlighting, and collapsible
+details. Permission dialogs are implemented in preview.11 and tested through the
+actual dsh approval service. Settings editing, workspace features,
 additional plugin support, and launcher lifecycle remain planned. No
 full-parity claim is made by this preview. The legacy JS client and its packaging
 have been removed; its dsh installation flow remains pending in Go.

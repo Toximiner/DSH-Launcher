@@ -21,7 +21,7 @@ func TestSettingsDialogPreservesContext(t *testing.T) {
 			t.Fatal("literal text was interpreted as a shortcut")
 		}
 	}
-	for _, size := range []tea.WindowSizeMsg{{Width: 100, Height: 30}, {Width: 80, Height: 24}, {Width: 44, Height: 18}} {
+	for _, size := range []tea.WindowSizeMsg{{Width: 120, Height: 42}, {Width: 100, Height: 30}, {Width: 80, Height: 24}} {
 		m := newModel()
 		m.Update(size)
 		m.input.SetValue("draft 世界")
@@ -146,7 +146,7 @@ func TestPreferencesDefaultsAndMouseOverride(t *testing.T) {
 }
 
 func TestMenuAndDialogMouseTargets(t *testing.T) {
-	for _, size := range []tea.WindowSizeMsg{{Width: 100, Height: 30}, {Width: 44, Height: 18}} {
+	for _, size := range []tea.WindowSizeMsg{{Width: 100, Height: 30}, {Width: 80, Height: 24}} {
 		m := newModel()
 		m.Update(size)
 		m.input.SetValue("draft")

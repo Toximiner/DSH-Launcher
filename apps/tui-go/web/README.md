@@ -30,7 +30,7 @@ the local server, or pass `--url` to verify a deployment. The smoke test exercis
 settings, keyboard and mouse navigation, Unicode-capable input, and resizing.
 
 On phones the page automatically reduces terminal font size to fit a usable
-44×18 grid. Zoom buttons allow manual adjustment; Fit restores automatic sizing.
+80×24 grid. Native use is more comfortable at 100×30. Zoom buttons allow manual adjustment; Fit restores automatic sizing.
 A virtual terminal with scrolling is retained if manual zoom exceeds the display.
 Touch page buttons and Left/Right controls provide navigation without arrow keys.
 Visual viewport resizing adapts to the on-screen keyboard. Run

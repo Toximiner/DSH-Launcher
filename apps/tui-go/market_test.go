@@ -196,7 +196,7 @@ func TestBrowserMarketIsReadOnlyAndFitsPhones(t *testing.T) {
 	m.page = marketPage
 	m.browserPreview = true
 	m.market = &marketSnapshot{Profile: "demo", Installed: map[string]string{}, Plugins: []marketPlugin{{Name: "Beta", NPM: "beta-plugin", Description: map[string]string{"ru": "Плагин 世界"}}}}
-	for _, size := range []tea.WindowSizeMsg{{Width: 100, Height: 30}, {Width: 44, Height: 18}} {
+	for _, size := range []tea.WindowSizeMsg{{Width: 100, Height: 30}, {Width: 80, Height: 24}} {
 		m.Update(size)
 		m.confirmMarket("install")
 		if lipgloss.Height(m.View()) > size.Height || lipgloss.Width(m.View()) > size.Width {

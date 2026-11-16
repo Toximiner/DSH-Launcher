@@ -43,14 +43,14 @@
       if (autoScale) {
         for (let attempt=0;attempt<12;attempt++) {
           const size=fit.proposeDimensions();
-          if (!size || (size.cols>=44 && size.rows>=18) || font<=6) break;
-          font=Math.max(6,Math.min(font-0.5,Math.floor(font*Math.min(size.cols/44,size.rows/18)*2)/2));
+          if (!size || (size.cols>=80 && size.rows>=24) || font<=6) break;
+          font=Math.max(6,Math.min(font-0.5,Math.floor(font*Math.min(size.cols/80,size.rows/24)*2)/2));
           term.options.fontSize=font;
         }
       }
       fit.fit();
       // Keep a usable virtual terminal even when the user zooms beyond the viewport.
-      term.resize(Math.max(44,term.cols),Math.max(18,term.rows));
+      term.resize(Math.max(80,term.cols),Math.max(24,term.rows));
       render(dshTui.resize(term.cols,term.rows));
     }
     document.getElementById('fit').onclick=()=>{autoScale=true;requestedFont=16;resize();};

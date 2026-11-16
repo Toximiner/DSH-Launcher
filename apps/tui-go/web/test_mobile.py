@@ -22,7 +22,7 @@ with sync_playwright() as playwright:
         page.on('pageerror', lambda error: errors.append(str(error)))
         page.goto(args.url, wait_until='domcontentloaded', timeout=20000)
         page.wait_for_function('window.dshPreviewReady === true', timeout=45000)
-        page.wait_for_function('previewTerminal.cols >= 44 && previewTerminal.rows >= 18')
+        page.wait_for_function('previewTerminal.cols >= 80 && previewTerminal.rows >= 24')
         page.locator('[data-page="2"]').tap()
         page.wait_for_function('() => ' + SCREEN + '.includes("deepseek-flash")')
         assert 'Увеличьте терминал' not in page.evaluate(SCREEN)
@@ -36,21 +36,21 @@ with sync_playwright() as playwright:
         assert page.evaluate('previewTerminal.options.fontSize') > font
         page.locator('#zoom-out').tap()
         page.locator('#fit').tap()
-        page.wait_for_function('previewTerminal.cols >= 44 && previewTerminal.rows >= 18')
+        page.wait_for_function('previewTerminal.cols >= 80 && previewTerminal.rows >= 24')
         page.wait_for_function('document.querySelector(".xterm-screen").getBoundingClientRect().width <= document.getElementById("terminal").clientWidth + 1')
         page.locator('[data-page="2"]').tap()
         if args.screenshot and width == 390:
             page.screenshot(path=args.screenshot)
         page.set_viewport_size({'width': width, 'height': 380})
         page.locator('#fit').tap()
-        page.wait_for_function('previewTerminal.cols >= 44 && previewTerminal.rows >= 18')
+        page.wait_for_function('previewTerminal.cols >= 80 && previewTerminal.rows >= 24')
         assert 'Увеличьте терминал' not in page.evaluate(SCREEN)
         page.set_viewport_size({'width': width, 'height': height})
         page.locator('[data-page="5"]').tap()
         page.wait_for_function('() => ' + SCREEN + '.includes("Маркет · Каталог")')
         box = page.locator('.xterm-screen').bounding_box()
         columns, rows = page.evaluate('[previewTerminal.cols,previewTerminal.rows]')
-        page.touchscreen.tap(box['x'] + 5.5 * box['width'] / columns,
+        page.touchscreen.tap(box['x'] + 30.5 * box['width'] / columns,
                              box['y'] + 6.5 * box['height'] / rows)
         page.keyboard.type('prompt')
         page.keyboard.press('Enter')

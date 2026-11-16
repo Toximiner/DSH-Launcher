@@ -33,11 +33,11 @@ def alive(pid):
 
 
 class Terminal:
-    def __init__(self, executable, args, env):
+    def __init__(self, executable, args, env, columns=100, rows=30):
         self.master, self.slave = pty.openpty()
-        fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack('HHHH', 30, 100, 0, 0))
+        fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack('HHHH', rows, columns, 0, 0))
         self.initial = termios.tcgetattr(self.slave)
-        self.screen = pyte.Screen(100, 30)
+        self.screen = pyte.Screen(columns, rows)
         self.stream = pyte.Stream(self.screen)
         self.decoder = codecs.getincrementaldecoder('utf8')(errors='replace')
         self.raw = bytearray()

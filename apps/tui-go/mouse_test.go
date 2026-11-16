@@ -43,13 +43,13 @@ func TestMouseNavigationAndComposer(t *testing.T) {
 }
 
 func TestMouseScrollAndIgnoredEvents(t *testing.T) {
-	for _, width := range []int{100, 60} {
+	for _, width := range []int{120, 100} {
 		m := newModel()
 		m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 		m.append(strings.Repeat("scrollable content\n", 100))
 		bottom := m.viewport.YOffset
 		mainX := 0
-		if width == 100 {
+		if width >= 80 {
 			mainX = 25
 		}
 		mouse(m, mainX+3, 6, tea.MouseButtonWheelUp, tea.MouseActionPress)
@@ -72,7 +72,7 @@ func TestMouseScrollAndIgnoredEvents(t *testing.T) {
 		if m.page != 0 || m.navFocused || m.viewport.YOffset != bottom {
 			t.Fatal("an unrelated mouse event changed navigation or scroll")
 		}
-		if width == 100 {
+		if width >= 80 {
 			mouse(m, 5, 8, tea.MouseButtonWheelUp, tea.MouseActionPress)
 			if m.viewport.YOffset != bottom {
 				t.Fatal("wheel over sidebar scrolled content")

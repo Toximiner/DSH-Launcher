@@ -129,11 +129,11 @@ func TestQuestionContinuedProjectionAndDuplicateSuppression(t *testing.T) {
 	}
 }
 func TestQuestionMinimumLayoutMouseAndExplicitSkip(t *testing.T) {
-	for _, width := range []int{44, 100} {
+	for _, width := range []int{80, 100} {
 		m := questionModel(t, []userQuestion{{ID: "q", Question: "Question?", Options: []questionOption{{Label: "One", Description: strings.Repeat("detail ", 40)}, {Label: "Two"}}}})
 		var batch questionAnswers
 		m.approvals.reply = func(_ string, value any) error { batch = value.(questionAnswers); return nil }
-		m.Update(tea.WindowSizeMsg{Width: width, Height: 18})
+		m.Update(tea.WindowSizeMsg{Width: width, Height: 24})
 		lines := strings.Split(clean(m.View()), "\n")
 		box := m.approvalBox()
 		y := box.y + box.height - 3
@@ -144,7 +144,7 @@ func TestQuestionMinimumLayoutMouseAndExplicitSkip(t *testing.T) {
 		hit := f.hits[0]
 		m.approvals.viewport.SetYOffset(hit.start)
 		m.View()
-		m.mouse(tea.MouseMsg{X: box.x + 3, Y: box.y + 3, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+		m.mouse(tea.MouseMsg{X: box.x + 3, Y: box.y + 3 + hit.start - m.approvals.viewport.YOffset, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
 		_, _, d := m.questionCurrent()
 		if !d.selected[0] {
 			t.Fatal("mouse did not choose the visible option")

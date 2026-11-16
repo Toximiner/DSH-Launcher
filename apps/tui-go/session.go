@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type planState struct {
@@ -29,6 +30,7 @@ type goalState struct {
 	Rounds int `json:"roundsStarted"`
 }
 type sessionView struct {
+	Title          string
 	Queue          []queuedMessage
 	QueueKnown     bool
 	QueueFetchedAt time.Time
@@ -42,17 +44,23 @@ type sessionView struct {
 	StateCursor    int
 }
 type sessionItem struct {
-	ID      string `json:"sessionId"`
-	Running bool   `json:"running"`
+	ID          string `json:"sessionId"`
+	Running     bool   `json:"running"`
+	Projections struct {
+		Values struct {
+			Title string `json:"title"`
+		} `json:"values"`
+	} `json:"projections"`
 }
 type sessionAction struct{ action, value string }
 
 type sessionResult struct {
-	sequence int
-	view     *sessionView
-	items    []sessionItem
-	list     bool
-	err      error
+	titleRevision int
+	sequence      int
+	view          *sessionView
+	items         []sessionItem
+	list          bool
+	err           error
 }
 type sessionTick struct{ sequence int }
 
@@ -71,6 +79,9 @@ func readSession(ctx context.Context, api *dshAPI, id string) (*sessionView, err
 		return nil, errors.New("сессии нужна миграция; откройте её в dsh")
 	}
 	view := &sessionView{ID: id}
+	if data, ok := projection.Values["title"]; ok {
+		_ = json.Unmarshal(data, &view.Title)
+	}
 	if data, ok := projection.Values["plan"]; ok {
 		if json.Unmarshal(data, &view.Plan) != nil {
 			return nil, errors.New("неподдерживаемое состояние планирования")
@@ -221,11 +232,16 @@ func (m *model) sessionOperation(action, value string) tea.Cmd {
 		m.append("Сначала подключите сессию: /session <id> или /new.")
 		return nil
 	}
+	if m.session != nil && m.isSessionArchived(m.session.ID) && action != "refresh" && action != "connect" && action != "list" && action != "new" {
+		m.append("Сессия в архиве. /restore — восстановить.")
+		return nil
+	}
 	m.sessionBusy = true
 	m.sessionAction = action
 	m.sessionError = ""
 	m.sessionSequence++
 	sequence := m.sessionSequence
+	titleRevision := m.titleRevision
 	login, ctx := m.settingsLogin, m.settingsContext
 	id := ""
 	if m.session != nil {
@@ -236,7 +252,7 @@ func (m *model) sessionOperation(action, value string) tea.Cmd {
 	}
 	m.rebuild()
 	return func() tea.Msg {
-		result := sessionResult{sequence: sequence}
+		result := sessionResult{sequence: sequence, titleRevision: titleRevision}
 		api, err := openAPI(ctx, login)
 		if err != nil {
 			result.err = err
@@ -312,9 +328,10 @@ func (m *model) chooseMode(mode string) tea.Cmd {
 	return m.sessionOperation(mode, "")
 }
 func (m *model) sessionInfo() string {
-	lines := []string{heading.Render("Сессии dsh"), "/sessions — обновить список · /new — новая сессия", "↑/↓ — выбор · Enter — подключить · r — обновить"}
+	width := max(1, m.viewport.Width)
+	lines := []string{heading.Render("Сессии dsh"), "Enter вход · F3 имя · Ctrl+B ветка", "Ctrl+X архив/возврат · a фильтр · r новые"}
 	if m.session != nil {
-		lines = append(lines, "", "Текущая: "+clean(m.session.ID), "Режим: "+m.modeLabel())
+		lines = append(lines, ansi.Truncate("Текущая: "+clean(m.session.ID), width, "…"))
 	}
 	if m.sessionBusy {
 		lines = append(lines, "", "Запрос dsh…")
@@ -322,7 +339,15 @@ func (m *model) sessionInfo() string {
 	if m.sessionError != "" {
 		lines = append(lines, "", "Ошибка: "+m.sessionError)
 	}
-	for i, item := range m.sessionItems {
+	filter := "Активные сессии · a — показать архив"
+	if m.showArchived {
+		filter = "Архив сессий · a — показать активные"
+	}
+	lines = append(lines, "", filter)
+	if m.archive == nil || !m.archive.ready {
+		lines = append(lines, "Статус архива не подтверждён · подключение…")
+	}
+	for i, item := range m.visibleSessions() {
 		state := ""
 		if item.Running {
 			state = " · выполняется"
@@ -331,7 +356,13 @@ func (m *model) sessionInfo() string {
 		if i == m.sessionListIndex {
 			prefix = "› "
 		}
-		lines = append(lines, prefix+clean(item.ID)+state)
+		name := clean(item.Projections.Values.Title)
+		if name == "" {
+			name = clean(item.ID)
+		} else {
+			name += " · " + clean(item.ID)
+		}
+		lines = append(lines, ansi.Truncate(prefix+name+state, width, "…"))
 	}
 	if m.settingsLogin == "" {
 		lines = append(lines, "", "Сессии dsh недоступны без подключения.")
@@ -340,6 +371,9 @@ func (m *model) sessionInfo() string {
 }
 func (m *model) modeDescription() string {
 	label := "Режим: " + m.modeLabel()
+	if m.session != nil && m.isSessionArchived(m.session.ID) {
+		label += "\nСессия в архиве. /restore — восстановить."
+	}
 	if m.session != nil {
 		if m.session.Running {
 			label += "\nАгент: выполняется"

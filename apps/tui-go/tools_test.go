@@ -119,7 +119,7 @@ func TestToolsKeyboardMouseAndNarrowLayoutPreserveDraft(t *testing.T) {
 	toolEvent(t, m, 0, "tool/call", toolCall("a", "read", 1))
 	toolEvent(t, m, 1, "tool/result", toolResult("a", "one\ntwo\nthree\nfour\nfive\nsix", false))
 	m.input.SetValue("unsent draft")
-	for _, width := range []int{100, 44} {
+	for _, width := range []int{100, 80} {
 		m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 		m.Update(tea.KeyMsg{Type: tea.KeyF6})
 		if !m.toolFocused || m.input.Focused() {
