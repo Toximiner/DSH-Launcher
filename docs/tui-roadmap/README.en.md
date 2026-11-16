@@ -2,7 +2,7 @@
 
 [Русский](README.md) | **English**
 
-Baseline: November 16, 2026, Go client `0.2.0-preview.33`.
+Baseline: November 16, 2026, Go client `0.2.0-preview.34`.
 Terminal minimum: 80×24; recommended: 100×30.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.
@@ -52,7 +52,7 @@ The check used an isolated temporary profile; credentials are not bundled.
 | Message rendering | Markdown, syntax coloring, tables, folding, copying | Current increment complete | 4 ✓ |
 | Models and accounts | Catalog, session model/reasoning selection, provider creation, API keys | OAuth, specialized editors, remaining account flows | 5, partial |
 | dsh settings | Forms, multiline/JSON editor, local/backend validation, persistence, revision conflicts | Basic client increment complete; specialized editors are future improvements | 5 ✓ |
-| Agent modes | Ordinary/plan/goal and basic commands | Cards, plan review, goal editing, presets | 6 |
+| Agent modes | Modes, commands and editable goal card | Plan inspection/review and presets | 6 |
 | Workspace | Current directory path | File tree, previews, workspace selection | 7 |
 | Input and attachments | Single-line input | Multiline editor, file references, attachments | 7 |
 | Additional panes | None | Terminal/documents; investigate terminal equivalents of browser workflows | 7 |
@@ -137,8 +137,14 @@ The check used an isolated temporary profile; credentials are not bundled.
    account screens remain a dedicated adapter task. The full stage stays partial
    until those sign-in methods are implemented and verified. Secrets stay out of
    transcripts/logs.
-6. **Plans, goals, presets.** Extend current controls with plan inspection/review,
-   goal editing, execution status, and preset selection.
+6. **Plans, goals, presets — first increment in preview.34.** `/goal` opens a
+   card with objective, phase/revision, rounds/cap, block reason and separate
+   continuation activation. F3 edits the multiline objective/cap; F5 saves through
+   goals/edit with atomic identity/revision checks. Conflicts retain the draft;
+   Ctrl+R shows the fresh snapshot, and Ctrl+B explicitly accepts its revision,
+   preserving untouched foreign fields. Actual dsh verifies cancellation, absent
+   goals, three terminal sizes and reconnect. Next: plan inspection/review and
+   preset selection.
    Done: reattachment restores state matching dsh.
 7. **Workspace and input.** Add multiline input, files/attachments, file tree,
    document previews, and terminal pane in separate increments. Specify terminal

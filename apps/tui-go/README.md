@@ -1,4 +1,4 @@
-# Go TUI preview — 0.2.0-preview.33
+# Go TUI preview — 0.2.0-preview.34
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
@@ -563,9 +563,38 @@ Actual-dsh check with a local controlled model, no paid calls:
 ```sh
 python apps/tui-go/test/real_history.py --binary /path/to/dsh-launcher-tui-go --dsh /path/to/dsh
 python apps/tui-go/test/real_settings.py --binary /path/to/dsh-launcher-tui-go --dsh /path/to/dsh
+python apps/tui-go/test/real_goals.py --binary /path/to/dsh-launcher-tui-go --dsh /path/to/dsh
 ```
 
 ## Sessions and agent modes
+
+Preview.34 adds **`/goal`**: a snapshot of the current goal, its phase/revision,
+round count/cap, block reason, and process-local automatic-continuation state.
+Active phase and armed continuation are shown separately. F5/Ctrl+R rereads;
+↑/↓, PgUp/PgDn, and the wheel scroll the description. Empty goals and unavailable
+reads are distinct; a failed read retains the last snapshot marked unconfirmed.
+
+F3 opens the objective/round-cap editor. Tab switches fields, Enter inserts a
+newline in the description, F5 saves through `goals/edit`, and Esc discards the
+draft. F3 switches between the snapshot and the retained editor. Only changed
+fields are sent, with the exact goal ID/revision. The backend atomically rejects
+a stale ref. Edits preserve phase/activation; an already armed goal may continue
+under its revised objective. Opening or viewing the dialog never submits a task.
+
+A rejected/unconfirmed write retains the draft and blocks saves until Ctrl+R.
+If the revision changed, the fresh snapshot is shown for review. Ctrl+B explicitly
+accepts that revision and returns to the retained draft; untouched fields follow
+the new snapshot. A draft cannot be rebased onto a different goal identity.
+Esc cancels the draft; a second Esc closes the dialog. No write retries occur
+automatically. Changing sessions cancels the dialog and ignores late responses.
+Archived sessions cannot edit. Browser demo does not access goals.
+
+Limits: objective 64 KiB, positive integral round cap up to JavaScript's safe
+integer maximum (9007199254740991), 20-second read/write timeout. Input that would
+be truncated or transformed is refused; pasted tabs/control characters are not
+accepted. Creating/pausing/resuming/clearing goals still uses the existing
+`/goal <description>`, `/goal pause`, `/goal resume`, and `/goal clear` commands.
+Plan review and preset selection remain the next stage-6 increments.
 
 Attach a session or explicitly create a new one:
 

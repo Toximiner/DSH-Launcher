@@ -59,6 +59,12 @@ staging before backend persistence, cancellation, portable schema constraints an
 secret-container refusal.
 An isolated dummy key is stored through credentials/set and checked in the next
 request to the local model; no user profile or paid provider is touched.
+`test/real_goals.py` checks actual goal snapshots, phase versus activation,
+multiline objective/round-cap editing, cancellation, stale-revision refusal,
+explicit conflict review, preservation of untouched foreign fields, empty goals,
+reconnect and three terminal sizes. The isolated profile disables the automatic
+goal-round driver and counts local model requests (must stay zero); this verifies
+goal UI/protocol behavior, not autonomous round execution.
 `test/real_history.py` uses another isolated actual-dsh profile to check paginated
 history, fixed read cuts, page scroll positions, draft preservation, and reads
 while the live model runs. Search checks cover oldest Unicode text beyond the

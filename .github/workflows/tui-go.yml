@@ -59,6 +59,11 @@ jobs:
           build/go-pty-env/bin/python apps/tui-go/test/real_settings.py \
             --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
             --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh"
+      - name: Actual dsh goal snapshots and revision-checked editing
+        run: |
+          build/go-pty-env/bin/python apps/tui-go/test/real_goals.py \
+            --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
+            --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh"
       - name: Build static browser preview
         run: python3 apps/tui-go/web/build.py
       - uses: actions/upload-artifact@v7

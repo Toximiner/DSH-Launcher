@@ -34,6 +34,9 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if m.settingsForm != nil {
 		return m.settingsFormMouse(msg)
 	}
+	if m.goalDialog != nil {
+		return m.goalMouse(msg)
+	}
 	if m.modelPicker != nil {
 		return m.modelsMouse(msg)
 	}

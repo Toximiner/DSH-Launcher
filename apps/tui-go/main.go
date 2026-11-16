@@ -15,8 +15,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const version = "0.2.0-preview.33"
-const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/rename — название текущей · F3 в списке\n/archive · /restore — архив и возврат\nВ списке: a — архив · Ctrl+X — перенести\n/fork — новая ветка · Ctrl+B в списке\n/models · F12 — выбор модели сессии\n/providers — настройки провайдеров\nВ настройках: Enter — форма · F6 — провайдеры\n/mode default|plan|goal — режим\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/history — история сессии · F11\nCtrl+F в истории — поиск · F3 — ещё\nCtrl+T в поиске — всё / сообщения / инструменты\nTab в истории — выбор · Ctrl+B — ветка\nCtrl+R в истории — Markdown/исходник\nВ истории: Ctrl+Y — копия · Ctrl+K — код\nF6/Shift+F6 — инструмент истории · Enter — детали\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
+const version = "0.2.0-preview.34"
+const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/rename — название текущей · F3 в списке\n/archive · /restore — архив и возврат\nВ списке: a — архив · Ctrl+X — перенести\n/fork — новая ветка · Ctrl+B в списке\n/models · F12 — выбор модели сессии\n/providers — настройки провайдеров\nВ настройках: Enter — форма · F6 — провайдеры\n/mode default|plan|goal — режим\n/goal — состояние цели · F3 правка\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/history — история сессии · F11\nCtrl+F в истории — поиск · F3 — ещё\nCtrl+T в поиске — всё / сообщения / инструменты\nTab в истории — выбор · Ctrl+B — ветка\nCtrl+R в истории — Markdown/исходник\nВ истории: Ctrl+Y — копия · Ctrl+K — код\nF6/Shift+F6 — инструмент истории · Enter — детали\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
 	chatPage = iota
@@ -33,6 +33,7 @@ var navigationPages = []int{chatPage, sessionsPage, dshSettingsPage, logPage, ma
 type quitMsg struct{}
 
 type model struct {
+	goalDialog          *goalDialog
 	settingsForm        *settingsForm
 	modelPicker         *modelPicker
 	copyClipboard       func(context.Context, string) (string, error)
@@ -244,6 +245,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case modelPickerResult:
 		m.handleModelPicker(msg)
+		return m, nil
+	case goalDialogResult:
+		m.handleGoalDialog(msg)
 		return m, nil
 	case historyCopyResult:
 		m.handleHistoryCopy(msg)
@@ -457,6 +461,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd, handled := m.settingsFormKey(msg); handled {
 			return m, cmd
 		}
+		if cmd, handled := m.goalKey(msg); handled {
+			return m, cmd
+		}
 		if cmd, handled := m.modelsKey(msg); handled {
 			return m, cmd
 		}
@@ -641,6 +648,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.openSettingsForm(true)
 			case "/models":
 				return m, m.openModels()
+			case "/goal":
+				return m, m.openGoal()
 			case "/history":
 				return m, m.openHistory()
 			case "/stop":

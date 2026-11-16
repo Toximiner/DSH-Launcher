@@ -103,6 +103,10 @@ func (api *dshAPI) rpc(ctx context.Context, method string, args map[string]any, 
 		return &rpcRejected{method: method, code: code}
 	}
 	if target != nil {
+		// An absent goal is returned as undefined; JSON omits its value member.
+		if method == "goals/get" && len(envelope.Result.Value) == 0 {
+			envelope.Result.Value = json.RawMessage("null")
+		}
 		if len(envelope.Result.Value) == 0 || json.Unmarshal(envelope.Result.Value, target) != nil {
 			return errors.New("неподдерживаемые данные API dsh")
 		}
