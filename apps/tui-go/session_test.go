@@ -220,3 +220,29 @@ func TestModeCommandWaitsForBackgroundRead(t *testing.T) {
 		t.Fatal("queued mode change was lost")
 	}
 }
+
+func TestBackgroundSessionRefreshKeepsDisplayStable(t *testing.T) {
+	m := newModel()
+	m.width, m.height = 100, 30
+	m.session = &sessionView{ID: "session-test"}
+	for _, page := range []int{chatPage, sessionsPage} {
+		m.page = page
+		m.sessionBusy = false
+		m.rebuild()
+		before := m.View()
+		m.sessionBusy = true
+		m.sessionAction = "refresh"
+		m.rebuild()
+		if m.View() != before {
+			t.Fatalf("background refresh changed the display on page %d", page)
+		}
+	}
+	m.sessionAction = "list"
+	if !strings.Contains(m.sessionInfo(), "Запрос dsh…") {
+		t.Fatal("explicit session requests must retain loading feedback")
+	}
+	m.sessionError = "connection failed"
+	if !strings.Contains(m.sessionInfo(), m.sessionError) {
+		t.Fatal("background refresh errors must remain visible")
+	}
+}

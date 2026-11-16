@@ -113,7 +113,7 @@ func (m *model) View() string {
 	if m.session != nil {
 		status = accent.Render("✓ dsh · " + m.modeLabel())
 	}
-	if m.sessionBusy {
+	if m.sessionRequestVisible() {
 		status = accent.Render("◌ Запрос сессии dsh")
 	}
 	if m.chat != nil && !m.chat.ready {

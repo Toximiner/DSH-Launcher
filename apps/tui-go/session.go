@@ -382,13 +382,19 @@ func (m *model) chooseMode(mode string) tea.Cmd {
 	}
 	return m.sessionOperation(mode, "")
 }
+
+// Background refreshes keep the current snapshot visible without loading indicators.
+func (m *model) sessionRequestVisible() bool {
+	return m.sessionBusy && m.sessionAction != "refresh"
+}
+
 func (m *model) sessionInfo() string {
 	width := max(1, m.viewport.Width)
 	lines := []string{heading.Render("Сессии dsh"), "Enter вход · F3 имя · Ctrl+B ветка", "Ctrl+X архив/возврат · a фильтр · r новые"}
 	if m.session != nil {
 		lines = append(lines, ansi.Truncate("Текущая: "+clean(m.session.ID), width, "…"))
 	}
-	if m.sessionBusy {
+	if m.sessionRequestVisible() {
 		lines = append(lines, "", "Запрос dsh…")
 	}
 	if m.sessionError != "" {
@@ -444,7 +450,7 @@ func (m *model) modeDescription() string {
 			}
 		}
 	}
-	if m.sessionBusy {
+	if m.sessionRequestVisible() {
 		label += " · запрос…"
 	}
 	if m.session != nil && m.session.Plan != nil && m.session.Plan.Pending {
