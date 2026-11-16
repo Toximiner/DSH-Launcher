@@ -1,4 +1,4 @@
-# Go TUI preview — 0.2.0-preview.30
+# Go TUI preview — 0.2.0-preview.31
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
@@ -320,6 +320,29 @@ Arguments/names are restored for result cards whose call is outside the page.
 Unfinished calls at the cut have an unknown result.
 History does not yet persist navigation across client restarts.
 
+Preview.31 adds **F12 / `/models`** for the connected session. F12 also works
+from the dsh settings page. The picker reads `session/modelCatalog` and the
+session’s `modelSelection.next` projection, falling back to the host default for
+an unconfigured session. Search matches provider/model IDs and names; ↑/↓ or a
+click selects a row, Tab/Shift+Tab cycles adapter-declared reasoning efforts
+(including default), Enter applies, F5 rereads, and Esc closes while idle/loading.
+Unsupported current selections remain visible separately and are never invented
+as catalog entries. The draft and underlying scroll remain intact.
+
+Applying uses `session/selectModel`, without editing provider credentials. The
+picker states that dsh also saves the **shared default** in the background; the
+response confirms only the session choice. Current generation continues and the
+choice applies at the next prompt-assembly boundary. A preflight reread refuses
+an already changed session choice; this is not an atomic compare-and-swap because
+the API has no revision argument. A competing write can still race that boundary.
+Unconfirmed/rejected writes never retry; Enter stays blocked until F5 rereads the
+state. A read-only/no-change choice issues no mutation. Cancelled/late results and
+session changes cannot update a new picker. Provider failure messages and keys
+are not displayed. Catalog bounds are 256 groups / 2,000 models / 32 efforts per
+model; read/write operations have a 20-second timeout. Browser demo does not
+perform model changes. Provider authorization and general schema/revision-based
+settings forms remain the next stage-5 increments.
+
 Preview.21 adds **`/rename`** for the connected session and **F3** on the Sessions
 page for the selected entry. The editor starts with the current title, Enter
 saves through `session/rename`, and Esc discards the edit. Chat drafts remain
@@ -602,8 +625,8 @@ Preview.22 branches at the latest completed turn; preview.23 branches at selecte
 messages. Preview.24 adds archive/restore, preview.25 raises the minimum to 80×24,
 preview.26 formats Markdown, preview.27 adds message/code copying, and preview.28
 adds syntax coloring. Preview.29 adds collapsible history tool details; preview.30
-adds tool search and cross-page replacement support. Next: models and editable
-dsh settings. Permission dialogs are implemented in preview.11 and tested through the
+adds tool search and cross-page replacement support. Preview.31 adds session
+model/reasoning selection. Next: provider authorization and editable dsh settings. Permission dialogs are implemented in preview.11 and tested through the
 actual dsh approval service. Settings editing, workspace features,
 additional plugin support, and launcher lifecycle remain planned. No
 full-parity claim is made by this preview. The legacy JS client and its packaging

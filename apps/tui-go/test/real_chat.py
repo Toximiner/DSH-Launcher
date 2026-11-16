@@ -24,6 +24,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--binary', required=True)
 parser.add_argument('--ptc-bootstrap', help='Optional official source bootstrap for the pinned npm package missing process.js')
 parser.add_argument('--dsh', required=True, help='Installed dsh 0.2.2-rc.1; Node 24.9+ must be in PATH')
+parser.add_argument('--capture-models', help='Prefix for actual model picker captures')
 parser.add_argument('--capture-history-search', help='Prefix for actual tool search captures')
 parser.add_argument('--capture-history-tools', help='Prefix for actual folded history tool captures')
 parser.add_argument('--capture-nested', help='Optional terminal-cell JSON of actual nested PTC calls')
@@ -186,6 +187,8 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
             'apiKeyEnv': 'TUI_TEST_API_KEY', 'api': 'openai-completions',
             'baseURL': f'http://127.0.0.1:{model.server_port}/v1',
             'models': [{'id': 'fixture', 'contextWindow': 131072, 'maxTokens': 2048,
+                        'reasoningEfforts': False, 'input': ['text']},
+                       {'id': 'fixture-alt', 'contextWindow': 131072, 'maxTokens': 2048,
                         'reasoningEfforts': False, 'input': ['text']}],
             'retryPolicy': {'mode': 'normal', 'maxRetries': 0}}}}},
         {'id': 'agent-default-model', 'config': {'provider': 'tui-fixture', 'model': 'fixture'}},
@@ -271,10 +274,42 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Введите сообщение.', timeout=20)
         # Capture identity before the first prompt generates a display title.
         session_id = re.search(r'Сессия · (session-[a-z0-9-]+)', app.text).group(1)
+        app.send('MODEL DRAFT')
+        for columns, rows in [(120, 42), (100, 30), (80, 24)]:
+            app.resize(columns, rows)
+            app.wait('MODEL DRAFT')
+            app.send('\x1b[24~')
+            app.wait('Модель сессии')
+            app.wait('Текущая: tui-fixture/fixture')
+            app.send('fixture-alt')
+            app.wait('Выбор: tui-fixture/fixture-alt')
+            app.wait('общую модель по умолчанию')
+            if args.capture_models:
+                capture_cells(app, args.capture_models + f'-{columns}x{rows}.json')
+            app.send('\x1b')
+            app.wait('MODEL DRAFT')
+            assert len(model_calls) == 0, 'Reading/cancelling model selection ran the model'
+        app.send('\x1b[24~')
+        app.wait('Текущая: tui-fixture/fixture')
+        app.send('fixture-alt')
+        app.wait('Выбор: tui-fixture/fixture-alt')
+        app.send('\r')
+        app.wait('выбор подтверждён', timeout=20)
+        app.wait('Текущая: tui-fixture/fixture-alt')
+        app.send('\x1b')
+        app.wait('MODEL DRAFT')
+        app.send('\x1b[24~')
+        app.wait('Текущая: tui-fixture/fixture-alt')
+        app.send('\x1b')
+        app.wait('MODEL DRAFT')
+        app.send('\x15')
+        app.resize(100, 30)
         app.command('Reply briefly without invoking any tools.')
         app.wait('Ответ 1: ', timeout=25)
         assert 'настоящего dsh.' not in app.text, 'Intermediate streaming state was not observed'
         app.wait('Ответ 1: проверка транспорта настоящего dsh.', timeout=20)
+        assert model_calls[0]['model'] == 'fixture-alt', 'Confirmed TUI selection did not reach actual model input'
+        print('Actual dsh models: shared provider catalog, three sizes, cancelled selection, retained draft, confirmed change, reopen and selected model in the next request OK')
         app.wait('Агент: не выполняется', timeout=20)
         app.command('A second turn without tools.')
         app.wait('Ответ 2: проверка транспорта настоящего dsh.', timeout=20)

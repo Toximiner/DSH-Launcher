@@ -155,7 +155,7 @@ func (m *model) View() string {
 		hints = "F11 история · F10 меню · Tab разделы"
 	}
 	if m.page == dshSettingsPage && m.settingsLogin != "" {
-		hints = "←/→ раздел · r обновить · PgUp/PgDn"
+		hints = "←/→ раздел · r обновить · F12 модели"
 	}
 	if m.page == chatPage && len(m.toolIDs()) > 0 {
 		hints = "F11 история · F6 инструменты · Enter детали"
@@ -167,7 +167,7 @@ func (m *model) View() string {
 		hints = "F9 очередь · F8 остановить задачу"
 	}
 	footer := bar(muted.Render(hints), muted.Render("Ctrl+D выход"), width)
-	return m.approvalView(m.queueDialogView(m.historyCodeView(m.archiveView(m.forkView(m.renameView(m.chromeView(m.historyView(header + "\n" + body + "\n" + footer))))))))
+	return m.approvalView(m.queueDialogView(m.modelsView(m.historyCodeView(m.archiveView(m.forkView(m.renameView(m.chromeView(m.historyView(header + "\n" + body + "\n" + footer)))))))))
 }
 
 func (m *model) modeControls() string {

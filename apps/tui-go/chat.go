@@ -161,6 +161,7 @@ func (m *model) startChat(id string) tea.Cmd {
 }
 
 func (m *model) stopChat() {
+	m.closeModels()
 	m.closeHistory()
 	m.queueDialog = queueDialog{}
 	if m.chat != nil {

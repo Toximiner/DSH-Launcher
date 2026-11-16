@@ -80,7 +80,7 @@ func (m *model) settingsView() string {
 	if m.settingsLogin == "" {
 		return heading.Render("Настройки dsh · только чтение") + "\n\n" + muted.Render("Для чтения настроек работающего dsh\nукажите --url или DSH_TUI_URL.\nНужен URL входа с ?token=.")
 	}
-	lines := []string{heading.Render("Настройки dsh · только чтение"), muted.Render("←/→ — раздел · r — обновить · колесо — прокрутка")}
+	lines := []string{heading.Render("Настройки dsh · только чтение"), muted.Render("←/→ — раздел · r — обновить · F12 — модель сессии")}
 	if m.settingsLoading {
 		lines = append(lines, "", "Загрузка настроек…")
 	}

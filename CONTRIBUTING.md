@@ -81,7 +81,11 @@ Preview.30 checks include all/messages/tools search scopes, argument/result matc
 scrolled into view, cross-page tool context and obsolete nested-card filtering.
 The isolated history probe invokes real Session.append to test cross-page
 replacement, replacement-of-replacement and reversed numeric endpoint order; no
-user profiles or paid models are involved. Go checks also cover invalid transitions,
+user profiles or paid models are involved. The model-picker scenario reads the
+actual dsh catalog, cancels at three sizes, applies an alternate configured model,
+reopens its persisted selection, and asserts the next model request uses it. Go
+tests cover reasoning effort IDs, omission of default effort, stale/cancelled
+results, detected competing choices and blocked retries after unconfirmed writes. Go checks also cover invalid transitions,
 cancellation, and no resurrection during older-page navigation/search.
 Go WebSocket checks cover fresh archive baselines, increments,
 disconnection, replacement on reconnect, and cancellation.

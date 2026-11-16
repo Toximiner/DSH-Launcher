@@ -2,7 +2,7 @@
 
 [Русский](README.md) | **English**
 
-Baseline: November 16, 2026, Go client `0.2.0-preview.30`.
+Baseline: November 16, 2026, Go client `0.2.0-preview.31`.
 Terminal minimum: 80×24; recommended: 100×30.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.
@@ -50,7 +50,7 @@ The check used an isolated temporary profile; credentials are not bundled.
 | Tools and questions | Tool cards, permissions, questions, queue submission/view/removal/editing/steering, nested PTC calls, command stdout/stderr | Basic milestone complete; arbitrary plugin streams need backend APIs | 3 ✓ |
 | Sessions and history | Create/list/attach, rename, fork, archive; history, message/tool search, cross-page replacements | Current increment complete; permanent deletion needs dsh API support | 4 ✓ |
 | Message rendering | Markdown, syntax coloring, tables, folding, copying | Current increment complete | 4 ✓ |
-| Models and accounts | No configuration UI | Providers, authorization, model and parameter selection | 5 |
+| Models and accounts | Provider catalog and session model/reasoning selection | Provider authorization/editing and remaining parameters | 5, partial |
 | dsh settings | Read-only snapshots | Forms, validation, persistence, revision conflicts | 5 |
 | Agent modes | Ordinary/plan/goal and basic commands | Cards, plan review, goal editing, presets | 6 |
 | Workspace | Current directory path | File tree, previews, workspace selection | 7 |
@@ -118,7 +118,12 @@ The check used an isolated temporary profile; credentials are not bundled.
    complete; permanent deletion remains separate and needs dsh API support.
    Next: stage 5 — models and editable dsh settings.
    Done: reattachment restores actual history without duplicates.
-5. **Models and dsh settings.** Provider authorization, model selection,
+5. **Models and dsh settings — first increment in preview.31.** F12 / `/models`:
+   connected-provider catalog, search, model and reasoning-effort selection.
+   Acknowledgement covers the session; dsh saves the shared default in the
+   background. Preflight detects already changed selections without claiming
+   atomic API protection; unconfirmed writes never retry. Next: provider
+   authorization/editing, remaining parameters,
    schema-driven forms, revision-checked writes; secrets stay out of transcripts
    and logs. Clearly mark changes requiring restart. Done: a selected model applies
    to the session; conflicts preserve other writers' edits. Actual verification
