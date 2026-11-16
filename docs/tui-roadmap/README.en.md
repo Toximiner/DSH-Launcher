@@ -1,10 +1,12 @@
 # TUI development roadmap
 
+Preview.39: `--start` and `/runtime` startup reuse a running local dsh after API authentication. Unavailable login discovery gives guidance instead of spawning another process. Failed startup preserves diagnostics and the existing backend ownership record.
+
 GUI/TUI now share local dsh client leases: closing either client preserves the backend for the other, and the last client stops a managed backend; external dsh remains external. Actual-dsh checks cover both close orders, with additional GUI Docker scenarios on CI. Ctrl+X cancels the current package request by requestId; account profile/balance opens in a scrollable view.
 
 [Русский](README.md) | **English**
 
-Baseline: November 16, 2026, Go client `0.2.0-preview.38`.
+Baseline: November 16, 2026, Go client `0.2.0-preview.39`.
 Terminal minimum: 80×24; recommended: 100×30.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.

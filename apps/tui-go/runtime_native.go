@@ -291,6 +291,9 @@ func (c *nativeRuntime) start(ctx context.Context) error {
 	if c.Snapshot().Owned {
 		return errors.New(tr("свой dsh уже работает"))
 	}
+	if attached, err := c.attachExisting(ctx); err != nil || attached {
+		return err
+	}
 	if err := checkBackendNode(ctx); err != nil {
 		return err
 	}

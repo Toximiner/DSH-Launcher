@@ -1189,5 +1189,8 @@
   " · Ctrl+X — отменить установку": " · Ctrl+X — cancel installation",
   "Отмена запрошена; ожидаем ответ dsh…": "Cancellation requested; waiting for dsh…",
   "Отменить текущую установку пакета": "Cancel the current package installation",
-  "Установка пакетов": "Package installation"
+  "Установка пакетов": "Package installation",
+  "Не удалось проверить порт dsh %d.": "Could not check dsh port %d.",
+  "Порт %d занят. Не удалось войти в работающий dsh; используйте --url или DSH_TUI_URL со свежей ссылкой входа. Второй процесс не запущен.": "Port %d is occupied. Could not sign in to the running dsh; use --url or DSH_TUI_URL with a fresh login URL. No second process was started.",
+  "dsh уже работает — подключение к существующему процессу…": "dsh is already running — connecting to the existing process…"
 }

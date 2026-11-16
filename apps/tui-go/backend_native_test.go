@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func marketFixture(t *testing.T) (backendOptions, string) {
@@ -117,4 +118,44 @@ exec /bin/sleep 30
 	if _, err := os.Stat(filepath.Join(root, "calls")); !os.IsNotExist(err) {
 		t.Fatal("backend launch unexpectedly installed a plugin")
 	}
+}
+
+func TestFailedBackendStartPreservesOwnershipAndFlushesDiagnostics(t *testing.T) {
+	options, _ := marketFixture(t)
+	options.Port = 3205
+	record := filepath.Join(sharedBackendDirectory(options.Port), "managed.json")
+	previous := []byte(`{"pid":123,"start":"existing","group":123}`)
+	os.MkdirAll(filepath.Dir(record), 0700)
+	os.WriteFile(record, previous, 0600)
+	os.WriteFile(options.Bin, []byte("#!/bin/sh\necho 'fixture startup failure' >&2\nexit 1\n"), 0700)
+	var output bytes.Buffer
+	_, _, _, err := startBackendLogged(context.Background(), options, os.Environ(), &output)
+	if err == nil || !strings.Contains(output.String(), "fixture startup failure") {
+		t.Fatal("startup diagnostics were lost", err)
+	}
+	current, _ := os.ReadFile(record)
+	if !bytes.Equal(current, previous) {
+		t.Fatal("failed start replaced live backend ownership")
+	}
+}
+
+func TestRuntimeLogsContinueAfterStartOperationContextEnds(t *testing.T) {
+	c := runtimeFixture(t)
+	bin := filepath.Join(c.config.CWD, "logging-backend")
+	os.WriteFile(bin, []byte("#!/bin/sh\nprintf 'dsh web: http://127.0.0.1:3205/?token=fixture\\n'\n/bin/sleep 0.2\necho 'after operation completion'\nexec /bin/sleep 30\n"), 0700)
+	c.config.Bin = bin
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	if err := c.start(ctx); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(c.Snapshot().Log, "after operation completion") {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("backend log collection stopped when the start operation completed")
 }

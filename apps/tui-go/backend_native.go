@@ -250,7 +250,9 @@ func startBackendLogged(ctx context.Context, options backendOptions, env []strin
 	}
 	done := make(chan struct{})
 	go func() { command.Wait(); close(done) }()
+	logsDone := make(chan struct{})
 	go func() {
+		defer close(logsDone)
 		defer spool.Close()
 		var offset int64
 		buffer := make([]byte, 32<<10)
@@ -273,8 +275,6 @@ func startBackendLogged(ctx context.Context, options backendOptions, env []strin
 			case <-done:
 				poll()
 				return
-			case <-ctx.Done():
-				return
 			}
 		}
 	}()
@@ -296,17 +296,18 @@ func startBackendLogged(ctx context.Context, options backendOptions, env []strin
 			}
 		})
 	}
-	if err := rememberBackend(options.Port, command.Process.Pid); err != nil {
-		stop()
-		return "", nil, nil, err
-	}
 	select {
 	case value := <-ready:
+		if err := rememberBackend(options.Port, command.Process.Pid); err != nil {
+			stop()
+			return "", nil, nil, err
+		}
 		return value, stop, done, nil
 	case <-ctx.Done():
 		stop()
 		return "", nil, nil, ctx.Err()
 	case <-done:
+		<-logsDone
 		return "", nil, nil, errors.New(tr("dsh завершился до запуска; откройте журнал"))
 	case <-time.After(120 * time.Second):
 		stop()

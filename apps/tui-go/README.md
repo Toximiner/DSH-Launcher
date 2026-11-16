@@ -1,7 +1,19 @@
-# Go TUI preview — 0.2.0-preview.38
+# Go TUI preview — 0.2.0-preview.39
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
+
+## Starting when dsh is already running (preview.39)
+
+`dsh-launcher-tui --start` checks the configured loopback port first. If dsh is
+already running, the client discovers its login URL from a regular stdout file
+owned by the same user and verifies authentication and the session API before
+connecting. It skips local Node/dsh installation and marketplace setup in this
+case. No second backend is started and an external backend is not claimed.
+If the port is occupied but login discovery fails (for example, stdout is a pipe),
+the client asks for `--url` or `DSH_TUI_URL` with a fresh login URL.
+Failed startup does not overwrite an existing managed backend identity, and
+startup diagnostics are drained before returning an error.
 
 ## Shared GUI/TUI backend lifetime
 

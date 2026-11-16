@@ -71,7 +71,8 @@ for node_owns in [False, True]:
         try:
             if node_owns:
                 peer, login = start_peer(True)
-                app = Terminal(binary, ['--url', login, '--new'], env)
+                # Reuse the listening backend even if no local dsh binary can be launched.
+                app = Terminal(binary, ['--start', '--dsh', '/missing/dsh', '--port', str(port), '--cwd', str(root)], env)
             else:
                 app = Terminal(binary, ['--start', '--market', 'skip', '--dsh', dsh, '--cwd', str(root), '--port', str(port)], env)
             app.wait('Введите сообщение.', timeout=60)
@@ -87,6 +88,16 @@ for node_owns in [False, True]:
                 app.exited()
             else:
                 peer, _ = start_peer(False)
+                # A second --start can discover the first TUI's unlinked stdout
+                # file and attach while its runtime ownership lock is held.
+                second = Terminal(binary, ['--start', '--dsh', '/missing/dsh', '--port', str(port), '--cwd', str(root)], env)
+                try:
+                    second.wait('Введите сообщение.', timeout=30)
+                    second.send('\x04')
+                    second.exited()
+                    assert port_open(), 'Closing attached TUI stopped the shared backend'
+                finally:
+                    second.close(root / 'second-terminal.log')
                 app.send('\x04')
                 app.exited()
                 assert port_open(), 'Closing TUI owner stopped actual dsh used by GUI'

@@ -140,64 +140,76 @@ func run(args []string, out io.Writer) error {
 		if controlErr != nil {
 			return controlErr
 		}
-		if err := checkBackendNode(ctx); err != nil {
-			return err
-		}
 		if *loginFlag != "" {
 			return fmt.Errorf("--start cannot be combined with a login URL")
 		}
-		if _, err := exec.LookPath(control.selectedBin()); err != nil {
-			reader := bufio.NewReader(os.Stdin)
-			for {
-				fmt.Fprint(out, tr("dsh не найден. [i] Установить в каталог TUI · [q] Выйти: "))
-				type reply struct {
-					line string
-					err  error
-				}
-				response := make(chan reply, 1)
-				go func() { line, e := reader.ReadString('\n'); response <- reply{line, e} }()
-				var answer string
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case r := <-response:
-					if r.err != nil {
-						return r.err
-					}
-					answer = r.line
-				}
-				if strings.TrimSpace(answer) != "i" {
-					return fmt.Errorf("%s", tr("установка отменена; запустите без --start для /runtime"))
-				}
-				control.live = out
-				err = control.Execute(ctx, "install", "latest")
-				control.live = nil
-				if err == nil {
-					break
-				}
-				fmt.Fprintln(out, control.logSnapshot())
-				fmt.Fprintln(out, redactDiagnostic(err.Error()))
+		attached, err := control.attachExisting(ctx)
+		if err != nil {
+			return err
+		}
+		if attached {
+			fmt.Fprintln(out, tr("dsh уже работает — подключение к существующему процессу…"))
+			*loginFlag = control.Snapshot().Login
+			if *sessionFlag == "" {
+				*newFlag = true
 			}
-		}
-		options := backendOptions{Bin: control.selectedBin(), Profile: control.config.Profile, Port: control.config.Port, CWD: control.config.CWD, Market: *marketFlag}
-		env, err := prepareMarket(ctx, options, os.Stdin, out)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintln(out, tr("Запуск dsh…"))
-		owner, err := lockRuntime(control.root)
-		if err != nil {
-			return err
-		}
-		control.owner = owner
-		login, stop, done, err := startBackendLogged(ctx, options, env, control)
-		if err != nil {
-			return err
-		}
-		control.adopt(login, stop, done)
-		*loginFlag = login
-		if *sessionFlag == "" {
-			*newFlag = true
+		} else {
+			if err := checkBackendNode(ctx); err != nil {
+				return err
+			}
+			if _, err := exec.LookPath(control.selectedBin()); err != nil {
+				reader := bufio.NewReader(os.Stdin)
+				for {
+					fmt.Fprint(out, tr("dsh не найден. [i] Установить в каталог TUI · [q] Выйти: "))
+					type reply struct {
+						line string
+						err  error
+					}
+					response := make(chan reply, 1)
+					go func() { line, e := reader.ReadString('\n'); response <- reply{line, e} }()
+					var answer string
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case r := <-response:
+						if r.err != nil {
+							return r.err
+						}
+						answer = r.line
+					}
+					if strings.TrimSpace(answer) != "i" {
+						return fmt.Errorf("%s", tr("установка отменена; запустите без --start для /runtime"))
+					}
+					control.live = out
+					err = control.Execute(ctx, "install", "latest")
+					control.live = nil
+					if err == nil {
+						break
+					}
+					fmt.Fprintln(out, control.logSnapshot())
+					fmt.Fprintln(out, redactDiagnostic(err.Error()))
+				}
+			}
+			options := backendOptions{Bin: control.selectedBin(), Profile: control.config.Profile, Port: control.config.Port, CWD: control.config.CWD, Market: *marketFlag}
+			env, err := prepareMarket(ctx, options, os.Stdin, out)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(out, tr("Запуск dsh…"))
+			owner, err := lockRuntime(control.root)
+			if err != nil {
+				return err
+			}
+			control.owner = owner
+			login, stop, done, err := startBackendLogged(ctx, options, env, control)
+			if err != nil {
+				return err
+			}
+			control.adopt(login, stop, done)
+			*loginFlag = login
+			if *sessionFlag == "" {
+				*newFlag = true
+			}
 		}
 	}
 	if (*sessionFlag != "" || *newFlag) && *loginFlag == "" {
