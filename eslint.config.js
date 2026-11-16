@@ -18,6 +18,10 @@ module.exports = [
     },
   },
   {
+    files: ['apps/tui-go/test/*.mjs'],
+    languageOptions: { sourceType: 'module', globals: { ...globals.node } },
+  },
+  {
     files: ['apps/tui-go/web/preview.js', 'tools/live/terminal.js'],
     languageOptions: {
       sourceType: 'script',
