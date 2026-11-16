@@ -1,9 +1,9 @@
-# Go TUI preview — 0.2.0-preview.31
+# Go TUI preview — 0.2.0-preview.33
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
 
-The terminal client is implemented in Go/Bubble Tea, with read-only dsh settings
+The terminal client is implemented in Go/Bubble Tea, with schema-driven dsh settings
 and a panel layout: a workspace sidebar, conversation panel, separate
 message composer, connection status, and keyboard hints. The sidebar remains
 visible throughout the supported size range. Input history restores drafts; scrolling, resizing, and clean shutdown
@@ -114,7 +114,7 @@ dsh admits the answer. Arbitrary future interaction kinds remain delegated.
 Tab focuses the sidebar, arrows select a page, and Enter focuses its content.
 Esc returns to chat without losing the draft. Sessions supports refresh (`r`),
 selection, and attachment; Log shows local client information. **Настройки dsh**
-remains a separate read-only backend section. **Настройки TUI** opens from
+remains a separate backend section with schema-driven editing. **Настройки TUI** opens from
 **Файл → Настройки TUI…**, F4, or Alt+T. F10 or Alt+F/V/H opens File/View/Help.
 Dialogs preserve page, scroll, draft, and focus. Mouse clicks work on menus and
 settings controls. Help → About works offline.
@@ -146,7 +146,7 @@ The maintained terminal libraries are Bubble Tea, Bubbles (`textinput` and
 
 [Static browser preview build and limitations](web/README.md).
 
-## Read dsh settings
+## Connect and edit dsh settings
 
 Start dsh separately, then pass its login URL through the environment (avoids
 putting it in the client process arguments), or use `--url URL`:
@@ -227,15 +227,63 @@ Actual-dsh tests verify confirmation, same-turn journal events, next-step model
 input, preserved ordinary work, reconnect, and minimum terminal size.
 
 The client signs in through `/connect` and reads `/api/settings/describe`.
-It never calls settings write endpoints or loads the settings document from disk.
-Open **Настройки dsh** with the mouse or sidebar keyboard navigation. Left/Right switches
-namespaces, `r` refreshes the snapshot, and the wheel or PgUp/PgDn scrolls values.
-Loaded namespaces are sorted by their backend names; fields retain API names.
-Schema-declared secrets show only whether they are set. Neither the schema nor
-base/user layers are rendered. A failed refresh retains the previous snapshot
-and marks it stale. Reads have a timeout and are cancelled on client shutdown.
-Settings remain a point-in-time read-only view without automatic change subscriptions.
+Open **Настройки dsh** with the mouse or sidebar keyboard navigation. Left/Right
+switches namespaces, `r` refreshes the snapshot, and the wheel or PgUp/PgDn scrolls
+values. Enter opens the selected namespace's schema form; F6 or `/providers` opens
+the providers dictionary. The attached dsh profile owns these settings: GUI and TUI
+connected to the same profile share them. The client does not edit profile files.
 An attached dsh is left running when the client exits.
+
+Forms support nested objects, dictionaries, arrays, scalar values, and constant
+choices from dsh's Schemastery schema. ↑/↓ selects a field, Enter opens/edits it,
+and Ctrl+N adds a dictionary entry or array member. Inside a scalar editor, Enter
+stages the value and Esc cancels; constant choices also accept ↑/↓. Strings use
+plain text; numbers, booleans, and complex scalar values use JSON. Missing fields
+are listed from the schema. Unknown fields remain read-only. Ctrl+E opens a
+multiline editor: plain text for strings and JSON for other fields, including
+objects/arrays. Enter inserts a newline; F5 stages the value in the form, then a
+second F5 saves to dsh. Existing multiline strings open this editor with Enter.
+Cancellation preserves the earlier staged value and the chat draft. Input that
+would be transformed or truncated is refused. Whole-container editing is blocked
+when the container contains redacted or schema-declared secrets.
+
+Portable schema checks run before staging/saving: types, required values, constant
+choices, nested objects/arrays/unions, numeric ranges/steps and lengths (string
+length uses JavaScript UTF-16 units). Checks are bounded to depth 32 / 10,000 nodes.
+Backend validation remains authoritative for patterns, transforms, refinements,
+unsupported schema types and relationships between fields.
+
+F5 sends only staged paths through `settings/mutate`, with `expectedRevision`.
+Unrelated settings and redacted secrets are preserved. Array edits materialize the
+whole array to preserve inherited members; arrays containing secrets are refused.
+Ctrl+U unsets a user override and previews the inherited base value. Ctrl+X drops
+the selected draft edit (the whole array when its members were edited). Esc moves
+up a level; leaving the root with staged edits asks whether to discard them.
+Drafts are local to the dialog, bounded to 256 operations / 64 KiB / depth 32.
+The backend validates the complete namespace and reports its application policy.
+
+A conflict or unconfirmed write blocks further saves until Ctrl+R rereads the
+namespace. Ordinary draft fields survive the reread. Changes to the same path are
+marked as conflicts: explicitly edit/review the field or drop its draft with
+Ctrl+X before saving. No automatic write retries occur. Namespace revision checks
+protect settings writes atomically; API-key writes use a separate API without a
+revision guard. Reads/writes have a 20-second timeout. Browser demo is read-only.
+
+On a credential-reference field such as `apiKeyEnv`, Ctrl+K opens a masked API-key
+editor after pending settings have been saved. The form reads only
+`credentials/describe` status (configured/source/writable), never the old key.
+Enter explicitly writes the new value through `credentials/set`. Input is cleared
+before sending and after failures; keys stay out of chat and input history.
+A file credential can override the same environment reference for this dsh
+profile. Successful storage does not prove provider access; the next model request
+checks it. Limits: one line / 16 KiB. Credential deletion remains pending.
+Generic provider OAuth/browser login needs a dsh Remote authorization contract:
+the pinned backend has internal authorization flows but no generic API for
+listing/starting/cancelling them and exchanging prompts/notices. The separate
+DeepSeek account API is not a substitute for other providers' OAuth; its account
+screens remain a dedicated adapter task. The TUI does not run its own OAuth flow
+or modify the shared credential-record format. Schema-declared secrets are masked in the settings view and form;
+private backend errors are replaced with generic diagnostics.
 
 ## Streamed text chat
 
@@ -340,8 +388,10 @@ state. A read-only/no-change choice issues no mutation. Cancelled/late results a
 session changes cannot update a new picker. Provider failure messages and keys
 are not displayed. Catalog bounds are 256 groups / 2,000 models / 32 efforts per
 model; read/write operations have a 20-second timeout. Browser demo does not
-perform model changes. Provider authorization and general schema/revision-based
-settings forms remain the next stage-5 increments.
+perform model changes. Preview.32 adds API-key authorization and
+schema/revision-based settings forms. Preview.33 adds multiline/JSON editing and
+portable schema validation. Generic OAuth needs a backend Remote contract;
+specialized account screens remain separate work.
 
 Preview.21 adds **`/rename`** for the connected session and **F3** on the Sessions
 page for the selected entry. The editor starts with the current title, Enter
@@ -512,6 +562,7 @@ Actual-dsh check with a local controlled model, no paid calls:
 
 ```sh
 python apps/tui-go/test/real_history.py --binary /path/to/dsh-launcher-tui-go --dsh /path/to/dsh
+python apps/tui-go/test/real_settings.py --binary /path/to/dsh-launcher-tui-go --dsh /path/to/dsh
 ```
 
 ## Sessions and agent modes
@@ -626,8 +677,10 @@ messages. Preview.24 adds archive/restore, preview.25 raises the minimum to 80×
 preview.26 formats Markdown, preview.27 adds message/code copying, and preview.28
 adds syntax coloring. Preview.29 adds collapsible history tool details; preview.30
 adds tool search and cross-page replacement support. Preview.31 adds session
-model/reasoning selection. Next: provider authorization and editable dsh settings. Permission dialogs are implemented in preview.11 and tested through the
-actual dsh approval service. Settings editing, workspace features,
+model/reasoning selection. Preview.32 adds provider creation/editing, schema forms,
+revision conflicts, and masked API-key entry. Preview.33 completes generic
+settings editing with multiline/JSON values and local validation. Permission dialogs are implemented
+in preview.11 and tested through the actual dsh approval service. OAuth/account adapters, workspace features,
 additional plugin support, and launcher lifecycle remain planned. No
 full-parity claim is made by this preview. The legacy JS client and its packaging
 have been removed; its dsh installation flow remains pending in Go.

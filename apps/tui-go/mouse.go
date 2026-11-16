@@ -31,6 +31,9 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if cmd, handled := m.queueMouse(msg); handled {
 		return cmd
 	}
+	if m.settingsForm != nil {
+		return m.settingsFormMouse(msg)
+	}
 	if m.modelPicker != nil {
 		return m.modelsMouse(msg)
 	}

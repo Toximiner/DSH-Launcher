@@ -51,6 +51,14 @@ actual session journal events, and preserve remaining work across reconnect.
 Nested PTC checks cover real file reads, errors, restart, and bash cancellation.
 Command-output checks cover live stdout/stderr before completion, reconnect,
 100×30/80×24 layouts, preserved model output, and cancellation.
+`test/real_settings.py` verifies schema-driven provider editing/creation, model
+catalog discovery, exact path writes, revision conflicts between two clients,
+retained drafts, same-field review, and credential masking at three terminal sizes.
+Settings editor checks cover multiline JSON model creation, exact Unicode/newlines,
+staging before backend persistence, cancellation, portable schema constraints and
+secret-container refusal.
+An isolated dummy key is stored through credentials/set and checked in the next
+request to the local model; no user profile or paid provider is touched.
 `test/real_history.py` uses another isolated actual-dsh profile to check paginated
 history, fixed read cuts, page scroll positions, draft preservation, and reads
 while the live model runs. Search checks cover oldest Unicode text beyond the

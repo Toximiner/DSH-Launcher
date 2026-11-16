@@ -19,7 +19,10 @@ type dshAPI struct {
 	client *http.Client
 }
 
-type rpcRejected struct{ method string }
+type rpcRejected struct {
+	method string
+	code   string
+}
 
 func (e *rpcRejected) Error() string {
 	return fmt.Sprintf("dsh отказал в операции %s", e.method)
@@ -81,7 +84,10 @@ func (api *dshAPI) rpc(ctx context.Context, method string, args map[string]any, 
 		Type   string `json:"type"`
 		ID     string `json:"rpcId"`
 		Result struct {
-			OK    *bool           `json:"ok"`
+			OK    *bool `json:"ok"`
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
 			Value json.RawMessage `json:"value"`
 		} `json:"result"`
 	}
@@ -89,7 +95,12 @@ func (api *dshAPI) rpc(ctx context.Context, method string, args map[string]any, 
 		return errors.New("неподдерживаемый ответ API dsh")
 	}
 	if !*envelope.Result.OK {
-		return &rpcRejected{method: method}
+		code := ""
+		switch envelope.Result.Error.Code {
+		case "settings/conflict", "settings/rejected", "credential/rejected":
+			code = envelope.Result.Error.Code
+		}
+		return &rpcRejected{method: method, code: code}
 	}
 	if target != nil {
 		if len(envelope.Result.Value) == 0 || json.Unmarshal(envelope.Result.Value, target) != nil {

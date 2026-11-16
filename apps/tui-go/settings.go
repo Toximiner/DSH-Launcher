@@ -13,15 +13,21 @@ import (
 )
 
 type settingsNamespace struct {
-	NS       string `json:"ns"`
-	Value    any    `json:"value"`
-	Revision int    `json:"revision"`
-	Secrets  []struct {
-		Path []string `json:"path"`
-		Set  bool     `json:"set"`
-	} `json:"secrets"`
+	Schema   json.RawMessage  `json:"schema"`
+	Base     any              `json:"base"`
+	User     any              `json:"user"`
+	Applies  string           `json:"applies"`
+	NS       string           `json:"ns"`
+	Value    any              `json:"value"`
+	Revision int              `json:"revision"`
+	Secrets  []settingsSecret `json:"secrets"`
+}
+type settingsSecret struct {
+	Path []string `json:"path"`
+	Set  bool     `json:"set"`
 }
 type settingsSnapshot struct {
+	Writable   bool                `json:"writable"`
 	Namespaces []settingsNamespace `json:"namespaces"`
 }
 type settingsResult struct {
@@ -45,7 +51,7 @@ func settingsURL(value string) (*url.URL, error) {
 	return u, nil
 }
 
-// Settings remain read-only; session control uses separate, explicit operations.
+// Descriptions are always redacted; edits use revision-checked path operations.
 func readSettings(ctx context.Context, login string) (*settingsSnapshot, error) {
 	api, err := openAPI(ctx, login)
 	if err != nil {
@@ -78,9 +84,9 @@ func (m *model) loadSettings() tea.Cmd {
 
 func (m *model) settingsView() string {
 	if m.settingsLogin == "" {
-		return heading.Render("Настройки dsh · только чтение") + "\n\n" + muted.Render("Для чтения настроек работающего dsh\nукажите --url или DSH_TUI_URL.\nНужен URL входа с ?token=.")
+		return heading.Render("Настройки dsh") + "\n\n" + muted.Render("Для чтения настроек работающего dsh\nукажите --url или DSH_TUI_URL.\nНужен URL входа с ?token=.")
 	}
-	lines := []string{heading.Render("Настройки dsh · только чтение"), muted.Render("←/→ — раздел · r — обновить · F12 — модель сессии")}
+	lines := []string{heading.Render("Настройки dsh"), muted.Render("←/→ раздел · Enter правка · F6 провайдеры · F12 модель")}
 	if m.settingsLoading {
 		lines = append(lines, "", "Загрузка настроек…")
 	}
@@ -101,7 +107,7 @@ func (m *model) settingsView() string {
 	ns := m.settings.Namespaces[m.settingsIndex]
 	lines = append(lines, "", accent.Bold(true).Render(fmt.Sprintf("‹ %s ›  [%d/%d]", clean(ns.NS), m.settingsIndex+1, len(m.settings.Namespaces))), muted.Render(fmt.Sprintf("Ревизия %d · действующие значения", ns.Revision)), "")
 	lines = append(lines, settingsFields(ns)...)
-	lines = append(lines, "", muted.Render("Секреты скрыты. Изменение параметров пока недоступно."))
+	lines = append(lines, "", muted.Render("Секреты скрыты. Enter — форма выбранного раздела."))
 	return strings.Join(lines, "\n")
 }
 

@@ -2,7 +2,7 @@
 
 [Русский](README.md) | **English**
 
-Baseline: November 16, 2026, Go client `0.2.0-preview.31`.
+Baseline: November 16, 2026, Go client `0.2.0-preview.33`.
 Terminal minimum: 80×24; recommended: 100×30.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.
@@ -22,7 +22,7 @@ disabled; private Codespaces supports live inspection.
 
 - File/View/Help menu, modal TUI settings, persisted mouse/input-history preferences.
 - Sidebar navigation, panels, local draft input/history, mouse, and scrolling.
-- dsh attachment and read-only settings with secret masking.
+- dsh attachment, schema-driven revision-checked settings, provider creation, and masked API-key entry.
 - dsh task queue: submission while running, server-confirmed pending items, individual removal/editing, queue-to-steering promotion, admission into history, and reconnect recovery.
 - Agent questions: choices, multi-select, multiline answers, skip, batches, timed holds, and continued replies.
 - Permission dialogs: reason, arguments, one-shot allow/reject, F7, cancellation, and pending request recovery.
@@ -50,8 +50,8 @@ The check used an isolated temporary profile; credentials are not bundled.
 | Tools and questions | Tool cards, permissions, questions, queue submission/view/removal/editing/steering, nested PTC calls, command stdout/stderr | Basic milestone complete; arbitrary plugin streams need backend APIs | 3 ✓ |
 | Sessions and history | Create/list/attach, rename, fork, archive; history, message/tool search, cross-page replacements | Current increment complete; permanent deletion needs dsh API support | 4 ✓ |
 | Message rendering | Markdown, syntax coloring, tables, folding, copying | Current increment complete | 4 ✓ |
-| Models and accounts | Provider catalog and session model/reasoning selection | Provider authorization/editing and remaining parameters | 5, partial |
-| dsh settings | Read-only snapshots | Forms, validation, persistence, revision conflicts | 5 |
+| Models and accounts | Catalog, session model/reasoning selection, provider creation, API keys | OAuth, specialized editors, remaining account flows | 5, partial |
+| dsh settings | Forms, multiline/JSON editor, local/backend validation, persistence, revision conflicts | Basic client increment complete; specialized editors are future improvements | 5 ✓ |
 | Agent modes | Ordinary/plan/goal and basic commands | Cards, plan review, goal editing, presets | 6 |
 | Workspace | Current directory path | File tree, previews, workspace selection | 7 |
 | Input and attachments | Single-line input | Multiline editor, file references, attachments | 7 |
@@ -122,12 +122,21 @@ The check used an isolated temporary profile; credentials are not bundled.
    connected-provider catalog, search, model and reasoning-effort selection.
    Acknowledgement covers the session; dsh saves the shared default in the
    background. Preflight detects already changed selections without claiming
-   atomic API protection; unconfirmed writes never retry. Next: provider
-   authorization/editing, remaining parameters,
-   schema-driven forms, revision-checked writes; secrets stay out of transcripts
-   and logs. Clearly mark changes requiring restart. Done: a selected model applies
-   to the session; conflicts preserve other writers' edits. Actual verification
-   requires working provider access.
+   atomic API protection; unconfirmed writes never retry. Preview.32 adds schema
+   forms, provider/model creation and editing, F5 revision-checked persistence,
+   and same-field conflict review. Ctrl+K enters API keys separately; old values
+   are never read, and credential writes have no revision guard. Actual dsh checks
+   verify the new key in a request and two-client conflicts in an isolated profile.
+   Preview.33 completes the basic forms: Ctrl+E opens multiline/JSON editing;
+   local checks cover types, required values, ranges, steps, and lengths. The first
+   F5 stages; the next saves. The model/API-key/generic-settings client increment
+   is complete. **External dependency:** generic provider OAuth needs dsh Remote
+   operations to list/start/cancel flows and exchange prompts/notices. The pinned
+   version has the internal authorization service but no generic RPC contract.
+   DeepSeek's separate account API does not cover other providers' OAuth; its
+   account screens remain a dedicated adapter task. The full stage stays partial
+   until those sign-in methods are implemented and verified. Secrets stay out of
+   transcripts/logs.
 6. **Plans, goals, presets.** Extend current controls with plan inspection/review,
    goal editing, execution status, and preset selection.
    Done: reattachment restores state matching dsh.
