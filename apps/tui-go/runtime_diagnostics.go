@@ -14,7 +14,7 @@ var diagnosticRedactors = []*regexp.Regexp{
 func redactDiagnostic(text string) string {
 	text = clean(text)
 	for _, r := range diagnosticRedactors {
-		text = r.ReplaceAllString(text, "${1}[СКРЫТО]")
+		text = r.ReplaceAllString(text, tr("${1}[СКРЫТО]"))
 	}
 	return text
 }

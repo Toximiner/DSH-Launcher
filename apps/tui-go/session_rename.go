@@ -25,7 +25,7 @@ type sessionRenameResult struct {
 
 func (m *model) openSessionRename(current bool) tea.Cmd {
 	if m.settingsLogin == "" {
-		m.append("Переименование доступно при подключении к dsh.")
+		m.append(tr("Переименование доступно при подключении к dsh."))
 		return nil
 	}
 	id, title := "", ""
@@ -37,11 +37,11 @@ func (m *model) openSessionRename(current bool) tea.Cmd {
 		id, title = item.ID, item.Projections.Values.Title
 	}
 	if id == "" {
-		m.append("Выберите сессию для переименования.")
+		m.append(tr("Выберите сессию для переименования."))
 		return nil
 	}
 	editor := textinput.New()
-	editor.Prompt = "Название: "
+	editor.Prompt = tr("Название: ")
 	editor.CharLimit = 4096
 	editor.SetValue(title)
 	editor.CursorEnd()
@@ -74,11 +74,11 @@ func (m *model) renameKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case tea.KeyEnter:
 		title := d.editor.Value()
 		if strings.TrimSpace(title) == "" {
-			d.note = "Введите непустое название."
+			d.note = tr("Введите непустое название.")
 			return nil, true
 		}
 		d.busy = true
-		d.note = "Сохранение в dsh…"
+		d.note = tr("Сохранение в dsh…")
 		login, ctx := m.settingsLogin, m.settingsContext
 		if ctx == nil {
 			ctx = context.Background()
@@ -96,7 +96,7 @@ func (m *model) renameKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 				}
 				err = api.rpc(ctx, "session/rename", map[string]any{"request": map[string]any{"sessionId": d.id, "title": title}}, &accepted)
 				if err == nil && (accepted.Seq == nil || *accepted.Seq < 0 || strings.TrimSpace(accepted.Title) == "") {
-					err = errors.New("dsh не подтвердил название")
+					err = errors.New(tr("dsh не подтвердил название"))
 				}
 				result.title = accepted.Title
 			}
@@ -119,7 +119,7 @@ func (m *model) handleSessionRename(result sessionRenameResult) tea.Cmd {
 	}
 	d.busy = false
 	if result.err != nil {
-		d.note = "Не удалось подтвердить. Проверьте список перед повтором. " + clean(result.err.Error())
+		d.note = tr("Не удалось подтвердить. Проверьте список перед повтором. ") + clean(result.err.Error())
 		return nil
 	}
 	m.titleRevision++
@@ -151,10 +151,10 @@ func (m *model) renameView(base string) string {
 	if len(note) > 3 {
 		note = note[:3]
 	}
-	hint := "Enter — сохранить · Esc — отменить"
+	hint := tr("Enter — сохранить · Esc — отменить")
 	if d.busy {
-		hint = "Ожидание ответа dsh…"
+		hint = tr("Ожидание ответа dsh…")
 	}
-	content := strings.Join([]string{heading.Render("Название сессии"), ansi.Truncate(clean(d.id), inner, "…"), "", d.editor.View(), "", strings.Join(note, "\n"), hint}, "\n")
+	content := strings.Join([]string{heading().Render(tr("Название сессии")), ansi.Truncate(clean(d.id), inner, "…"), "", d.editor.View(), "", strings.Join(note, "\n"), hint}, "\n")
 	return overlay(base, panel(width, height, content, "#58a6ff"), (m.width-1-width)/2, (m.height-height)/2, m.width-1)
 }

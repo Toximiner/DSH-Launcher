@@ -66,7 +66,10 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
     (profile / 'package.json').write_text(json.dumps({'name': 'isolated-workbench-test', 'private': True,
         'dependencies': {}, 'dsh': {'profile': {'bundles': ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']}}}))
     (profile / 'cordis.yml').write_text('[]\n')
+    sdk_examples = Path(__file__).resolve().parents[3] / 'packages/tui-plugin-sdk/examples'
     (profile / 'cordis.patch.yml').write_text(json.dumps([
+        {'insert': [{'id': 'tui-greeting-example', 'name': str(sdk_examples / 'greeting.mjs')},
+                    {'id': 'tui-counter-example', 'name': str(sdk_examples / 'counter.mjs')}]},
         {'id': 'llm-pi-ai', 'config': {'providers': {'settings-fixture': {
             'apiKeyEnv': 'SETTINGS_TEST_KEY', 'api': 'openai-completions', 'baseURL': endpoint,
             'models': [{'id': 'fixture', 'contextWindow': 131072, 'maxTokens': 256, 'reasoningEfforts': False, 'input': ['text']}],
@@ -111,6 +114,26 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         session_id = created['value']['sessionId']
         (project / 'sample.txt').write_text('\n'.join(f'line-{i:03d} привет' for i in range(1, 451)))
         (project / 'nested').mkdir()
+        pdf_objects = [b'<< /Type /Catalog /Pages 2 0 R >>', b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+                       b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>',
+                       b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>']
+        pdf_text = b'BT /F1 12 Tf 20 100 Td (PDF preview fixture) Tj ET'
+        pdf_objects.append(b'<< /Length ' + str(len(pdf_text)).encode() + b' >>\nstream\n' + pdf_text + b'\nendstream')
+        pdf = b'%PDF-1.4\n'
+        offsets = [0]
+        for number, obj in enumerate(pdf_objects, 1):
+            offsets.append(len(pdf))
+            pdf += f'{number} 0 obj\n'.encode() + obj + b'\nendobj\n'
+        xref = len(pdf)
+        pdf += b'xref\n0 6\n0000000000 65535 f \n' + b''.join(f'{offset:010d} 00000 n \n'.encode() for offset in offsets[1:])
+        pdf += f'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
+        (project / 'sample.pdf').write_bytes(pdf)
+        (project / 'page.html').write_text('<html><body><p>HTML preview fixture</p><script>hidden-script-text</script></body></html>')
+        import struct
+        import zlib
+        def png_chunk(kind, data):
+            return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
+        (project / 'pixel.png').write_bytes(b'\x89PNG\r\n\x1a\n' + png_chunk(b'IHDR', struct.pack('!IIBBBBB', 1, 1, 8, 2, 0, 0, 0)) + png_chunk(b'IDAT', zlib.compress(b'\x00\xff\x00\x00')) + png_chunk(b'IEND', b''))
         app = Terminal(str(Path(args.binary).resolve()), ['--session', session_id], {**env, 'DSH_TUI_URL': login[0]}, columns=100, rows=30)
         app.wait('Введите сообщение.', timeout=20)
         def capture(kind):
@@ -141,9 +164,29 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
             app.send('\x1b')
             app.wait('Введите сообщение.')
         for command, title in [('/workspaces', 'Рабочие области'), ('/packages', 'Управление пакетами'),
-                ('/plugins', 'Плагины dsh'), ('/commands', 'Команды плагинов'),
+                ('/plugins', 'Плагины dsh'), ('/account', 'Аккаунт DeepSeek'), ('/commands', 'Команды плагинов'),
                 ('/jobs', 'Фоновые задания'), ('/agents', 'Подагенты сессии'), ('/tasks', 'Задачи команды')]:
             panel(command, title)
+            back()
+        for command, title, expected in [('tui-greeting', 'Greeting example', 'Hello, Alice'), ('tui-counter', 'Counter example', 'Total │ 2')]:
+            panel('/commands', 'Команды плагинов')
+            app.send(command)
+            app.wait('/' + command)
+            app.send('\r')
+            app.wait('Enter — подтвердить')
+            app.send('\r')
+            app.wait(title)
+            if command == 'tui-greeting':
+                app.send('\r\x15Alice\r')
+                app.send('\x1b[B')
+            else:
+                app.send('\x1b[B\x1b[B')
+            app.send('\r')
+            app.wait('Enter — подтвердить')
+            app.send('\r')
+            app.wait(expected)
+            app.send('\x1b')
+            app.wait('Команды плагинов')
             back()
         app.command('/presets')
         app.wait('Текущий пресет:')
@@ -155,8 +198,18 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.wait('Ответ dsh получен')
         assert rpc('session/projections', {'request': {'sessionId': session_id}})['value']['values']['agentPreset'] == preset
         back()
+        for filename, expected in [('page.html', 'HTML preview fixture'), ('pixel.png', '1 × 1'), ('sample.pdf', 'PDF preview fixture')]:
+            panel('/files', 'Файлы рабочей области')
+            app.send(filename)
+            app.wait(filename)
+            app.send('\r')
+            app.wait(expected)
+            assert 'hidden-script-text' not in app.text
+            app.send('\x1b')
+            app.wait('Снимок dsh')
+            back()
         panel('/files', 'Файлы рабочей области')
-        app.send('sample')
+        app.send('sample.txt')
         app.wait('sample.txt')
         app.send('\r')
         app.wait('line-001')

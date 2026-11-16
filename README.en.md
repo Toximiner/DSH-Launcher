@@ -537,3 +537,5 @@ and remove `--no-sandbox` from the last line of `run.sh`.
 - The cookie lives in the Electron profile (`~/.config/dsh-launcher`); to
   “forget” the authorization, close the window (dsh will stop) and delete
   that directory.
+
+Keyboard shortcuts are listed in **Settings → Keyboard shortcuts**, with search and action context.

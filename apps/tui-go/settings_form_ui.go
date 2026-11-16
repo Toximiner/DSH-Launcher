@@ -39,7 +39,7 @@ func (m *model) settingsFormKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			d.serial++
 			d.busy = false
 			d.discard = true
-			d.note = "Отбросить изменения? Enter — отбросить · Esc — продолжить."
+			d.note = tr("Отбросить изменения? Enter — отбросить · Esc — продолжить.")
 		}
 		return nil, true
 	}
@@ -70,7 +70,7 @@ func (m *model) settingsFormKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			return cmd, true
 		}
 		if msg.Paste && msg.Type == tea.KeyRunes && strings.ContainsAny(string(msg.Runes), "\n\r") {
-			d.note = "Поле принимает только одну строку. Вставка не изменена и не принята."
+			d.note = tr("Поле принимает только одну строку. Вставка не изменена и не принята.")
 			return nil, true
 		}
 		switch msg.Type {
@@ -162,7 +162,7 @@ func (m *model) settingsFormKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		if len(d.ops) > 0 {
 			d.discard = true
-			d.note = "Отбросить изменения? Enter — отбросить · Esc — продолжить."
+			d.note = tr("Отбросить изменения? Enter — отбросить · Esc — продолжить.")
 			return nil, true
 		}
 		return m.closeSettingsForm(), true
@@ -181,36 +181,36 @@ func (m *model) settingsFormView(base string) string {
 	box := m.settingsFormBox()
 	width := box.width - 4
 	trim := func(text string) string { return ansi.Truncate(clean(text), width, "…") }
-	title := "Настройки · " + d.namespace.NS
+	title := tr("Настройки · ") + d.namespace.NS
 	if d.field != nil && d.field.credential {
-		title = "API-ключ · " + d.field.ref
+		title = tr("API-ключ · ") + d.field.ref
 	}
-	lines := []string{heading.Render(trim(title)), trim("/" + strings.Join(d.path, "/")), fmt.Sprintf("Ревизия %d · изменений %d · F5 сохранить", d.namespace.Revision, len(d.ops)), ""}
+	lines := []string{heading().Render(trim(title)), trim("/" + strings.Join(d.path, "/")), fmt.Sprintf(tr("Ревизия %d · изменений %d · F5 сохранить"), d.namespace.Revision, len(d.ops)), ""}
 	if d.field != nil && d.field.credential {
-		lines[2] = "Enter — записать новый ключ · Esc — отменить"
+		lines[2] = tr("Enter — записать новый ключ · Esc — отменить")
 	}
 	available := box.height - 11
 	if d.field != nil {
 		field := d.field
 		field.editor.Width = max(1, width-13)
 		if field.credential {
-			status := "не задан"
+			status := tr("не задан")
 			if field.info.Configured {
-				status = "задан"
+				status = tr("задан")
 			}
-			lines = append(lines, "Состояние: "+status, trim("Источник: "+field.info.Source), "Существующий ключ скрыт и не читается.", "Enter заменит ключ в общем хранилище dsh.", field.editor.View())
+			lines = append(lines, tr("Состояние: ")+status, trim(tr("Источник: ")+field.info.Source), tr("Существующий ключ скрыт и не читается."), tr("Enter заменит ключ в общем хранилище dsh."), field.editor.View())
 		} else if field.multiline != nil {
 			field.multiline.SetWidth(width)
 			field.multiline.SetHeight(max(1, box.height-13))
-			lines = append(lines, trim("Поле: "+strings.Join(field.row.path, "/")), trim("Тип: "+field.row.node.Type+" · многострочный редактор"))
+			lines = append(lines, trim(tr("Поле: ")+strings.Join(field.row.path, "/")), trim(tr("Тип: ")+field.row.node.Type+tr(" · многострочный редактор")))
 			lines = append(lines, strings.Split(field.multiline.View(), "\n")...)
 		} else {
-			lines = append(lines, trim("Поле: "+strings.Join(field.row.path, "/")), trim("Тип: "+field.row.node.Type), field.editor.View())
+			lines = append(lines, trim(tr("Поле: ")+strings.Join(field.row.path, "/")), trim(tr("Тип: ")+field.row.node.Type), field.editor.View())
 			if field.add {
-				lines[len(lines)-3] = "Новая запись"
+				lines[len(lines)-3] = tr("Новая запись")
 			}
 			if choices := d.schema.enums(field.row.node); len(choices) > 0 {
-				lines = append(lines, "↑/↓ — выбрать значение схемы")
+				lines = append(lines, tr("↑/↓ — выбрать значение схемы"))
 			}
 		}
 	} else {
@@ -222,7 +222,7 @@ func (m *model) settingsFormView(base string) string {
 		}
 		start := max(0, min(d.index-available/2, count-available))
 		for i := start; i < min(count, start+available); i++ {
-			label := "＋ Добавить запись"
+			label := tr("＋ Добавить запись")
 			if i < len(rows) {
 				row := rows[i]
 				label = row.key + " = " + formSummary(row)
@@ -235,7 +235,7 @@ func (m *model) settingsFormView(base string) string {
 					}
 				}
 				if !row.known {
-					label += " [только чтение]"
+					label += tr(" [только чтение]")
 				}
 			}
 			prefix := "  "
@@ -244,12 +244,12 @@ func (m *model) settingsFormView(base string) string {
 			}
 			label = trim(prefix + label)
 			if i == d.index {
-				label = heading.Render(label)
+				label = heading().Render(label)
 			}
 			lines = append(lines, label)
 		}
 		if count == 0 {
-			lines = append(lines, "Нет полей для изменения.")
+			lines = append(lines, tr("Нет полей для изменения."))
 		}
 	}
 	for len(lines) < box.height-7 {
@@ -257,31 +257,31 @@ func (m *model) settingsFormView(base string) string {
 	}
 	note := d.note
 	if d.busy {
-		note = "Запрос dsh…"
+		note = tr("Запрос dsh…")
 	}
 	notes := strings.Split(ansi.Hardwrap(clean(note), width, true), "\n")
 	for len(notes) < 3 {
 		notes = append(notes, "")
 	}
-	lines = append(lines, muted.Render(notes[0]), muted.Render(notes[1]), muted.Render(notes[2]))
-	hint := "↑/↓ поле · Enter открыть · Ctrl+N добавить · Ctrl+E редактор"
-	hint2 := "F5 сохранить · Ctrl+R перечитать · Ctrl+U сброс · Ctrl+X отмена правки"
+	lines = append(lines, muted().Render(notes[0]), muted().Render(notes[1]), muted().Render(notes[2]))
+	hint := tr("↑/↓ поле · Enter открыть · Ctrl+N добавить · Ctrl+E редактор")
+	hint2 := tr("F5 сохранить · Ctrl+R перечитать · Ctrl+U сброс · Ctrl+X отмена правки")
 	if d.field != nil {
-		hint = "Enter — принять · Esc — отменить ввод"
-		hint2 = "Ключи и секреты не попадают в историю ввода."
+		hint = tr("Enter — принять · Esc — отменить ввод")
+		hint2 = tr("Ключи и секреты не попадают в историю ввода.")
 		if d.field.multiline != nil {
-			hint = "Enter — новая строка · F5 — принять · Esc — отменить"
-			hint2 = "Принять в форму; затем F5 — сохранить в dsh."
+			hint = tr("Enter — новая строка · F5 — принять · Esc — отменить")
+			hint2 = tr("Принять в форму; затем F5 — сохранить в dsh.")
 		}
 	} else {
-		hint2 += " · Esc назад"
+		hint2 += tr(" · Esc назад")
 		if row, ok := d.selection(); ok && nodeRole(row.node) == "credential-ref" {
-			hint = "Ctrl+K — задать API-ключ · Enter — имя ссылки"
+			hint = tr("Ctrl+K — задать API-ключ · Enter — имя ссылки")
 		}
 	}
 	if d.discard {
-		hint = "Enter — отбросить изменения"
-		hint2 = "Esc — вернуться к форме"
+		hint = tr("Enter — отбросить изменения")
+		hint2 = tr("Esc — вернуться к форме")
 	}
 	lines = append(lines, trim(hint), trim(hint2))
 	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)

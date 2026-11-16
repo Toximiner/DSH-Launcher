@@ -25,11 +25,11 @@ type nestedToolEvent struct {
 func nestedTool(s *chatState, event chatEvent) (*chatTool, error) {
 	var data nestedToolEvent
 	if json.Unmarshal(event.Data, &data) != nil {
-		return nil, errors.New("неподдерживаемые данные вложенного вызова")
+		return nil, errors.New(tr("неподдерживаемые данные вложенного вызова"))
 	}
 	for _, id := range []string{data.ID, data.ParentID, data.RootID} {
 		if id == "" || len(id) > 1024 {
-			return nil, errors.New("вложенный вызов без корректных идентификаторов")
+			return nil, errors.New(tr("вложенный вызов без корректных идентификаторов"))
 		}
 	}
 	tool := &chatTool{ID: data.ID, ParentID: data.ParentID, RootID: data.RootID, Nested: true, StartSeq: event.Seq, Turn: -1, Name: boundedToolText(data.Name, 256), Arguments: boundedToolText(string(data.Arguments), toolArgumentsLimit), State: "running"}
@@ -146,17 +146,17 @@ func (m *model) nestedRelation(t *chatTool) string {
 		if _, ok := nestedDepth(t, tools); ok {
 			name := parent.Name
 			if name == "" {
-				name = "Инструмент"
+				name = tr("Инструмент")
 			}
-			label := "Внутри: " + name
+			label := tr("Внутри: ") + name
 			if m.chat.expandedTools[t.ID] {
 				label += " · " + id
 			}
 			return label
 		}
-		return "Связь вызовов не восстановлена · " + id
+		return tr("Связь вызовов не восстановлена · ") + id
 	}
-	return "Родитель вне окна истории · " + id
+	return tr("Родитель вне окна истории · ") + id
 }
 func (m *model) displayTool(t *chatTool, depth int) string {
 	indent := 0

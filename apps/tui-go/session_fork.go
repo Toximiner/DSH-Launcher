@@ -27,11 +27,11 @@ type sessionForkResult struct {
 
 func (m *model) openSessionFork(current bool) tea.Cmd {
 	if m.settingsLogin == "" {
-		m.append("Ветвление доступно при подключении к dsh.")
+		m.append(tr("Ветвление доступно при подключении к dsh."))
 		return nil
 	}
 	if m.chatSessionChanging() {
-		m.append("Дождитесь подключения сессии перед ветвлением.")
+		m.append(tr("Дождитесь подключения сессии перед ветвлением."))
 		return nil
 	}
 	id := ""
@@ -42,7 +42,7 @@ func (m *model) openSessionFork(current bool) tea.Cmd {
 		id = m.visibleSessions()[m.sessionListIndex].ID
 	}
 	if id == "" {
-		m.append("Выберите сессию для ветвления.")
+		m.append(tr("Выберите сессию для ветвления."))
 		return nil
 	}
 	m.forkDialog = &sessionFork{id: id, focused: m.input.Focused()}
@@ -75,7 +75,7 @@ func (m *model) forkKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			return nil, true
 		}
 		d.attempted, d.busy = true, true
-		d.note = "Создание ветки в dsh…"
+		d.note = tr("Создание ветки в dsh…")
 		login, ctx := m.settingsLogin, m.settingsContext
 		if ctx == nil {
 			ctx = context.Background()
@@ -96,7 +96,7 @@ func (m *model) forkKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 				}
 				err = api.rpc(ctx, "session/fork", map[string]any{"request": request}, &created)
 				if err == nil && (strings.TrimSpace(created.ID) == "" || created.ID == d.id) {
-					err = errors.New("dsh не подтвердил новую сессию")
+					err = errors.New(tr("dsh не подтвердил новую сессию"))
 				}
 				result.childID = created.ID
 			}
@@ -114,14 +114,14 @@ func (m *model) handleSessionFork(result sessionForkResult) tea.Cmd {
 	}
 	d.busy = false
 	if result.err != nil {
-		d.note = "Создание не подтверждено. Закройте окно и обновите список перед повтором. " + clean(result.err.Error())
+		d.note = tr("Создание не подтверждено. Закройте окно и обновите список перед повтором. ") + clean(result.err.Error())
 		return nil
 	}
 	m.forkDialog = nil
 	m.closeHistory()
 	focus := m.showChat()
 	// Keep the acknowledged identity visible if connecting fails; never create again.
-	m.append("Ветка создана: " + clean(result.childID) + ". Для подключения: /session " + clean(result.childID))
+	m.append(tr("Ветка создана: ") + clean(result.childID) + tr(". Для подключения: /session ") + clean(result.childID))
 	return tea.Batch(focus, m.sessionOperation("connect", result.childID))
 }
 
@@ -132,11 +132,11 @@ func (m *model) forkView(base string) string {
 	}
 	width, height := min(76, m.width-3), min(16, m.height-2)
 	inner := width - 4
-	explanation := "История — до последнего завершённого хода. Незавершённый ответ не войдёт. Без завершённых ходов ветка недоступна. Источник продолжит работу. Откроется новая ветка."
+	explanation := tr("История — до последнего завершённого хода. Незавершённый ответ не войдёт. Без завершённых ходов ветка недоступна. Источник продолжит работу. Откроется новая ветка.")
 	if d.atSeq != nil {
-		explanation = fmt.Sprintf("История — по событие #%d включительно. Более поздние сообщения не войдут. Незавершённый ход закроет dsh. Источник продолжит работу.", *d.atSeq)
+		explanation = fmt.Sprintf(tr("История — по событие #%d включительно. Более поздние сообщения не войдут. Незавершённый ход закроет dsh. Источник продолжит работу."), *d.atSeq)
 	}
-	lines := []string{heading.Render("Ветвление сессии"), ansi.Truncate(clean(d.id), inner, "…")}
+	lines := []string{heading().Render(tr("Ветвление сессии")), ansi.Truncate(clean(d.id), inner, "…")}
 	if d.preview != "" {
 		lines = append(lines, ansi.Truncate(d.preview, inner, "…"))
 	}
@@ -148,11 +148,11 @@ func (m *model) forkView(base string) string {
 		}
 		lines = append(lines, strings.Join(note, "\n"))
 	}
-	hint := "Enter — создать · Esc — отменить"
+	hint := tr("Enter — создать · Esc — отменить")
 	if d.busy {
-		hint = "Ожидание ответа dsh…"
+		hint = tr("Ожидание ответа dsh…")
 	} else if d.attempted {
-		hint = "Esc — закрыть и проверить список"
+		hint = tr("Esc — закрыть и проверить список")
 	}
 	lines = append(lines, hint)
 	return overlay(base, panel(width, height, strings.Join(lines, "\n"), "#58a6ff"), (m.width-1-width)/2, (m.height-height)/2, m.width-1)

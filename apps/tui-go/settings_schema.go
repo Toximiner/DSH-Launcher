@@ -36,10 +36,10 @@ type settingsPathOp struct {
 func decodeFormSchema(raw json.RawMessage) (*formSchema, error) {
 	var schema formSchema
 	if len(raw) > 1<<20 || json.Unmarshal(raw, &schema) != nil || len(schema.Refs) > 10000 {
-		return nil, fmt.Errorf("Схема раздела недоступна или слишком велика.")
+		return nil, fmt.Errorf("%s", tr("Схема раздела недоступна или слишком велика."))
 	}
 	if _, ok := schema.Refs[strconv.Itoa(schema.UID)]; !ok {
-		return nil, fmt.Errorf("Формат схемы раздела не поддержан.")
+		return nil, fmt.Errorf("%s", tr("Формат схемы раздела не поддержан."))
 	}
 	return &schema, nil
 }
@@ -232,13 +232,13 @@ func formDefault(node formNode) any {
 }
 func formSummary(row formRow) string {
 	if nodeRole(row.node) == "secret" {
-		return "[секрет скрыт]"
+		return tr("[секрет скрыт]")
 	}
 	if formContainer(row.node) {
 		return "[" + row.node.Type + "]"
 	}
 	if row.value == nil {
-		return "[не задано]"
+		return tr("[не задано]")
 	}
 	raw, _ := json.Marshal(row.value)
 	return clean(strings.ReplaceAll(string(raw), "\n", " "))

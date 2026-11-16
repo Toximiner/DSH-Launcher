@@ -16,6 +16,7 @@ import (
 
 func benchTestModel(t *testing.T, kind string) *model {
 	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	m := chatModel(t)
 	applyChat(t, m, `{"type":"snapshot","header":{"id":"s"},"cursor":-1}`)
 	m.openWorkbench(kind)
@@ -196,5 +197,48 @@ func TestWorkbenchJobSearchKeepsSpacesAndRefusesForeignOwner(t *testing.T) {
 	d.rows[0].Data["owner"] = "other"
 	if m.benchPrepare(tea.KeyEnter) != nil || d.document != "" {
 		t.Fatal("foreign job output was opened")
+	}
+}
+
+func TestPackageVersionSelectionAndBuildApproval(t *testing.T) {
+	m := benchTestModel(t, "package-versions")
+	d := m.workbench
+	d.location = "fixture"
+	d.rows = []benchRow{{ID: "2.0.0", Data: map[string]any{"bundle": true, "incompatible": map[string]any{"runtimeVersion": "1.0.0"}}}}
+	m.benchPrepare(tea.KeyEnter)
+	if d.confirm || d.action != nil {
+		t.Fatal("incompatible package version offered for installation")
+	}
+	d.rows[0].Data = map[string]any{"bundle": true, "registry": "https://registry.example"}
+	m.benchPrepare(tea.KeyEnter)
+	if !d.confirm || d.action.Args["version"] != "2.0.0" || objectValue(d.action.Args["options"])["registry"] != "https://registry.example" {
+		t.Fatal("exact version or its registry was lost")
+	}
+	m = benchTestModel(t, "packages")
+	d = m.workbench
+	d.pendingBuilds = []string{"fixture-native@1.0.0"}
+	d.pendingSpec = "fixture@1.0.0"
+	d.blocked = true
+	m.benchKey(tea.KeyMsg{Type: tea.KeyF2})
+	if !d.confirm || !strings.Contains(d.action.Label, "fixture-native@1.0.0") {
+		t.Fatal("build scripts were not named for explicit confirmation")
+	}
+	if len(objectValue(d.action.Args["options"])["approvedBuilds"].([]string)) != 1 {
+		t.Fatal("build approval list changed")
+	}
+}
+func TestPackageReceiptsSurviveReopeningAndFilterOrigins(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	r := packageReceipt{ID: strings.Repeat("a", 32), Origin: "http://localhost:3080", Method: "pluginManager/updateBundle", Target: "fixture", State: "unknown"}
+	if err := savePackageReceipt(r); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := packageReceipts(r.Origin)
+	if err != nil || len(rows) != 1 || !strings.Contains(rows[0].Body, "неизвестен") {
+		t.Fatal("unknown operation was lost or reported as complete")
+	}
+	foreign, _ := packageReceipts("http://localhost:4000")
+	if len(foreign) != 0 {
+		t.Fatal("receipts crossed backend origins")
 	}
 }

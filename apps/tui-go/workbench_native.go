@@ -44,14 +44,14 @@ func readBenchJob(ctx context.Context, api *dshAPI, session, id string) (string,
 		return !state.Done && state.Cursor < total
 	})
 	if invalid != nil || err != nil || !state.Opened {
-		return "", errors.New("Не удалось прочитать вывод задания; F5 обновить.")
+		return "", errors.New(tr("Не удалось прочитать вывод задания; F5 обновить."))
 	}
-	label := "Вывод задания · снимок · F5 обновить\n"
+	label := tr("Вывод задания · снимок · F5 обновить\n")
 	if state.Gap {
-		label += "Часть вывода недоступна (разрыв/лимит).\n"
+		label += tr("Часть вывода недоступна (разрыв/лимит).\n")
 	}
 	if state.Text == "" {
-		label += "Пока нет вывода. F5 — перечитать.\n"
+		label += tr("Пока нет вывода. F5 — перечитать.\n")
 	}
 	return label + state.Text, nil
 }

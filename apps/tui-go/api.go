@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"strings"
 	"time"
 )
 
@@ -25,7 +26,7 @@ type rpcRejected struct {
 }
 
 func (e *rpcRejected) Error() string {
-	return fmt.Sprintf("dsh отказал в операции %s", e.method)
+	return fmt.Sprintf(tr("dsh отказал в операции %s"), e.method)
 }
 
 func openAPI(ctx context.Context, login string) (*dshAPI, error) {
@@ -43,12 +44,12 @@ func openAPI(ctx context.Context, login string) (*dshAPI, error) {
 	response, err := api.client.Do(req)
 	if err != nil {
 		api.close()
-		return nil, errors.New("не удалось подключиться к dsh")
+		return nil, errors.New(tr("не удалось подключиться к dsh"))
 	}
 	response.Body.Close()
 	if response.StatusCode != http.StatusFound || len(jar.Cookies(u)) == 0 {
 		api.close()
-		return nil, fmt.Errorf("вход в dsh не выполнен (HTTP %d); получите свежий URL входа", response.StatusCode)
+		return nil, fmt.Errorf(tr("вход в dsh не выполнен (HTTP %d); получите свежий URL входа"), response.StatusCode)
 	}
 	return api, nil
 }
@@ -57,28 +58,34 @@ func (api *dshAPI) close() { api.client.CloseIdleConnections() }
 func (api *dshAPI) rpc(ctx context.Context, method string, args map[string]any, target any) error {
 	id := make([]byte, 16)
 	if _, err := rand.Read(id); err != nil {
-		return errors.New("не удалось создать идентификатор запроса")
+		return errors.New(tr("не удалось создать идентификатор запроса"))
 	}
 	rpcID := hex.EncodeToString(id)
 	body, err := json.Marshal(map[string]any{"type": "client-request", "rpcId": rpcID, "method": method, "payload": map[string]any{"args": args}})
 	if err != nil {
-		return errors.New("не удалось подготовить запрос dsh")
+		return errors.New(tr("не удалось подготовить запрос dsh"))
 	}
 	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, api.origin+"/api/"+method, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", api.origin)
 	response, err := api.client.Do(req)
 	if err != nil {
-		return errors.New("запрос dsh не выполнен; проверьте подключение")
+		return errors.New(tr("запрос dsh не выполнен; проверьте подключение"))
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("dsh: %s недоступен (HTTP %d)", method, response.StatusCode)
+		return fmt.Errorf(tr("dsh: %s недоступен (HTTP %d)"), method, response.StatusCode)
 	}
 	const limit = 8 << 20
 	data, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
 	if err != nil || len(data) > limit {
-		return errors.New("ответ dsh слишком велик или не прочитан")
+		return errors.New(tr("ответ dsh слишком велик или не прочитан"))
+	}
+	if method == "workspaceFiles/readBytes" && strings.HasPrefix(response.Header.Get("Content-Type"), "multipart/") {
+		data, err = decodeFileCarrier(response.Header.Get("Content-Type"), data)
+		if err != nil {
+			return err
+		}
 	}
 	var envelope struct {
 		Type   string `json:"type"`
@@ -92,7 +99,7 @@ func (api *dshAPI) rpc(ctx context.Context, method string, args map[string]any, 
 		} `json:"result"`
 	}
 	if json.Unmarshal(data, &envelope) != nil || envelope.Type != "server-response" || envelope.ID != rpcID || envelope.Result.OK == nil {
-		return errors.New("неподдерживаемый ответ API dsh")
+		return errors.New(tr("неподдерживаемый ответ API dsh"))
 	}
 	if !*envelope.Result.OK {
 		code := ""
@@ -108,7 +115,7 @@ func (api *dshAPI) rpc(ctx context.Context, method string, args map[string]any, 
 			envelope.Result.Value = json.RawMessage("null")
 		}
 		if len(envelope.Result.Value) == 0 || json.Unmarshal(envelope.Result.Value, target) != nil {
-			return errors.New("неподдерживаемые данные API dsh")
+			return errors.New(tr("неподдерживаемые данные API dsh"))
 		}
 	}
 	return nil

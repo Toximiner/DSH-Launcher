@@ -38,13 +38,13 @@ type historySnapshot struct {
 
 func validateHistoryPage(page historyPage, cut, before int) (int, error) {
 	if page.Cursor != cut || before < 0 || before > cut+1 || len(page.Records) > 4096 {
-		return 0, errors.New("Некорректный снимок истории.")
+		return 0, errors.New(tr("Некорректный снимок истории."))
 	}
 	first, last := -1, -1
 	for _, record := range page.Records {
 		seq := record.Event.Seq
 		if record.Type != "event" || seq < 0 || seq >= before || last >= 0 && seq != last+1 {
-			return 0, errors.New("Пропуск или неверный порядок событий истории.")
+			return 0, errors.New(tr("Пропуск или неверный порядок событий истории."))
 		}
 		if first < 0 {
 			first = seq
@@ -52,7 +52,7 @@ func validateHistoryPage(page historyPage, cut, before int) (int, error) {
 		last = seq
 	}
 	if before > 0 && last != before-1 || before == 0 && len(page.Records) != 0 || page.HasMore != (first > 0) {
-		return 0, errors.New("Неполная страница истории.")
+		return 0, errors.New(tr("Неполная страница истории."))
 	}
 	return first, nil
 }
@@ -65,11 +65,11 @@ func buildHistorySnapshot(ctx context.Context, cut int, read func(context.Contex
 	before, bytes := cut+1, 0
 	for {
 		if ctx.Err() != nil {
-			return nil, latest, errors.New("Индекс истории: чтение прервано или истекло время.")
+			return nil, latest, errors.New(tr("Индекс истории: чтение прервано или истекло время."))
 		}
 		page, err := read(ctx, before)
 		if err != nil {
-			return nil, latest, errors.New("Не удалось прочитать индекс истории. F5 — повторить.")
+			return nil, latest, errors.New(tr("Не удалось прочитать индекс истории. F5 — повторить."))
 		}
 		first, err := validateHistoryPage(page, cut, before)
 		if err != nil {
@@ -82,7 +82,7 @@ func buildHistorySnapshot(ctx context.Context, cut int, read func(context.Contex
 			event := page.Records[i].Event
 			bytes += len(event.Data) + len(event.SurfaceOp)
 			if len(metadata) >= historyIndexEvents || bytes > historyIndexBytes {
-				return nil, latest, errors.New("Индекс истории превышает 100 000 событий / 64 МиБ. Текущая страница сохранена.")
+				return nil, latest, errors.New(tr("Индекс истории превышает 100 000 событий / 64 МиБ. Текущая страница сохранена."))
 			}
 			meta := historyMetadata{seq: event.Seq}
 			if len(event.SurfaceOp) > 0 {
@@ -90,7 +90,7 @@ func buildHistorySnapshot(ctx context.Context, cut int, read func(context.Contex
 				if string(event.SurfaceOp) != `"append"` {
 					op := &historyReplacement{}
 					if json.Unmarshal(event.SurfaceOp, op) != nil || op.Op != "replace" || op.Start < 0 || op.End < 0 || op.Start >= event.Seq || op.End >= event.Seq {
-						return nil, latest, errors.New("Некорректная замена истории.")
+						return nil, latest, errors.New(tr("Некорректная замена истории."))
 					}
 					meta.replacement = op
 				}
@@ -106,7 +106,7 @@ func buildHistorySnapshot(ctx context.Context, cut int, read func(context.Contex
 					}
 				}
 				if json.Unmarshal(event.Data, &data) != nil {
-					return nil, latest, errors.New("Некорректные данные инструмента в истории.")
+					return nil, latest, errors.New(tr("Некорректные данные инструмента в истории."))
 				}
 				id := data.CallID
 				if event.Type == "tool/result" {
@@ -116,13 +116,13 @@ func buildHistorySnapshot(ctx context.Context, cut int, read func(context.Contex
 					}
 				}
 				if id == "" || len(id) > 1024 {
-					return nil, latest, errors.New("Некорректный идентификатор инструмента.")
+					return nil, latest, errors.New(tr("Некорректный идентификатор инструмента."))
 				}
 				meta.tool = &historyIndexedTool{chatTool: chatTool{ID: id, Name: boundedToolText(data.Name, 256), Arguments: boundedToolText(data.Arguments, toolArgumentsLimit), Turn: data.Turn, StartSeq: event.Seq}, seq: event.Seq, result: event.Type == "tool/result"}
 			case "tool/ptc-dispatch-start", "tool/ptc-dispatch":
 				var data nestedToolEvent
 				if json.Unmarshal(event.Data, &data) != nil || data.ID == "" || len(data.ID) > 1024 || data.ParentID == "" || len(data.ParentID) > 1024 || data.RootID == "" || len(data.RootID) > 1024 {
-					return nil, latest, errors.New("Некорректная связь вложенного инструмента.")
+					return nil, latest, errors.New(tr("Некорректная связь вложенного инструмента."))
 				}
 				meta.tool = &historyIndexedTool{chatTool: chatTool{ID: data.ID, Name: boundedToolText(data.Name, 256), Arguments: boundedToolText(string(data.Arguments), toolArgumentsLimit), ParentID: data.ParentID, RootID: data.RootID, Nested: true, StartSeq: event.Seq}, seq: event.Seq, result: event.Type == "tool/ptc-dispatch"}
 			}
@@ -140,14 +140,14 @@ func buildHistorySnapshot(ctx context.Context, cut int, read func(context.Contex
 	retiredAt := map[string]int{}
 	for i := len(metadata) - 1; i >= 0; i-- {
 		if ctx.Err() != nil {
-			return nil, latest, errors.New("Индекс истории: чтение прервано.")
+			return nil, latest, errors.New(tr("Индекс истории: чтение прервано."))
 		}
 		meta := metadata[i]
 		if meta.surface {
 			if op := meta.replacement; op != nil {
 				start, end := nodes[op.Start], nodes[op.End]
 				if start == nil || end == nil {
-					return nil, latest, errors.New("Замена ссылается на отсутствующее сообщение истории.")
+					return nil, latest, errors.New(tr("Замена ссылается на отсутствующее сообщение истории."))
 				}
 				// Check ordering before changing the surface.
 				found := false
@@ -158,7 +158,7 @@ func buildHistorySnapshot(ctx context.Context, cut int, read func(context.Contex
 					}
 				}
 				if !found {
-					return nil, latest, errors.New("Обратный порядок границ замены истории.")
+					return nil, latest, errors.New(tr("Обратный порядок границ замены истории."))
 				}
 				node := surface.InsertBefore(meta.seq, start)
 				for e := start; ; {
@@ -246,7 +246,7 @@ func projectIndexedHistory(page historyPage, id string, cut, before int, index *
 		return projectHistory(page, id, cut, before)
 	}
 	if index.cut != cut {
-		return nil, 0, errors.New("Индекс относится к другому снимку истории.")
+		return nil, 0, errors.New(tr("Индекс относится к другому снимку истории."))
 	}
 	first, err := validateHistoryPage(page, cut, before)
 	if err != nil {

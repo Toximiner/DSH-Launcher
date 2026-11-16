@@ -22,11 +22,11 @@ const (
 func historyScopeLabel(scope int) string {
 	switch scope {
 	case historySearchMessages:
-		return "сообщения"
+		return tr("сообщения")
 	case historySearchTools:
-		return "инструменты"
+		return tr("инструменты")
 	default:
-		return "всё"
+		return tr("всё")
 	}
 }
 
@@ -67,8 +67,8 @@ func (m *model) editHistorySearch() tea.Cmd {
 	}
 	if h.search == nil {
 		editor := textinput.New()
-		editor.Prompt = "Поиск: "
-		editor.Placeholder = "Текст сообщения или инструмента…"
+		editor.Prompt = tr("Поиск: ")
+		editor.Placeholder = tr("Текст сообщения или инструмента…")
 		editor.CharLimit = 256
 		h.search = &historySearch{editor: editor, hitSeq: -1, anchor: -1}
 	}
@@ -77,7 +77,7 @@ func (m *model) editHistorySearch() tea.Cmd {
 	h.search.editor.Width = max(1, h.viewport.Width-7)
 	h.search.editing = true
 	h.search.editScope = h.search.scope
-	h.note = "Область: " + historyScopeLabel(h.search.editScope) + " · Ctrl+T — сменить · Enter — найти · Esc — назад."
+	h.note = tr("Область: ") + historyScopeLabel(h.search.editScope) + tr(" · Ctrl+T — сменить · Enter — найти · Esc — назад.")
 	return h.search.editor.Focus()
 }
 
@@ -90,7 +90,7 @@ func (m *model) cancelHistorySearch() {
 	h.serial++
 	h.search.running = false
 	h.busy = false
-	h.note = "Поиск отменён. F3 — повторить; Esc — вернуться в чат."
+	h.note = tr("Поиск отменён. F3 — повторить; Esc — вернуться в чат.")
 }
 
 func (m *model) startHistorySearch(fresh bool) tea.Cmd {
@@ -102,7 +102,7 @@ func (m *model) startHistorySearch(fresh bool) tea.Cmd {
 	if fresh {
 		query := strings.TrimSpace(clean(s.editor.Value()))
 		if query == "" {
-			h.note = "Введите текст для поиска."
+			h.note = tr("Введите текст для поиска.")
 			return nil
 		}
 		s.query, s.nextBefore, s.hitSeq, s.finished = query, h.cut+1, -1, false
@@ -121,12 +121,12 @@ func (m *model) startHistorySearch(fresh bool) tea.Cmd {
 		return nil
 	}
 	if s.finished {
-		h.note = "Поиск дошёл до начала истории. Ctrl+F — новый запрос."
+		h.note = tr("Поиск дошёл до начала истории. Ctrl+F — новый запрос.")
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(h.ctx, 20*time.Second)
 	s.cancel, s.running = cancel, true
-	h.busy, h.note = true, "Поиск по истории… Esc — отменить."
+	h.busy, h.note = true, tr("Поиск по истории… Esc — отменить.")
 	h.serial++
 	serial, cut, before, query, login, id := h.serial, h.cut, s.nextBefore, s.query, m.settingsLogin, h.sessionID
 	snapshot, scope := h.snapshot, s.scope
@@ -149,7 +149,7 @@ func (m *model) startHistorySearch(fresh bool) tea.Cmd {
 				result = scanHistory(ctx, result, id, read)
 			}
 		} else {
-			result.err = errors.New("Поиск недоступен. Проверьте подключение и нажмите F3.")
+			result.err = errors.New(tr("Поиск недоступен. Проверьте подключение и нажмите F3."))
 		}
 		return result
 	}
@@ -161,12 +161,12 @@ func scanHistory(ctx context.Context, result historySearchResult, id string, rea
 	before := result.nextBefore
 	for result.pages < historySearchPages {
 		if ctx.Err() != nil {
-			result.err = errors.New("Поиск прерван или истекло время. F3 — повторить.")
+			result.err = errors.New(tr("Поиск прерван или истекло время. F3 — повторить."))
 			return result
 		}
 		page, err := read(ctx, before)
 		if err != nil {
-			result.err = errors.New("Не удалось прочитать историю для поиска. F3 — повторить.")
+			result.err = errors.New(tr("Не удалось прочитать историю для поиска. F3 — повторить."))
 			return result
 		}
 		projection, first, err := projectIndexedHistory(page, id, result.cut, before, result.snapshot)
@@ -196,7 +196,7 @@ func scanHistory(ctx context.Context, result historySearchResult, id string, rea
 			return result
 		}
 		if first < 0 || first >= before {
-			result.err = errors.New("Поиск остановлен: страница истории не продвигается.")
+			result.err = errors.New(tr("Поиск остановлен: страница истории не продвигается."))
 			return result
 		}
 		before, result.nextBefore = first, first
@@ -221,9 +221,9 @@ func (m *model) handleHistorySearch(result historySearchResult) {
 	s.nextBefore, s.finished = result.nextBefore, result.finished
 	if result.hitSeq < 0 {
 		if result.finished {
-			h.note = "Более ранних совпадений нет; поиск дошёл до начала истории."
+			h.note = tr("Более ранних совпадений нет; поиск дошёл до начала истории.")
 		} else {
-			h.note = fmt.Sprintf("Проверено %d страниц. F3 — продолжить поиск более ранних сообщений.", result.pages)
+			h.note = fmt.Sprintf(tr("Проверено %d страниц. F3 — продолжить поиск более ранних сообщений."), result.pages)
 		}
 		return
 	}
@@ -262,9 +262,9 @@ func (m *model) showHistorySearchHit(page historyPage, before, hit int) {
 			break
 		}
 	}
-	h.note = "Совпадение найдено. Ctrl+Y — копия · Ctrl+K — код · F3 — раньше."
+	h.note = tr("Совпадение найдено. Ctrl+Y — копия · Ctrl+K — код · F3 — раньше.")
 	if h.toolFocused {
-		h.note = "Совпадение в инструменте · Enter — детали · F3 — раньше · Tab — сообщение."
+		h.note = tr("Совпадение в инструменте · Enter — детали · F3 — раньше · Tab — сообщение.")
 	}
 	m.resizeHistory()
 	if s.anchor >= 0 {
@@ -300,12 +300,12 @@ func (m *model) historySearchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			switch msg.String() {
 			case "ctrl+t":
 				s.editScope = (s.editScope + 1) % 3
-				h.note = "Область: " + historyScopeLabel(s.editScope) + " · Ctrl+T — сменить · Enter — найти."
+				h.note = tr("Область: ") + historyScopeLabel(s.editScope) + tr(" · Ctrl+T — сменить · Enter — найти.")
 				return nil, true
 			case "esc":
 				s.editing = false
 				s.editor.Blur()
-				h.note = "Поиск закрыт. Ctrl+F — открыть; Esc — чат."
+				h.note = tr("Поиск закрыт. Ctrl+F — открыть; Esc — чат.")
 				return nil, true
 			case "enter":
 				return m.startHistorySearch(true), true

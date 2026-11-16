@@ -86,7 +86,7 @@ func (m *model) handleApprovalUpdate(msg approvalUpdate) tea.Cmd {
 		if n.generation == s.generation {
 			s.ready = false
 			s.busy = false
-			s.note = "Нет связи с каналом запросов. Ответы недоступны до переподключения."
+			s.note = tr("Нет связи с каналом запросов. Ответы недоступны до переподключения.")
 		}
 	} else if f := n.frame; f != nil {
 		if f.Type == "ready" {
@@ -114,7 +114,7 @@ func (m *model) handleApprovalUpdate(msg approvalUpdate) tea.Cmd {
 				}
 				if len(s.requests) >= 32 {
 					s.overflow = true
-					s.note = "Остальные запросы будут загружены после этой очереди."
+					s.note = tr("Остальные запросы будут загружены после этой очереди.")
 					break
 				}
 				request := *f
@@ -124,7 +124,7 @@ func (m *model) handleApprovalUpdate(msg approvalUpdate) tea.Cmd {
 				}
 				request.Request.Reason = boundedToolText(request.Request.Reason, toolArgumentsLimit)
 				s.requests = append(s.requests, request)
-				m.runtimeNotice("Агент ожидает ответа пользователя · F7.")
+				m.runtimeNotice(tr("Агент ожидает ответа пользователя · F7."))
 				if request.Event == "user-questions/request" {
 					if form := m.prepareQuestion(request); form.invalid {
 						s.requests[len(s.requests)-1].Request.Questions = nil
@@ -138,7 +138,7 @@ func (m *model) handleApprovalUpdate(msg approvalUpdate) tea.Cmd {
 				}
 			case "cancel":
 				m.removeApproval(f.ID)
-				s.note = "Запрос отозван или обработан другим клиентом."
+				s.note = tr("Запрос отозван или обработан другим клиентом.")
 			}
 		}
 	}
@@ -178,7 +178,7 @@ func (m *model) answerApproval() tea.Cmd {
 	}
 	id, epoch, generation, answer := s.requests[0].ID, s.epoch, s.generation, s.answer
 	s.busy = true
-	s.note = "Отправка ответа…"
+	s.note = tr("Отправка ответа…")
 	return func() tea.Msg {
 		return approvalAnswerResult{epoch: epoch, generation: generation, id: id, err: answer(id, outcome)}
 	}
@@ -191,7 +191,7 @@ func (m *model) handleApprovalAnswer(msg approvalAnswerResult) {
 	question := s.requests[0].Event == "user-questions/request"
 	if msg.err != nil {
 		s.ready = false
-		s.note = "Ответ не подтверждён. Восстанавливаем канал; автоматического повтора нет."
+		s.note = tr("Ответ не подтверждён. Восстанавливаем канал; автоматического повтора нет.")
 		if s.disconnect != nil {
 			s.disconnect()
 		}
@@ -207,9 +207,9 @@ func (m *model) handleApprovalAnswer(msg approvalAnswerResult) {
 		}
 		m.removeApproval(msg.id)
 		if m.chat != nil {
-			m.chat.note = "Ответ на запрос передан dsh; итог отображается в истории разрешений."
+			m.chat.note = tr("Ответ на запрос передан dsh; итог отображается в истории разрешений.")
 			if question {
-				m.chat.note = "Ответы на вопросы переданы dsh."
+				m.chat.note = tr("Ответы на вопросы переданы dsh.")
 			}
 		}
 	}
@@ -282,13 +282,13 @@ func (m *model) approvalView(base string) string {
 	s.viewport.Height = box.height - 8
 	reason := request.Reason
 	if reason == "" {
-		reason = "Причина не передана dsh."
+		reason = tr("Причина не передана dsh.")
 	}
-	content := "Инструмент: " + request.ToolName + "\nПричина:\n" + reason + "\n\nАргументы вызова недоступны в текущей истории."
+	content := tr("Инструмент: ") + request.ToolName + tr("\nПричина:\n") + reason + tr("\n\nАргументы вызова недоступны в текущей истории.")
 	if m.chat != nil && request.CallID != "" {
 		for _, message := range m.chat.messages {
 			if message.tool != nil && message.tool.ID == request.CallID {
-				content = "Инструмент: " + request.ToolName + "\nПричина:\n" + reason + "\n\nАргументы:\n" + message.tool.Arguments
+				content = tr("Инструмент: ") + request.ToolName + tr("\nПричина:\n") + reason + tr("\n\nАргументы:\n") + message.tool.Arguments
 				break
 			}
 		}
@@ -296,11 +296,11 @@ func (m *model) approvalView(base string) string {
 	s.viewport.SetContent(ansi.Hardwrap(content, max(1, inner), true))
 	note := s.note
 	if note == "" {
-		note = "Разрешение только на этот вызов."
+		note = tr("Разрешение только на этот вызов.")
 	}
 	left := inner / 2
-	buttons := lipgloss.NewStyle().Width(left).Render(selectedRow("[ Отказать ]", s.selection == 0, left)) + selectedRow("[ Разрешить ]", s.selection == 1, inner-left)
-	lines := []string{heading.Render("Запрос разрешения dsh"), muted.Render(fmt.Sprintf("Ожидает ответа · запросов: %d", len(s.requests))), s.viewport.View(), ansi.Truncate(note, inner, "…"), buttons, muted.Render(ansi.Truncate("←/→ выбор · Enter ответ · Esc позже", inner, "…")), muted.Render(ansi.Truncate("PgUp/PgDn детали · F8 остановить", inner, "…"))}
+	buttons := lipgloss.NewStyle().Width(left).Render(selectedRow(tr("[ Отказать ]"), s.selection == 0, left)) + selectedRow(tr("[ Разрешить ]"), s.selection == 1, inner-left)
+	lines := []string{heading().Render(tr("Запрос разрешения dsh")), muted().Render(fmt.Sprintf(tr("Ожидает ответа · запросов: %d"), len(s.requests))), s.viewport.View(), ansi.Truncate(note, inner, "…"), buttons, muted().Render(ansi.Truncate(tr("←/→ выбор · Enter ответ · Esc позже"), inner, "…")), muted().Render(ansi.Truncate(tr("PgUp/PgDn детали · F8 остановить"), inner, "…"))}
 	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#d29922"), box.x, box.y, m.width-1)
 }
 func (m *model) approvalMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
@@ -330,14 +330,14 @@ func (m *model) approvalMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 func approvalOutcomeLabel(outcome string) string {
 	switch outcome {
 	case "allowed-once":
-		return "Разрешено один раз"
+		return tr("Разрешено один раз")
 	case "rejected":
-		return "Отказано"
+		return tr("Отказано")
 	case "cancelled":
-		return "Запрос отменён"
+		return tr("Запрос отменён")
 	case "unavailable":
-		return "Канал подтверждения недоступен"
+		return tr("Канал подтверждения недоступен")
 	default:
-		return "Неизвестное решение dsh"
+		return tr("Неизвестное решение dsh")
 	}
 }

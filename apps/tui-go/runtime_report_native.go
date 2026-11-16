@@ -18,7 +18,7 @@ func (c *nativeRuntime) report(destination string) (string, error) {
 		destination = filepath.Join(c.root, "reports")
 	}
 	if !filepath.IsAbs(destination) {
-		return "", fmt.Errorf("нужен абсолютный путь к папке отчётов")
+		return "", fmt.Errorf("%s", tr("нужен абсолютный путь к папке отчётов"))
 	}
 	if err := os.MkdirAll(destination, 0700); err != nil {
 		return "", err

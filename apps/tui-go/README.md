@@ -1,4 +1,4 @@
-# Go TUI preview — 0.2.0-preview.37
+# Go TUI preview — 0.2.0-preview.38
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
@@ -805,18 +805,13 @@ resolution dialogs, build approvals, restart, rollback, and operation cancellati
 remain later work. If dsh restarts, obtain a fresh login URL. Closing an attached
 client does not cancel a remote operation; reopen the market to check its state.
 
-The browser has an explicitly labeled sample catalog: search, installed filtering,
-and confirmation UI work, while writes explain that the native client is required.
-The demo never changes any backend packages.
-
 ## Migration scope
 
 The agreed target is terminal-only operation: launcher capabilities, the dsh
 interface, and plugin functionality through dedicated TUI views and adapters.
 Arbitrary HTML/JavaScript plugin screens cannot run inside Bubble Tea. Plugin
-support combines background operation, shared schema/command views, a proposed
-declarative UI contract, and dedicated adapters for complex workflows. The shared
-contract is not implemented yet. Track backend, settings, commands, and complete
+support combines background operation, shared schema/command views, a versioned
+declarative UI contract, and dedicated adapters for complex workflows. The initial shared contract is implemented in [the plugin SDK](../../packages/tui-plugin-sdk/README.en.md). Track backend, settings, commands, and complete
 screen support separately; a generic chat client does not establish full plugin
 compatibility.
 
@@ -826,7 +821,37 @@ and milestone order. The client includes streamed chat, tool output, questions,
 permissions, queues, history/search/forks/archive, models/settings, goals/presets,
 workbench adapters and owned runtime installation/update/rollback/diagnostics.
 Actual-model acceptance was checked with Qwen3.8-27B on November 16, 2026.
-OAuth/account adapters, full document editing, the declarative plugin contract,
-remaining package adapters and release polish remain in the roadmap. Public TUI
+Workspace writes, permanent session deletion and team mutations require backend contracts. Additional provider/plugin adapters remain API-dependent. Public TUI
 update delivery still needs its first dedicated release. Full GUI/plugin parity
 is not claimed.
+
+F4 → Keyboard shortcuts (also F1) opens the searchable, scrollable key reference. It includes the context of modal/editor shortcuts. Type to filter, Ctrl+U to clear, PgUp/PgDn or the mouse wheel to scroll. Closing restores the composer draft and focus.
+
+
+## Preview.38
+
+F4 settings persist dark/light theme, Russian/English and sidebar visibility.
+F1 opens the keyboard reference; GUI settings have their own searchable reference.
+Ctrl+F or `/` on Sessions filters by title/ID. Clicking a session selects it.
+
+`/account` shows DeepSeek account state, browser sign-in/cancel, profile/balance
+and guarded sign-out. Open the displayed HTTPS login URL in a browser; over SSH,
+forward the dsh port for its callback. F5 refreshes the account snapshot. Account
+credentials stay in dsh. Production sign-in requires an interactive browser login.
+
+`/files` reads PNG/JPEG/GIF as bounded terminal thumbnails, PDF as its text layer
+(requires `poppler-utils` / `pdftotext`), and local HTML as passive text. Full-file
+previews are capped at 6 MiB, images at 20 million pixels, PDF output at 256 KiB/10s.
+Text files remain paginated. File writing needs a backend mutation/CAS contract.
+
+`/packages`: Ctrl+N installs a package spec/path; F6 lists compatible versions;
+F3 accepts an exact version. If an install reports pending build scripts, F2
+names them for explicit approval before retry. `/runtime` restarts only an owned
+dsh, after confirmation. `/operations` lists private local receipts for the same
+backend origin; an interrupted request has an unknown outcome until checked.
+Receipts do not establish success merely because the client restarted.
+
+The [declarative SDK](../../packages/tui-plugin-sdk/README.en.md) supports shared
+forms/actions/status/tables over existing human commands. Arbitrary plugin HTML
+still requires a terminal adapter. CI covers two SDK examples, actual package
+install/update/failure preservation and fresh installs on three distributions.

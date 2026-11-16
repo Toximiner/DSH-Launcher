@@ -20,7 +20,7 @@ func (m *model) requestQueueSteering() {
 		return
 	}
 	if !m.session.Running {
-		s.note = "Уточнение доступно только во время работы агента."
+		s.note = tr("Уточнение доступно только во время работы агента.")
 		return
 	}
 	item, _ := m.queueSelection()
@@ -28,7 +28,7 @@ func (m *model) requestQueueSteering() {
 		return
 	}
 	if item.Placement != "queued" {
-		s.note = "Это сообщение уже передано как уточнение."
+		s.note = tr("Это сообщение уже передано как уточнение.")
 		return
 	}
 	s.confirm = item.ID
@@ -36,7 +36,7 @@ func (m *model) requestQueueSteering() {
 	s.confirmText = boundedToolText(contentText(item.Content), toolArgumentsLimit)
 	s.confirmContent = append([]queueContent(nil), item.Content...)
 	s.accept = false
-	s.note = "Учесть на следующем шаге? Остальная очередь сохранится."
+	s.note = tr("Учесть на следующем шаге? Остальная очередь сохранится.")
 }
 func (m *model) steerQueuedItem() tea.Cmd {
 	s := &m.queueDialog
@@ -44,7 +44,7 @@ func (m *model) steerQueuedItem() tea.Cmd {
 		return nil
 	}
 	if !m.session.Running {
-		s.note = "Текущая задача завершена. Уточнение не отправлено."
+		s.note = tr("Текущая задача завершена. Уточнение не отправлено.")
 		return nil
 	}
 	var item *queuedMessage
@@ -58,13 +58,13 @@ func (m *model) steerQueuedItem() tea.Cmd {
 	if item == nil || item.Placement != "queued" {
 		s.confirm = ""
 		s.confirmKind = ""
-		s.note = "Сообщение уже покинуло очередь заданий. Обновляем состояние."
+		s.note = tr("Сообщение уже покинуло очередь заданий. Обновляем состояние.")
 		return nil
 	}
 	if !reflect.DeepEqual(item.Content, s.confirmContent) {
 		s.confirm = ""
 		s.confirmKind = ""
-		s.note = "Текст изменён другим клиентом. Выберите задание заново."
+		s.note = tr("Текст изменён другим клиентом. Выберите задание заново.")
 		return nil
 	}
 	id, itemID, epoch, login, ctx := m.session.ID, s.confirm, m.chat.epoch, m.settingsLogin, m.settingsContext
@@ -73,7 +73,7 @@ func (m *model) steerQueuedItem() tea.Cmd {
 	}
 	s.busy = true
 	s.operationID = itemID
-	s.note = "Передача уточнения…"
+	s.note = tr("Передача уточнения…")
 	return func() tea.Msg {
 		result := queueSteerResult{epoch: epoch, sessionID: id, itemID: itemID}
 		api, err := openAPI(ctx, login)
@@ -87,7 +87,7 @@ func (m *model) steerQueuedItem() tea.Cmd {
 		}
 		result.err = api.rpc(ctx, "session/updateQueue", map[string]any{"request": map[string]any{"sessionId": id, "itemId": itemID, "action": map[string]any{"kind": "steer"}}}, &receipt)
 		if result.err == nil && !receipt.Accepted {
-			result.err = errors.New("неподдерживаемое подтверждение уточнения")
+			result.err = errors.New(tr("неподдерживаемое подтверждение уточнения"))
 		}
 		return result
 	}
@@ -106,13 +106,13 @@ func (m *model) handleQueueSteering(msg queueSteerResult) tea.Cmd {
 	s.confirmKind = ""
 	s.accept = false
 	if msg.err == nil {
-		s.note = "Уточнение принято dsh. Оно будет учтено на следующем шаге."
+		s.note = tr("Уточнение принято dsh. Оно будет учтено на следующем шаге.")
 	} else {
 		var rejected *rpcRejected
 		if errors.As(msg.err, &rejected) {
-			s.note = "dsh отклонил уточнение: текущая задача могла уже завершиться."
+			s.note = tr("dsh отклонил уточнение: текущая задача могла уже завершиться.")
 		} else {
-			s.note = "Передача не подтверждена; автоповтора нет. Обновляем очередь."
+			s.note = tr("Передача не подтверждена; автоповтора нет. Обновляем очередь.")
 		}
 	}
 	m.rebuild()

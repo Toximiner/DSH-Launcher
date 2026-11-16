@@ -22,7 +22,7 @@ func writeNativeClipboard(ctx context.Context, value string, env func(string) st
 		return "", ctx.Err()
 	}
 	if value == "" || len(value) > clipboardTextLimit {
-		return "", errors.New("Недопустимый размер фрагмента.")
+		return "", errors.New(tr("Недопустимый размер фрагмента."))
 	}
 	if env("SSH_CONNECTION") == "" && env("SSH_TTY") == "" {
 		var candidates [][]string
@@ -46,7 +46,7 @@ func writeNativeClipboard(ctx context.Context, value string, env func(string) st
 				return "", ctx.Err()
 			}
 			if err == nil {
-				return "скопировано в системный буфер.", nil
+				return tr("скопировано в системный буфер."), nil
 			}
 		}
 	}
@@ -62,7 +62,7 @@ func writeNativeClipboard(ctx context.Context, value string, env func(string) st
 	encoded := sequence.String()
 	n, err := io.WriteString(out, encoded)
 	if err != nil || n != len(encoded) {
-		return "", errors.New("Не удалось отправить запрос буферу терминала.")
+		return "", errors.New(tr("Не удалось отправить запрос буферу терминала."))
 	}
-	return "запрос OSC 52 отправлен; запись терминал не подтверждает.", nil
+	return tr("запрос OSC 52 отправлен; запись терминал не подтверждает."), nil
 }

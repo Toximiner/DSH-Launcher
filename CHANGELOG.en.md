@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- TUI preview.38: searchable shortcut references in TUI/GUI settings; persisted light/dark theme, RU/EN and sidebar visibility; session search and stable background refresh; DeepSeek account panel; bounded image/PDF/HTML previews; declarative plugin SDK with two actual-dsh examples; package version/build controls and private durable operation receipts. CI adds package lifecycle and three clean Linux installs.
+
 - Remove the static browser/WASM TUI preview, its build job and CI artifacts; use the native Linux binary. Correct the interactive PTY environment in CI checks.
 
 - Go preview 0.2.0-preview.37 implements baseline client stages 11–13: `/runtime` adds user-local dsh installation/progress and owned processes; `/updates` adds version/release notes, dsh and TUI installation/rollback with SHA-256, atomic replacement and `.previous --rollback-tui`; `/diagnostics` adds bounded stdout/stderr, masked private tar.gz reports and journal/opt-in BEL notices. Actual isolated npm/dsh checks cover empty-home startup, restart, external-process preservation and actual TUI binary update/recovery; Go checks cover failures/cancellation and secrets. Dedicated `tui-v…` publication is prepared; public delivery remains unverified until its first release. Binary rollback does not downgrade or restore dsh profile data.

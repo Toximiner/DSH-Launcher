@@ -3,11 +3,11 @@ name: tui-go-preview
 on:
   pull_request:
     branches: [main]
-    paths: ['apps/tui-go/**', '.github/workflows/tui-go.yml']
+    paths: ['apps/tui-go/**', 'packages/tui-plugin-sdk/**', '.github/workflows/tui-go.yml']
   push:
     branches: [main]
     tags: ['tui-v*']
-    paths: ['apps/tui-go/**', '.github/workflows/tui-go.yml']
+    paths: ['apps/tui-go/**', 'packages/tui-plugin-sdk/**', '.github/workflows/tui-go.yml']
   workflow_dispatch:
 
 permissions:
@@ -75,7 +75,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [chat, history, settings, goals, workbench, background, runtime]
+        suite: [chat, history, settings, goals, workbench, background, runtime, packages]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7
@@ -88,6 +88,12 @@ jobs:
           cache: npm
           # The workflow pins dsh and Node; changing either invalidates this cache.
           cache-dependency-path: .github/workflows/tui-go.yml
+      - name: Install package lifecycle test dependency
+        if: matrix.suite == 'packages'
+        run: npm install --prefix build/package-tools --ignore-scripts --no-audit --no-fund pnpm@12.8.1 && echo "$PWD/build/package-tools/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Install PDF preview dependency
+        if: matrix.suite == 'workbench'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
       - name: Prepare isolated protocol runtime
         run: |
           chmod +x build/tui-go/dsh-launcher-tui-go_linux_amd64
@@ -111,9 +117,39 @@ jobs:
             --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
             --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh" "${extra[@]}"
 
+  linux-install:
+    name: Clean install (${{ matrix.image }})
+    needs: native-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['ubuntu:24.04', 'ubuntu:26.04', 'debian:13']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: dsh-launcher-tui-go-preview
+          path: build/tui-go
+      - name: Install and exercise the terminal in a clean distribution
+        env:
+          DISTRO_IMAGE: ${{ matrix.image }}
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" "$DISTRO_IMAGE" sh -eu -c '
+            apt-get update -qq
+            apt-get install -y -qq python3 python3-venv ca-certificates
+            python3 -m venv /tmp/pty
+            /tmp/pty/bin/pip -q install pyte==0.8.2
+            install -Dm755 /repo/build/tui-go/dsh-launcher-tui-go_linux_amd64 /tmp/tui-home/.local/bin/dsh-launcher-tui
+            export HOME=/tmp/tui-home PATH=/tmp/tui-home/.local/bin:$PATH
+            dsh-launcher-tui --version
+            /tmp/pty/bin/python /repo/apps/tui-go/test/terminal_preview.py /tmp/tui-home/.local/bin/dsh-launcher-tui
+          '
+
   # Keep one stable required check and gate publication on every matrix entry.
   terminal-preview:
-    needs: [unit, native-build, terminal-pty, integration]
+    needs: [unit, native-build, terminal-pty, integration, linux-install]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 1

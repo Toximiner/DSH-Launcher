@@ -74,7 +74,7 @@ func (m *model) selectHistoryTool(id string, reveal bool) {
 			h.toolFocused = true
 			h.selectedSeq = -1
 			h.projection.selectedTool = id
-			h.note = "F6/Shift+F6 — инструмент · Enter/клик — раскрыть или свернуть · Tab — сообщение."
+			h.note = tr("F6/Shift+F6 — инструмент · Enter/клик — раскрыть или свернуть · Tab — сообщение.")
 			m.resizeHistory()
 			if reveal {
 				m.revealHistoryTool()
@@ -90,7 +90,7 @@ func (m *model) moveHistoryTool(backward bool) {
 	}
 	h := m.historyReader
 	if len(h.toolRows) == 0 {
-		h.note = "На странице нет карточек инструментов."
+		h.note = tr("На странице нет карточек инструментов.")
 		return
 	}
 	index := -1
@@ -135,11 +135,11 @@ func (m *model) toggleHistoryTool(id string) {
 			h.rememberHistoryTool(historyToolKey{id, tool.StartSeq}, expanded)
 			m.resizeHistory()
 			m.revealHistoryTool()
-			state := "свёрнуты"
+			state := tr("свёрнуты")
 			if expanded {
-				state = "раскрыты"
+				state = tr("раскрыты")
 			}
-			h.note = fmt.Sprintf("Детали %s · Enter/клик — переключить · F6/Shift+F6 — другой инструмент.", state)
+			h.note = fmt.Sprintf(tr("Детали %s · Enter/клик — переключить · F6/Shift+F6 — другой инструмент."), state)
 			return
 		}
 	}

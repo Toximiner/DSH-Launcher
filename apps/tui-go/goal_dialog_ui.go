@@ -36,7 +36,7 @@ func (m *model) goalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 				d.draft = nil
 				d.editing = false
 				d.conflict = false
-				d.note = "Черновик отменён. Цель в dsh не изменена."
+				d.note = tr("Черновик отменён. Цель в dsh не изменена.")
 				return nil, true
 			}
 			return m.closeGoal(), true
@@ -45,7 +45,7 @@ func (m *model) goalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		case tea.KeyF3:
 			if d.editing {
 				d.editing = false
-				d.note = "Снимок цели. F3 — вернуться к черновику."
+				d.note = tr("Снимок цели. F3 — вернуться к черновику.")
 				return nil, true
 			}
 			return m.editGoal(), true
@@ -57,14 +57,14 @@ func (m *model) goalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		case tea.KeyCtrlB:
 			if !d.editing && d.conflict && !d.stale && d.current != nil && d.draft != nil {
 				if d.current.ID != d.draft.base.ID {
-					d.note = "Это другая цель. Esc — отменить старый черновик; F3 — новая правка."
+					d.note = tr("Это другая цель. Esc — отменить старый черновик; F3 — новая правка.")
 					return nil, true
 				}
 				// Fields untouched in the draft follow the fresh server snapshot.
 				if strings.TrimSpace(d.draft.objective.Value()) == d.draft.base.Objective {
 					d.draft.objective.SetValue(d.current.Objective)
 					if d.draft.objective.Value() != d.current.Objective {
-						d.note = "Новое описание нельзя открыть без преобразования. Esc — отменить."
+						d.note = tr("Новое описание нельзя открыть без преобразования. Esc — отменить.")
 						return nil, true
 					}
 				}
@@ -74,7 +74,7 @@ func (m *model) goalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 				d.draft.base = *d.current
 				d.conflict = false
 				d.editing = true
-				d.note = "Свежая ревизия принята для черновика. Проверьте поля; F5 — сохранить."
+				d.note = tr("Свежая ревизия принята для черновика. Проверьте поля; F5 — сохранить.")
 				return d.focusField(), true
 			}
 			return nil, true
@@ -90,14 +90,14 @@ func (m *model) goalKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			if msg.Type == tea.KeyRunes {
 				text := string(msg.Runes)
 				if len(d.draft.objective.Value())+len(text) > goalObjectiveLimit || clean(text) != text || strings.ContainsAny(text, "\r\t") {
-					d.note = "Ввод не принят: лимит 64 КиБ, табуляция и управляющие символы недоступны."
+					d.note = tr("Ввод не принят: лимит 64 КиБ, табуляция и управляющие символы недоступны.")
 					return nil, true
 				}
 			}
 			d.draft.objective, cmd = d.draft.objective.Update(msg)
 		} else {
 			if msg.Type == tea.KeyRunes && (len(d.draft.cap.Value())+len(string(msg.Runes)) > 16 || strings.ContainsAny(string(msg.Runes), "\r\n\t")) {
-				d.note = "Лимит раундов принимает до 16 цифр в одной строке."
+				d.note = tr("Лимит раундов принимает до 16 цифр в одной строке.")
 				return nil, true
 			}
 			d.draft.cap, cmd = d.draft.cap.Update(msg)
@@ -121,37 +121,37 @@ func (m *model) goalView(base string) string {
 	width := box.width - 4
 	bodyHeight := max(1, box.height-10)
 	trim := func(s string) string { return ansi.Truncate(clean(s), width, "…") }
-	title := "Цель сессии"
+	title := tr("Цель сессии")
 	if d.editing {
-		title = "Цель · редактирование"
+		title = tr("Цель · редактирование")
 	}
-	lines := []string{heading.Render(title), trim(d.id), ""}
+	lines := []string{heading().Render(title), trim(d.id), ""}
 	if d.editing && d.draft != nil {
 		d.draft.objective.SetWidth(width)
 		d.draft.objective.SetHeight(max(1, bodyHeight-2))
 		d.draft.cap.Width = max(1, width-17)
-		lines = append(lines, "Описание:")
+		lines = append(lines, tr("Описание:"))
 		lines = append(lines, strings.Split(d.draft.objective.View(), "\n")...)
 		lines = append(lines, d.draft.cap.View())
 	} else {
-		body := "Состояние ещё не прочитано."
+		body := tr("Состояние ещё не прочитано.")
 		if d.ready && d.current == nil {
-			body = "В этой сессии нет цели.\n\n/goal <описание> — создать цель.\nСоздание включает режим цели и может запустить работу."
+			body = tr("В этой сессии нет цели.\n\n/goal <описание> — создать цель.\nСоздание включает режим цели и может запустить работу.")
 		}
 		if goal := d.current; goal != nil {
-			phase := map[string]string{"active": "активна", "paused": "приостановлена", "blocked": "заблокирована", "complete": "завершена"}[goal.Phase]
-			activation := "выключено"
+			phase := map[string]string{"active": tr("активна"), "paused": tr("приостановлена"), "blocked": tr("заблокирована"), "complete": tr("завершена")}[goal.Phase]
+			activation := tr("выключено")
 			if goal.Activation == "armed" {
-				activation = "включено"
+				activation = tr("включено")
 			}
-			body = fmt.Sprintf("Фаза: %s · ревизия %d\nРаунды: %d / %d\nАвтопродолжение: %s\n", phase, goal.Revision, goal.Rounds, goal.MaxRounds, activation)
+			body = fmt.Sprintf(tr("Фаза: %s · ревизия %d\nРаунды: %d / %d\nАвтопродолжение: %s\n"), phase, goal.Revision, goal.Rounds, goal.MaxRounds, activation)
 			if goal.BlockedReason != nil {
-				body += "Блокировка: " + clean(goal.BlockedReason.Message) + "\n"
+				body += tr("Блокировка: ") + clean(goal.BlockedReason.Message) + "\n"
 			}
-			body += "\nОписание:\n" + clean(goal.Objective)
+			body += tr("\nОписание:\n") + clean(goal.Objective)
 		}
 		if d.stale {
-			body = "Снимок не подтверждён · Ctrl+R — перечитать\n\n" + body
+			body = tr("Снимок не подтверждён · Ctrl+R — перечитать\n\n") + body
 		}
 		d.viewport.Width = width
 		d.viewport.Height = bodyHeight
@@ -160,23 +160,23 @@ func (m *model) goalView(base string) string {
 	}
 	note := d.note
 	if d.busy {
-		note = "Запрос dsh…"
+		note = tr("Запрос dsh…")
 	}
 	notes := strings.Split(ansi.Hardwrap(clean(note), width, true), "\n")
 	for len(notes) < 3 {
 		notes = append(notes, "")
 	}
-	lines = append(lines, muted.Render(notes[0]), muted.Render(notes[1]), muted.Render(notes[2]))
-	hint, hint2 := "F3 правка · F5 обновить · ↑/↓ прокрутка", "Ctrl+R перечитать · Esc закрыть"
+	lines = append(lines, muted().Render(notes[0]), muted().Render(notes[1]), muted().Render(notes[2]))
+	hint, hint2 := tr("F3 правка · F5 обновить · ↑/↓ прокрутка"), tr("Ctrl+R перечитать · Esc закрыть")
 	if d.draft != nil {
-		hint2 = "F3 черновик · Ctrl+R перечитать · Esc отменить черновик"
+		hint2 = tr("F3 черновик · Ctrl+R перечитать · Esc отменить черновик")
 	}
 	if d.editing {
-		hint = "Tab поле · Enter новая строка · F5 сохранить"
-		hint2 = "F3 снимок · Ctrl+R перечитать · Esc отменить"
+		hint = tr("Tab поле · Enter новая строка · F5 сохранить")
+		hint2 = tr("F3 снимок · Ctrl+R перечитать · Esc отменить")
 	}
 	if d.conflict && !d.editing {
-		hint = "Ctrl+B принять ревизию · F3 черновик · Esc отменить"
+		hint = tr("Ctrl+B принять ревизию · F3 черновик · Esc отменить")
 	}
 	lines = append(lines, trim(hint), trim(hint2))
 	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)

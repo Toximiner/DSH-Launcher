@@ -65,7 +65,7 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	}
 	width, bodyHeight := m.contentSize()
 	mainX := 0
-	if m.width-1 >= 78 {
+	if m.sidebarVisible() {
 		mainX = sidebarWidth + sidebarGap
 	}
 	conversation := area{mainX + 2, bodyTop + 3, m.viewport.Width, m.viewport.Height}
@@ -114,7 +114,7 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if m.page == chatPage && m.chat != nil && conversation.contains(msg.X, msg.Y) {
 		viewLines := strings.Split(clean(m.viewport.View()), "\n")
 		screenRow := msg.Y - conversation.y
-		if screenRow >= 0 && screenRow < len(viewLines) && strings.Contains(viewLines[screenRow], "ОЧЕРЕДЬ DSH ·") {
+		if screenRow >= 0 && screenRow < len(viewLines) && strings.Contains(viewLines[screenRow], tr("ОЧЕРЕДЬ DSH ·")) {
 			return m.openQueue()
 		}
 		row := msg.Y - conversation.y + m.viewport.YOffset
@@ -125,6 +125,18 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 				m.chat.selectedTool = hit.id
 				m.input.Blur()
 				m.toggleTool(hit.id)
+				return nil
+			}
+		}
+	}
+	if m.page == sessionsPage && conversation.contains(msg.X, msg.Y) {
+		row := msg.Y - conversation.y + m.viewport.YOffset
+		for _, hit := range m.sessionHits {
+			if hit.row == row {
+				m.sessionListIndex = hit.index
+				m.navFocused = false
+				m.sessionSearching = false
+				m.rebuild()
 				return nil
 			}
 		}
@@ -167,18 +179,18 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	composer := area{mainX, bodyTop + bodyHeight - composerHeight - 1, width, composerHeight}
 	if m.page == chatPage && m.session != nil && msg.Y == composer.y+4 {
 		_, hint := m.composerText()
-		index := strings.Index(hint, "[F8 Стоп]")
+		index := strings.Index(hint, tr("[F8 Стоп]"))
 		if index < 0 {
 			return nil
 		}
 		x := mainX + 2 + len([]rune(hint[:index]))
-		if (area{x, msg.Y, len([]rune("[F8 Стоп]")), 1}).contains(msg.X, msg.Y) {
+		if (area{x, msg.Y, len([]rune(tr("[F8 Стоп]"))), 1}).contains(msg.X, msg.Y) {
 			return m.cancelChat()
 		}
 	}
 	if m.page == chatPage && msg.Y == composer.y+2 && (m.session == nil || m.session.Address.Kind != "subagent") {
-		x := mainX + 2 + len([]rune("Режим: "))
-		for i, name := range []string{"Обычный", "План", "Цель"} {
+		x := mainX + 2 + len([]rune(tr("Режим: ")))
+		for i, name := range []string{tr("Обычный"), tr("План"), tr("Цель")} {
 			width := len([]rune(name)) + 2
 			if (area{x, msg.Y, width, 1}).contains(msg.X, msg.Y) {
 				return m.chooseMode([]string{"default", "plan", "goal"}[i])

@@ -67,25 +67,25 @@ type modelPickerResult struct {
 func readModelDirectory(ctx context.Context, api *dshAPI, id string) (*modelCatalog, modelSelection, error) {
 	var catalog modelCatalog
 	if err := api.rpc(ctx, "session/modelCatalog", map[string]any{}, &catalog); err != nil {
-		return nil, modelSelection{}, errors.New("Каталог моделей недоступен. F5 — повторить чтение.")
+		return nil, modelSelection{}, errors.New(tr("Каталог моделей недоступен. F5 — повторить чтение."))
 	}
 	count := 0
 	if len(catalog.Groups) > 256 {
-		return nil, modelSelection{}, errors.New("Каталог моделей слишком велик.")
+		return nil, modelSelection{}, errors.New(tr("Каталог моделей слишком велик."))
 	}
 	for _, group := range catalog.Groups {
 		if group.ID == "" || len(group.ID) > 1024 {
-			return nil, modelSelection{}, errors.New("Некорректный провайдер в каталоге.")
+			return nil, modelSelection{}, errors.New(tr("Некорректный провайдер в каталоге."))
 		}
 		for _, model := range group.Models {
 			count++
 			if count > 2000 || model.ID == "" || len(model.ID) > 1024 || model.Reasoning != nil && len(model.Reasoning.Efforts) > 32 {
-				return nil, modelSelection{}, errors.New("Некорректный или слишком большой каталог моделей.")
+				return nil, modelSelection{}, errors.New(tr("Некорректный или слишком большой каталог моделей."))
 			}
 			if model.Reasoning != nil {
 				for _, effort := range model.Reasoning.Efforts {
 					if effort.ID == "" || len(effort.ID) > 256 {
-						return nil, modelSelection{}, errors.New("Некорректный параметр рассуждения.")
+						return nil, modelSelection{}, errors.New(tr("Некорректный параметр рассуждения."))
 					}
 				}
 			}
@@ -100,7 +100,7 @@ func readModelDirectory(ctx context.Context, api *dshAPI, id string) (*modelCata
 		} `json:"values"`
 	}
 	if err := api.rpc(ctx, "session/projections", map[string]any{"request": map[string]any{"sessionId": id}}, &projection); err != nil || projection == nil || projection.Kind != "sequenced" {
-		return nil, modelSelection{}, errors.New("Не удалось прочитать модель сессии. F5 — повторить.")
+		return nil, modelSelection{}, errors.New(tr("Не удалось прочитать модель сессии. F5 — повторить."))
 	}
 	current := catalog.Default
 	if projection.Values.Model != nil && projection.Values.Model.Next != nil {
@@ -111,14 +111,14 @@ func readModelDirectory(ctx context.Context, api *dshAPI, id string) (*modelCata
 
 func (m *model) openModels() tea.Cmd {
 	if m.session == nil || m.chat == nil || !m.chat.ready || m.chatSessionChanging() {
-		m.append("Для выбора модели подключитесь к сессии dsh.")
+		m.append(tr("Для выбора модели подключитесь к сессии dsh."))
 		return nil
 	}
 	ctx, cancel := context.WithCancel(m.chat.ctx)
 	editor := textinput.New()
-	editor.Prompt = "Поиск: "
+	editor.Prompt = tr("Поиск: ")
 	editor.CharLimit = 128
-	editor.Placeholder = "Провайдер или модель…"
+	editor.Placeholder = tr("Провайдер или модель…")
 	d := &modelPicker{ctx: ctx, cancel: cancel, id: m.session.ID, epoch: m.chat.epoch, focused: m.input.Focused(), search: editor}
 	m.modelPicker = d
 	m.input.Blur()
@@ -143,7 +143,7 @@ func (m *model) loadModels() tea.Cmd {
 	}
 	d.busy = true
 	d.serial++
-	d.note = "Чтение каталога и модели сессии…"
+	d.note = tr("Чтение каталога и модели сессии…")
 	serial, login := d.serial, m.settingsLogin
 	return func() tea.Msg {
 		result := modelPickerResult{dialog: d, serial: serial}
@@ -154,7 +154,7 @@ func (m *model) loadModels() tea.Cmd {
 			defer api.close()
 			result.catalog, result.current, result.err = readModelDirectory(ctx, api, d.id)
 		} else {
-			result.err = errors.New("Не удалось прочитать модели. F5 — повторить чтение.")
+			result.err = errors.New(tr("Не удалось прочитать модели. F5 — повторить чтение."))
 		}
 		return result
 	}
@@ -216,12 +216,12 @@ func (m *model) applyModel() tea.Cmd {
 	option := options[d.index]
 	selection := modelSelection{Provider: option.provider, Model: option.model.ID, Reasoning: d.effort}
 	if selection == d.current {
-		d.note = "Эта модель и параметр уже выбраны."
+		d.note = tr("Эта модель и параметр уже выбраны.")
 		return nil
 	}
 	d.busy, d.writing = true, true
 	d.serial++
-	d.note = "Применение выбора в dsh…"
+	d.note = tr("Применение выбора в dsh…")
 	serial, login, baseline := d.serial, m.settingsLogin, d.current
 	return func() tea.Msg {
 		result := modelPickerResult{dialog: d, serial: serial}
@@ -234,7 +234,7 @@ func (m *model) applyModel() tea.Cmd {
 			if readErr != nil {
 				err = readErr
 			} else if current != baseline {
-				err = errors.New("Выбор изменён другим клиентом. F5 — перечитать перед применением.")
+				err = errors.New(tr("Выбор изменён другим клиентом. F5 — перечитать перед применением."))
 				result.err = err
 			} else {
 				var accepted struct {
@@ -246,7 +246,7 @@ func (m *model) applyModel() tea.Cmd {
 				}
 				err = api.rpc(ctx, "session/selectModel", map[string]any{"request": request}, &accepted)
 				if err == nil && (accepted.Selected == nil || *accepted.Selected != selection) {
-					err = errors.New("Ответ dsh не подтверждает выбранную модель.")
+					err = errors.New(tr("Ответ dsh не подтверждает выбранную модель."))
 				}
 				if err == nil {
 					result.selected = accepted.Selected
@@ -255,7 +255,7 @@ func (m *model) applyModel() tea.Cmd {
 		}
 		if err != nil {
 			if result.err == nil {
-				result.err = errors.New("Выбор не подтверждён. F5 — перечитать; автоматического повтора нет.")
+				result.err = errors.New(tr("Выбор не подтверждён. F5 — перечитать; автоматического повтора нет."))
 			}
 		}
 		return result
@@ -278,7 +278,7 @@ func (m *model) handleModelPicker(result modelPickerResult) {
 	d.uncertain = false
 	if result.selected != nil {
 		d.current = *result.selected
-		d.note = "Сессия: выбор подтверждён. Сохранение общего значения выполняет dsh."
+		d.note = tr("Сессия: выбор подтверждён. Сохранение общего значения выполняет dsh.")
 		return
 	}
 	d.catalog, d.current = result.catalog, result.current
@@ -289,9 +289,9 @@ func (m *model) handleModelPicker(result modelPickerResult) {
 			break
 		}
 	}
-	d.note = "Enter применяет выбор. Esc закрывает окно без нового выбора."
+	d.note = tr("Enter применяет выбор. Esc закрывает окно без нового выбора.")
 	if d.catalog != nil && len(d.catalog.Failures) > 0 {
-		d.note = fmt.Sprintf("Каталог: %d провайдеров недоступны. F5 — обновить.", len(d.catalog.Failures))
+		d.note = fmt.Sprintf(tr("Каталог: %d провайдеров недоступны. F5 — обновить."), len(d.catalog.Failures))
 	}
 }
 func (m *model) modelsKey(msg tea.KeyMsg) (tea.Cmd, bool) {
@@ -335,7 +335,7 @@ func (m *model) modelsKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case tea.KeyTab, tea.KeyShiftTab:
 		options := d.options()
 		if d.index < len(options) && options[d.index].model.Reasoning != nil {
-			efforts := append([]modelEffort{{ID: "", Name: "По умолчанию"}}, options[d.index].model.Reasoning.Efforts...)
+			efforts := append([]modelEffort{{ID: "", Name: tr("По умолчанию")}}, options[d.index].model.Reasoning.Efforts...)
 			index := 0
 			for i, e := range efforts {
 				if e.ID == d.effort {
@@ -375,7 +375,7 @@ func (m *model) modelsView(base string) string {
 	if d.current.Reasoning != "" {
 		current += " · " + d.current.Reasoning
 	}
-	lines := []string{heading.Render("Модель сессии"), ansi.Truncate(clean(d.id), width, "…"), ansi.Truncate("Текущая: "+clean(current), width, "…"), "Каталог подключённых провайдеров", d.search.View(), ""}
+	lines := []string{heading().Render(tr("Модель сессии")), ansi.Truncate(clean(d.id), width, "…"), ansi.Truncate(tr("Текущая: ")+clean(current), width, "…"), tr("Каталог подключённых провайдеров"), d.search.View(), ""}
 	options := d.options()
 	start := max(0, min(d.index-2, len(options)-5))
 	for i := 0; i < 5; i++ {
@@ -389,7 +389,7 @@ func (m *model) modelsView(base string) string {
 			}
 			label = prefix + option.provider + " / " + option.model.ID
 			if index == d.index {
-				label = heading.Render(ansi.Truncate(clean(label), width, "…"))
+				label = heading().Render(ansi.Truncate(clean(label), width, "…"))
 			} else {
 				label = ansi.Truncate(clean(label), width, "…")
 			}
@@ -397,22 +397,22 @@ func (m *model) modelsView(base string) string {
 		lines = append(lines, label)
 	}
 	if len(options) == 0 {
-		lines[6] = "Нет доступных моделей по этому запросу."
+		lines[6] = tr("Нет доступных моделей по этому запросу.")
 	}
-	selection, effort := "Выберите модель.", "Рассуждение: по умолчанию"
+	selection, effort := tr("Выберите модель."), tr("Рассуждение: по умолчанию")
 	if d.index < len(options) {
 		option := options[d.index]
-		selection = "Выбор: " + option.provider + "/" + option.model.ID
+		selection = tr("Выбор: ") + option.provider + "/" + option.model.ID
 		if d.effort != "" {
-			effort = "Рассуждение: " + d.effort
+			effort = tr("Рассуждение: ") + d.effort
 		}
 	}
-	lines = append(lines, "", ansi.Truncate(clean(selection), width, "…"), ansi.Truncate(clean(effort), width, "…"), ansi.Truncate("dsh также сохраняет общую модель по умолчанию.", width, "…"), ansi.Truncate("Текущий запрос продолжится; выбор — для следующего шага.", width, "…"))
+	lines = append(lines, "", ansi.Truncate(clean(selection), width, "…"), ansi.Truncate(clean(effort), width, "…"), ansi.Truncate(tr("dsh также сохраняет общую модель по умолчанию."), width, "…"), ansi.Truncate(tr("Текущий запрос продолжится; выбор — для следующего шага."), width, "…"))
 	notes := strings.Split(ansi.Hardwrap(clean(d.note), width, true), "\n")
 	for len(notes) < 2 {
 		notes = append(notes, "")
 	}
-	lines = append(lines, muted.Render(notes[0]), muted.Render(notes[1]), "↑/↓ модель · Tab/Shift+Tab рассуждение", "Enter применить · F5 перечитать · Esc назад")
+	lines = append(lines, muted().Render(notes[0]), muted().Render(notes[1]), tr("↑/↓ модель · Tab/Shift+Tab рассуждение"), tr("Enter применить · F5 перечитать · Esc назад"))
 	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)
 }
 func (m *model) modelsMouse(msg tea.MouseMsg) tea.Cmd {

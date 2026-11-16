@@ -52,18 +52,7 @@ function contextMenuItems(params) {
 /* Key → an action of "View" (a name from viewActions), or null — the key
    belongs to the page. code — the physical key, independent of the
    layout (RU/EN). */
-function keyAction(input) {
-  const c = input.control;
-  if (input.key === 'F5' || (c && input.code === 'KeyR')) return input.shift ? 'reloadHard' : 'reload';
-  if (c && (input.code === 'Equal' || input.code === 'NumpadAdd')) return 'zoomIn';
-  if (c && (input.code === 'Minus' || input.code === 'NumpadSubtract')) return 'zoomOut';
-  if (c && (input.code === 'Digit0' || input.code === 'Numpad0')) return 'zoomReset';
-  if (c && !input.shift && input.code === 'KeyF') return 'find';
-  if (input.key === 'F3') return input.shift ? 'findPrev' : 'findNext';
-  if (input.key === 'F11') return 'fullscreen';
-  if (c && input.code === 'Comma') return 'settings';
-  return null;
-}
+const { keyAction } = require('./shortcuts');
 
 /* Both Alt keys (down and up), by the physical code — independent of the
    layout: a bare Alt arrives as key="Alt", Shift+Alt (layout switch) — as

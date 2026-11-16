@@ -23,11 +23,11 @@ type sessionArchiveResult struct {
 
 func (m *model) openSessionArchive(current, restore bool) tea.Cmd {
 	if m.settingsLogin == "" {
-		m.append("Архив доступен при подключении к dsh.")
+		m.append(tr("Архив доступен при подключении к dsh."))
 		return nil
 	}
 	if m.chatSessionChanging() {
-		m.append("Дождитесь подключения сессии.")
+		m.append(tr("Дождитесь подключения сессии."))
 		return nil
 	}
 	id := ""
@@ -41,7 +41,7 @@ func (m *model) openSessionArchive(current, restore bool) tea.Cmd {
 		}
 	}
 	if id == "" {
-		m.append("Выберите сессию.")
+		m.append(tr("Выберите сессию."))
 		return nil
 	}
 	m.archiveDialog = &sessionArchive{id: id, restore: restore, focused: m.input.Focused()}
@@ -81,7 +81,7 @@ func (m *model) archiveKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			return nil, true
 		}
 		d.attempted, d.busy = true, true
-		d.note = "Сохранение в dsh…"
+		d.note = tr("Сохранение в dsh…")
 		ctx, login := m.settingsContext, m.settingsLogin
 		if ctx == nil {
 			ctx = context.Background()
@@ -107,7 +107,7 @@ func (m *model) archiveKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 					result.ids, err = archiveIDs(value.IDs)
 				}
 				if err == nil && result.ids[d.id] == d.restore {
-					err = errors.New("dsh не подтвердил состояние сессии")
+					err = errors.New(tr("dsh не подтвердил состояние сессии"))
 				}
 			}
 			result.err = err
@@ -123,7 +123,7 @@ func (m *model) handleSessionArchive(result sessionArchiveResult) tea.Cmd {
 	}
 	d.busy = false
 	if result.err != nil {
-		d.note = "Не подтверждено. Проверьте архив; для активной сессии сначала остановите задачи. " + clean(result.err.Error())
+		d.note = tr("Не подтверждено. Проверьте архив; для активной сессии сначала остановите задачи. ") + clean(result.err.Error())
 		return nil
 	}
 	m.archiveDialog = nil
@@ -143,15 +143,15 @@ func (m *model) archiveView(base string) string {
 	if d == nil {
 		return base
 	}
-	title := "Архивирование сессии"
-	explanation := "История сохранится. Сессия перейдёт в архив. Работающие задачи могут запретить архивирование; сначала остановите их. Восстановить сессию можно из списка архива."
+	title := tr("Архивирование сессии")
+	explanation := tr("История сохранится. Сессия перейдёт в архив. Работающие задачи могут запретить архивирование; сначала остановите их. Восстановить сессию можно из списка архива.")
 	if d.restore {
-		title = "Восстановление сессии"
-		explanation = "Сессия вернётся в активный список с сохранённой историей. Новое сообщение можно отправить после восстановления."
+		title = tr("Восстановление сессии")
+		explanation = tr("Сессия вернётся в активный список с сохранённой историей. Новое сообщение можно отправить после восстановления.")
 	}
 	width, height := min(76, m.width-3), min(16, m.height-2)
 	inner := width - 4
-	lines := []string{heading.Render(title), ansi.Truncate(clean(d.id), inner, "…"), "", ansi.Wrap(explanation, inner, ""), ""}
+	lines := []string{heading().Render(title), ansi.Truncate(clean(d.id), inner, "…"), "", ansi.Wrap(explanation, inner, ""), ""}
 	if d.note != "" {
 		note := strings.Split(ansi.Wrap(d.note, inner, ""), "\n")
 		if len(note) > 3 {
@@ -159,11 +159,11 @@ func (m *model) archiveView(base string) string {
 		}
 		lines = append(lines, strings.Join(note, "\n"))
 	}
-	hint := "Enter — подтвердить · Esc — назад"
+	hint := tr("Enter — подтвердить · Esc — назад")
 	if d.busy {
-		hint = "Ожидание ответа dsh…"
+		hint = tr("Ожидание ответа dsh…")
 	} else if d.attempted {
-		hint = "Esc — закрыть и проверить архив"
+		hint = tr("Esc — закрыть и проверить архив")
 	}
 	lines = append(lines, hint)
 	return overlay(base, panel(width, height, strings.Join(lines, "\n"), "#58a6ff"), (m.width-1-width)/2, (m.height-height)/2, m.width-1)

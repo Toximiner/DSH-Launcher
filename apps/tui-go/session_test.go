@@ -246,3 +246,29 @@ func TestBackgroundSessionRefreshKeepsDisplayStable(t *testing.T) {
 		t.Fatal("background refresh errors must remain visible")
 	}
 }
+
+func TestSessionSearchFiltersWithoutSendingRequests(t *testing.T) {
+	m := newModel()
+	m.page = sessionsPage
+	m.navFocused = false
+	m.sessionItems = []sessionItem{{ID: "one"}, {ID: "two"}}
+	m.sessionItems[0].Projections.Values.Title = "Первый разговор"
+	m.sessionItems[1].Projections.Values.Title = "Другой"
+	m.sessionSearchKey(tea.KeyMsg{Type: tea.KeyCtrlF})
+	m.sessionSearchKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ПЕРВЫЙ"), Paste: true})
+	if len(m.visibleSessions()) != 1 || m.visibleSessions()[0].ID != "one" {
+		t.Fatal("session title search is not case insensitive")
+	}
+	if m.sessionBusy {
+		t.Fatal("local session filtering sent a backend request")
+	}
+	m.sessionSearchKey(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.sessionSearching || m.sessionQuery == "" {
+		t.Fatal("closing search discarded the filter")
+	}
+	m.sessionSearchKey(tea.KeyMsg{Type: tea.KeyCtrlF})
+	m.sessionSearchKey(tea.KeyMsg{Type: tea.KeyCtrlU})
+	if len(m.visibleSessions()) != 2 {
+		t.Fatal("clearing search did not restore the session list")
+	}
+}

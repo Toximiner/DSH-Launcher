@@ -62,10 +62,10 @@ func newNativeRuntime(options backendOptions) (*nativeRuntime, error) {
 	c.executable, _ = os.Executable()
 	c.executable, _ = filepath.EvalSymlinks(c.executable)
 	if err := readJSON(filepath.Join(root, "runtime.json"), &c.config); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, errors.New("повреждены параметры запуска runtime.json")
+		return nil, errors.New(tr("повреждены параметры запуска runtime.json"))
 	}
 	if err := readJSON(filepath.Join(root, "dsh-install.json"), &c.install); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("повреждено состояние установки dsh: %w", err)
+		return nil, fmt.Errorf(tr("повреждено состояние установки dsh: %w"), err)
 	}
 	for _, slot := range []string{c.install.Current, c.install.Previous} {
 		if slot != "" && !validSlot(slot) {
@@ -76,10 +76,10 @@ func newNativeRuntime(options backendOptions) (*nativeRuntime, error) {
 		if len(previous) > 128<<10 {
 			previous = previous[len(previous)-(128<<10):]
 		}
-		c.state.Log = "Предыдущий запуск:\n" + redactDiagnostic(string(previous)) + "\nТекущий запуск:\n"
+		c.state.Log = tr("Предыдущий запуск:\n") + redactDiagnostic(string(previous)) + tr("\nТекущий запуск:\n")
 	}
 	c.state.Bell = c.config.Bell
-	c.setStatus("Управление dsh готово.", "")
+	c.setStatus(tr("Управление dsh готово."), "")
 	return c, nil
 }
 func validSlot(s string) bool {
@@ -133,14 +133,14 @@ func atomicFile(path string, b []byte, mode os.FileMode) error {
 }
 func validateRuntimeConfig(c runtimeConfig) error {
 	if c.Bin == "" || !profileName.MatchString(c.Profile) || c.Port < 1024 || c.Port > 65535 {
-		return errors.New("неверный путь, профиль или порт dsh")
+		return errors.New(tr("неверный путь, профиль или порт dsh"))
 	}
 	if !filepath.IsAbs(c.CWD) {
-		return errors.New("рабочая папка должна быть абсолютной")
+		return errors.New(tr("рабочая папка должна быть абсолютной"))
 	}
 	st, e := os.Stat(c.CWD)
 	if e != nil || !st.IsDir() {
-		return errors.New("рабочая папка недоступна")
+		return errors.New(tr("рабочая папка недоступна"))
 	}
 	return nil
 }
@@ -156,7 +156,7 @@ func (c *nativeRuntime) setStatus(status, note string) {
 	c.state.Status = redactDiagnostic(status)
 	c.state.Note = redactDiagnostic(note)
 	c.state.Revision++
-	c.state.Detail = fmt.Sprintf("Профиль: %s · порт: %d\nПапка: %s\ndsh: %s\nTUI: %s · %s/%s\nЗвуковые уведомления: %t", c.config.Profile, c.config.Port, c.config.CWD, c.selectedBin(), version, runtime.GOOS, runtime.GOARCH, c.config.Bell) + "\n" + c.releases.Text
+	c.state.Detail = fmt.Sprintf(tr("Профиль: %s · порт: %d\nПапка: %s\ndsh: %s\nTUI: %s · %s/%s\nЗвуковые уведомления: %t"), c.config.Profile, c.config.Port, c.config.CWD, c.selectedBin(), version, runtime.GOOS, runtime.GOARCH, c.config.Bell) + "\n" + c.releases.Text
 }
 func (c *nativeRuntime) Snapshot() runtimeSnapshot {
 	c.mu.Lock()
@@ -170,7 +170,7 @@ func (c *nativeRuntime) Snapshot() runtimeSnapshot {
 			s.Owned = false
 			s.Exited = true
 			s.Login = ""
-			s.Status = "Процесс dsh завершился."
+			s.Status = tr("Процесс dsh завершился.")
 		default:
 		}
 	}
@@ -205,7 +205,7 @@ func (c *nativeRuntime) persistLog() {
 	atomicFile(filepath.Join(c.root, "last-runtime.log"), []byte(c.logSnapshot()), 0600)
 }
 func (c *nativeRuntime) Notice(message string) {
-	fmt.Fprintln(c, "[Уведомление] "+message)
+	fmt.Fprintln(c, tr("[Уведомление] ")+message)
 	c.mu.Lock()
 	bell := c.state.Bell
 	c.mu.Unlock()
@@ -251,7 +251,7 @@ func (c *nativeRuntime) adopt(login string, stop func(), done <-chan struct{}) {
 }
 func (c *nativeRuntime) start(ctx context.Context) error {
 	if c.Snapshot().Owned {
-		return errors.New("свой dsh уже работает")
+		return errors.New(tr("свой dsh уже работает"))
 	}
 	if err := checkBackendNode(ctx); err != nil {
 		return err
@@ -269,7 +269,7 @@ func (c *nativeRuntime) start(ctx context.Context) error {
 }
 func (c *nativeRuntime) Execute(ctx context.Context, action, value string) (err error) {
 	if !c.op.TryLock() {
-		return errors.New("операция уже выполняется")
+		return errors.New(tr("операция уже выполняется"))
 	}
 	defer c.op.Unlock()
 	if c.owner == nil {
@@ -302,9 +302,9 @@ func (c *nativeRuntime) Execute(ctx context.Context, action, value string) (err 
 		c.state.Busy = false
 		c.mu.Unlock()
 		if err != nil {
-			c.setStatus("Ошибка операции · можно повторить", err.Error())
+			c.setStatus(tr("Ошибка операции · можно повторить"), err.Error())
 		} else {
-			c.setStatus("Готово · "+runtimeActionLabel(action), "Операция завершена. Подробности — в журнале.")
+			c.setStatus(tr("Готово · ")+runtimeActionLabel(action), tr("Операция завершена. Подробности — в журнале."))
 		}
 		c.Notice(c.Snapshot().Status)
 		c.persistLog()
@@ -320,7 +320,7 @@ func (c *nativeRuntime) Execute(ctx context.Context, action, value string) (err 
 		b, e := exec.CommandContext(ctx, c.selectedBin(), "--version").CombinedOutput()
 		c.Write(b)
 		if e != nil {
-			return errors.New("dsh не найден или не запускается; выберите установку")
+			return errors.New(tr("dsh не найден или не запускается; выберите установку"))
 		}
 	case "install", "update-dsh":
 		return c.installDsh(ctx, value)
@@ -328,25 +328,25 @@ func (c *nativeRuntime) Execute(ctx context.Context, action, value string) (err 
 		return c.start(ctx)
 	case "stop":
 		if c.stop == nil {
-			return errors.New("нет своего процесса; внешний dsh не останавливается")
+			return errors.New(tr("нет своего процесса; внешний dsh не останавливается"))
 		}
 		c.stopOwned()
 	case "restart":
 		if c.stop == nil {
-			return errors.New("нет своего процесса для перезапуска")
+			return errors.New(tr("нет своего процесса для перезапуска"))
 		}
 		c.stopOwned()
 		return c.start(ctx)
 	case "rollback-dsh":
 		if c.Snapshot().Owned {
-			return errors.New("сначала остановите свой dsh")
+			return errors.New(tr("сначала остановите свой dsh"))
 		}
 		if c.install.Previous == "" {
 			if c.install.Current == "" {
-				return errors.New("предыдущая установка отсутствует")
+				return errors.New(tr("предыдущая установка отсутствует"))
 			}
 			if e := verifyDsh(ctx, c.config.Bin); e != nil {
-				return errors.New("до первой установки не было доступного dsh; возвращать нечего")
+				return errors.New(tr("до первой установки не было доступного dsh; возвращать нечего"))
 			}
 			next := managedInstall{Previous: c.install.Current}
 			if e := atomicJSON(filepath.Join(c.root, "dsh-install.json"), next); e != nil {
@@ -365,7 +365,7 @@ func (c *nativeRuntime) Execute(ctx context.Context, action, value string) (err 
 		return err
 	case "bin", "profile", "port", "cwd":
 		if c.Snapshot().Owned {
-			return errors.New("сначала остановите свой dsh")
+			return errors.New(tr("сначала остановите свой dsh"))
 		}
 		next := c.config
 		switch action {
@@ -387,7 +387,7 @@ func (c *nativeRuntime) Execute(ctx context.Context, action, value string) (err 
 		return err
 	case "check":
 		if b, e := exec.CommandContext(ctx, c.selectedBin(), "--version").CombinedOutput(); e == nil {
-			fmt.Fprintf(c, "Установлен dsh: %s\n", strings.TrimSpace(string(b)))
+			fmt.Fprintf(c, tr("Установлен dsh: %s\n"), strings.TrimSpace(string(b)))
 		}
 		c.releases, err = fetchUpdateCatalog(ctx)
 		if err == nil {
@@ -396,13 +396,13 @@ func (c *nativeRuntime) Execute(ctx context.Context, action, value string) (err 
 		return err
 	case "update-tui":
 		if c.releases.TUI.URL == "" {
-			return errors.New("сначала проверьте версии; в релизе нужен TUI-бинарник с SHA-256")
+			return errors.New(tr("сначала проверьте версии; в релизе нужен TUI-бинарник с SHA-256"))
 		}
 		return c.updateTUI(ctx, c.releases.TUI)
 	case "local-tui":
 		parts := strings.Fields(value)
 		if len(parts) < 2 {
-			return errors.New("укажите абсолютный путь и SHA-256 через пробел")
+			return errors.New(tr("укажите абсолютный путь и SHA-256 через пробел"))
 		}
 		return c.updateTUI(ctx, updateArtifact{Path: strings.Join(parts[:len(parts)-1], " "), SHA256: parts[len(parts)-1]})
 	case "rollback-tui":
@@ -412,7 +412,7 @@ func (c *nativeRuntime) Execute(ctx context.Context, action, value string) (err 
 		if e != nil {
 			return e
 		}
-		fmt.Fprintln(c, "Отчёт сохранён: "+dest)
+		fmt.Fprintln(c, tr("Отчёт сохранён: ")+dest)
 	case "logs":
 		return nil
 	case "bell":
@@ -426,7 +426,7 @@ func (c *nativeRuntime) Execute(ctx context.Context, action, value string) (err 
 		}
 		return err
 	default:
-		return errors.New("неизвестная операция")
+		return errors.New(tr("неизвестная операция"))
 	}
 	return nil
 }
@@ -443,29 +443,29 @@ func runtimeActionLabel(action string) string {
 func verifyDsh(ctx context.Context, bin string) error {
 	output, e := exec.CommandContext(ctx, bin, "--version").CombinedOutput()
 	if e != nil || !regexp.MustCompile(`[0-9]+\.[0-9]+\.[0-9]+`).Match(output) {
-		return errors.New("проверка установленного dsh не прошла")
+		return errors.New(tr("проверка установленного dsh не прошла"))
 	}
 	return nil
 }
 func (c *nativeRuntime) installDsh(ctx context.Context, v string) error {
 	if c.Snapshot().Owned {
-		return errors.New("сначала остановите свой dsh; исполняющиеся задачи не переживают перезапуск")
+		return errors.New(tr("сначала остановите свой dsh; исполняющиеся задачи не переживают перезапуск"))
 	}
 	if e := checkBackendNode(ctx); e != nil {
 		return e
 	}
 	if v != "latest" && !packageVersion.MatchString(v) {
-		return errors.New("нужна точная версия npm или latest")
+		return errors.New(tr("нужна точная версия npm или latest"))
 	}
 	// Resolve tags before installation so the log and immutable slot identify the
 	// exact candidate. A failed or interrupted install never changes the pointer.
 	if v == "latest" {
 		b, e := exec.CommandContext(ctx, "npm", "view", dshPackage+"@latest", "version", "--json").Output()
 		if e != nil {
-			return errors.New("не удалось получить версию из npm")
+			return errors.New(tr("не удалось получить версию из npm"))
 		}
 		if json.Unmarshal(b, &v) != nil || !packageVersion.MatchString(v) {
-			return errors.New("неверная версия npm")
+			return errors.New(tr("неверная версия npm"))
 		}
 	}
 	dir := filepath.Join(c.root, "versions")
@@ -482,9 +482,9 @@ func (c *nativeRuntime) installDsh(ctx context.Context, v string) error {
 			os.RemoveAll(slot)
 		}
 	}()
-	fmt.Fprintln(c, "Установка dsh "+v+"…")
+	fmt.Fprintln(c, tr("Установка dsh ")+v+"…")
 	if e = runLocal(ctx, "npm", []string{"install", "--prefix", slot, "--no-audit", "--no-fund", "--ignore-scripts", dshPackage + "@" + v}, c.config.CWD, os.Environ(), c); e != nil {
-		return errors.New("установка npm не завершена; прежняя версия сохранена (см. журнал)")
+		return errors.New(tr("установка npm не завершена; прежняя версия сохранена (см. журнал)"))
 	}
 	if e = verifyDsh(ctx, filepath.Join(slot, "node_modules", ".bin", "dsh")); e != nil {
 		return e
@@ -493,7 +493,7 @@ func (c *nativeRuntime) installDsh(ctx context.Context, v string) error {
 		Version string `json:"version"`
 	}
 	if e = readJSON(filepath.Join(slot, "node_modules", "@deepseek-ai", "dsh", "package.json"), &metadata); e != nil || metadata.Version != v {
-		return errors.New("версия установленного пакета не совпадает с запрошенной; прежняя версия сохранена")
+		return errors.New(tr("версия установленного пакета не совпадает с запрошенной; прежняя версия сохранена"))
 	}
 	next := managedInstall{filepath.Base(slot), c.install.Current}
 	if e = atomicJSON(filepath.Join(c.root, "dsh-install.json"), next); e != nil {
@@ -501,7 +501,7 @@ func (c *nativeRuntime) installDsh(ctx context.Context, v string) error {
 	}
 	c.install = next
 	committed = true
-	fmt.Fprintln(c, "Активирована управляемая версия "+v+". Профиль не изменён.")
+	fmt.Fprintln(c, tr("Активирована управляемая версия ")+v+tr(". Профиль не изменён."))
 	return nil
 }
 
@@ -514,7 +514,7 @@ func lockRuntime(root string) (*os.File, error) {
 	}
 	if e = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); e != nil {
 		f.Close()
-		return nil, errors.New("другой TUI уже управляет установкой dsh")
+		return nil, errors.New(tr("другой TUI уже управляет установкой dsh"))
 	}
 	return f, nil
 }

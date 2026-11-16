@@ -11,8 +11,11 @@ import (
 )
 
 type clientPreferences struct {
-	Mouse        bool `json:"mouse"`
-	InputHistory bool `json:"inputHistory"`
+	Mouse        bool   `json:"mouse"`
+	InputHistory bool   `json:"inputHistory"`
+	Theme        string `json:"theme,omitempty"`
+	Language     string `json:"language,omitempty"`
+	HideSidebar  bool   `json:"hideSidebar,omitempty"`
 }
 
 func defaultClientPreferences() clientPreferences {
@@ -24,6 +27,8 @@ type chromeState struct {
 	menu, item                  int
 	dialog                      string
 	selection                   int
+	helpOffset                  int
+	helpQuery                   string
 	inputFocused, searchFocused bool
 }
 
@@ -51,6 +56,8 @@ func (m *model) openDialog(kind string) tea.Cmd {
 	m.chrome.menuOpen = false
 	m.chrome.dialog = kind
 	m.chrome.selection = 0
+	m.chrome.helpOffset = 0
+	m.chrome.helpQuery = ""
 	return nil
 }
 
@@ -71,23 +78,42 @@ func (m *model) togglePreference(index int) tea.Cmd {
 	next := m.prefs
 	if index == 0 {
 		if m.mouseForcedOff {
-			m.preferencesNote = "Мышь отключена флагом --no-mouse."
+			m.preferencesNote = tr("Мышь отключена флагом --no-mouse.")
 			return nil
 		}
 		next.Mouse = !next.Mouse
-	} else {
+	} else if index == 1 {
 		next.InputHistory = !next.InputHistory
+	} else if index == 4 {
+		if next.Theme == "light" {
+			next.Theme = ""
+		} else {
+			next.Theme = "light"
+		}
+	} else if index == 5 {
+		next.HideSidebar = !next.HideSidebar
+	} else if index == 6 {
+		if next.Language == "en" {
+			next.Language = ""
+		} else {
+			next.Language = "en"
+		}
 	}
 	if m.savePreferences != nil {
 		if err := m.savePreferences(next); err != nil {
-			m.preferencesNote = "Не удалось сохранить. Параметры не изменены."
+			m.preferencesNote = tr("Не удалось сохранить. Параметры не изменены.")
 			return nil
 		}
-		m.preferencesNote = "Сохранено."
+		m.preferencesNote = tr("Сохранено.")
 	} else {
-		m.preferencesNote = "Применено на время этого сеанса."
+		m.preferencesNote = tr("Применено на время этого сеанса.")
 	}
 	m.prefs = next
+	m.applyClientAppearance()
+	if index == 5 {
+		m.resize()
+	}
+	m.rebuild()
 	if !next.InputHistory {
 		m.history = nil
 		m.historyIndex = 0
@@ -139,6 +165,20 @@ func (m *model) activateMenu() tea.Cmd {
 func (m *model) chromeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	key := msg.String()
 	active := m.chrome.menuOpen || m.chrome.dialog != ""
+	if m.chrome.dialog == "help" && (msg.Type == tea.KeyRunes || msg.Type == tea.KeyBackspace || msg.Type == tea.KeyCtrlU) && !msg.Alt {
+		if msg.Type == tea.KeyCtrlU {
+			m.chrome.helpQuery = ""
+		} else if msg.Type == tea.KeyBackspace {
+			r := []rune(m.chrome.helpQuery)
+			if len(r) > 0 {
+				m.chrome.helpQuery = string(r[:len(r)-1])
+			}
+		} else if len(m.chrome.helpQuery)+len(string(msg.Runes)) <= 128 {
+			m.chrome.helpQuery += clean(string(msg.Runes))
+		}
+		m.chrome.helpOffset = 0
+		return nil, true
+	}
 	if msg.Paste {
 		return nil, active
 	}
@@ -184,6 +224,25 @@ func (m *model) chromeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.closeChrome(), true
 	}
 	if m.chrome.dialog != "" {
+		if m.chrome.dialog == "help" {
+			switch key {
+			case "up":
+				m.chrome.helpOffset--
+			case "down":
+				m.chrome.helpOffset++
+			case "pgup":
+				m.chrome.helpOffset -= max(1, m.height-12)
+			case "pgdown":
+				m.chrome.helpOffset += max(1, m.height-12)
+			case "home":
+				m.chrome.helpOffset = 0
+			case "end":
+				m.chrome.helpOffset = len(shortcutLines(m.chrome.helpQuery))
+			case "enter":
+				return m.closeChrome(), true
+			}
+			return nil, true
+		}
 		if m.chrome.dialog != "settings" {
 			if key == "enter" {
 				return m.closeChrome(), true
@@ -192,12 +251,15 @@ func (m *model) chromeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		switch key {
 		case "up", "shift+tab":
-			m.chrome.selection = (m.chrome.selection + 2) % 3
+			m.chrome.selection = (m.chrome.selection + 6) % 7
 		case "down", "tab":
-			m.chrome.selection = (m.chrome.selection + 1) % 3
+			m.chrome.selection = (m.chrome.selection + 1) % 7
 		case "enter", " ":
 			if m.chrome.selection == 2 {
 				return m.closeChrome(), true
+			}
+			if m.chrome.selection == 3 {
+				return m.openDialog("help"), true
 			}
 			return m.togglePreference(m.chrome.selection), true
 		}
@@ -223,7 +285,7 @@ func (m *model) chromeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 func menuStart(index int) int {
 	x := 1
 	for i := 0; i < index; i++ {
-		x += lipgloss.Width(menuNames[i]) + 2
+		x += lipgloss.Width(tr(menuNames[i])) + 2
 	}
 	return x
 }
@@ -231,20 +293,21 @@ func menuStart(index int) int {
 func (m *model) menuBar(width int) string {
 	parts := []string{}
 	for i, label := range menuNames {
+		label = tr(label)
 		if m.chrome.menuOpen && m.chrome.menu == i {
-			label = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#101318")).Background(lipgloss.Color("#79c0ff")).Render(label)
+			label = lipgloss.NewStyle().Bold(true).Foreground(uiColor("#101318")).Background(uiColor("#79c0ff")).Render(label)
 		} else {
-			label = heading.Render(label)
+			label = heading().Render(tr(label))
 		}
 		parts = append(parts, label)
 	}
-	return ansi.Truncate(" "+strings.Join(parts, "  ")+muted.Render("  │ "+filepath.Base(m.workspace)+" / "+pages[m.page]), width, "…")
+	return ansi.Truncate(" "+strings.Join(parts, "  ")+muted().Render("  │ "+filepath.Base(m.workspace)+" / "+tr(pages[m.page])), width, "…")
 }
 
 func selectedRow(text string, selected bool, width int) string {
 	text = ansi.Truncate(text, width, "…")
 	if selected {
-		return lipgloss.NewStyle().Width(width).Bold(true).Foreground(lipgloss.Color("#79c0ff")).Background(lipgloss.Color("#233044")).Render(text)
+		return lipgloss.NewStyle().Width(width).Bold(true).Foreground(uiColor("#79c0ff")).Background(uiColor("#233044")).Render(text)
 	}
 	return text
 }
@@ -255,8 +318,8 @@ func (m *model) dialogBox() (area, string) {
 	lines := []string{}
 	switch m.chrome.dialog {
 	case "settings":
-		lines = append(lines, heading.Render("Настройки TUI"), muted.Render("Применяются сразу · только этот клиент"), "")
-		for i, label := range []string{"Мышь в интерфейсе", "История ввода"} {
+		lines = append(lines, heading().Render(tr("Настройки TUI")), muted().Render(tr("Применяются сразу · только этот клиент")), "")
+		for i, label := range []string{tr("Мышь в интерфейсе"), tr("История ввода")} {
 			on := m.mouseEnabled()
 			if i == 1 {
 				on = m.prefs.InputHistory
@@ -266,19 +329,21 @@ func (m *model) dialogBox() (area, string) {
 				mark = "[✓]"
 			}
 			if i == 0 && m.mouseForcedOff {
-				label = "Мышь (--no-mouse)"
+				label = tr("Мышь (--no-mouse)")
 			}
 			lines = append(lines, selectedRow(mark+" "+label, m.chrome.selection == i, inner))
 		}
-		lines = append(lines, "", muted.Render("F4 / Alt+T — открыть · Esc — закрыть"), muted.Render("↑/↓ — выбор · Enter/Пробел — изменить"), "", ansi.Truncate(m.preferencesNote, inner, "…"), "", selectedRow("[ Закрыть ]", m.chrome.selection == 2, inner))
+		lines = append(lines, "", muted().Render(tr("F4 / Alt+T — открыть · Esc — закрыть")), muted().Render(tr("↑/↓ — выбор · Enter/Пробел — изменить")), "", ansi.Truncate(m.preferencesNote, inner, "…"), "", selectedRow(tr("[ Закрыть ]"), m.chrome.selection == 2, inner), selectedRow(tr("[ Горячие клавиши ]"), m.chrome.selection == 3, inner), selectedRow(tr("Тема: ")+map[bool]string{true: tr("светлая"), false: tr("тёмная")}[m.prefs.Theme == "light"], m.chrome.selection == 4, inner), selectedRow(tr("Боковая панель: ")+map[bool]string{true: tr("скрыта"), false: tr("видна")}[m.prefs.HideSidebar], m.chrome.selection == 5, inner), selectedRow("Language / Язык: "+map[bool]string{true: "English", false: "Русский"}[m.prefs.Language == "en"], m.chrome.selection == 6, inner))
 	case "help":
-		chatHint := "Чат локальный. /help — команды."
-		if m.settingsLogin != "" {
-			chatHint = "Enter — отправить · F8 — остановить"
-		}
-		lines = []string{heading.Render("Горячие клавиши"), "", "F10 / Alt+F/V/H — верхнее меню", "F4 / Alt+T — настройки TUI", "Tab — разделы · Esc — чат", "Alt+C/S/D/L/M — разделы", "F2 / Alt+1/2/3 — режим агента", "↑/↓ — история · PgUp/PgDn — прокрутка", "Ctrl+D / Ctrl+C — выход", "", chatHint, "", "[ Закрыть · Enter / Esc ]"}
+		all := shortcutLines(m.chrome.helpQuery)
+		count := max(1, min(24, m.height-11))
+		offset := max(0, min(m.chrome.helpOffset, max(0, len(all)-count)))
+		m.chrome.helpOffset = offset
+		lines = []string{heading().Render(tr("Горячие клавиши")), tr("Поиск: ") + m.chrome.helpQuery, ""}
+		lines = append(lines, all[offset:min(len(all), offset+count)]...)
+		lines = append(lines, "", fmt.Sprintf(tr("%d–%d / %d · ↑/↓ PgUp/PgDn · Ctrl+U сброс"), offset+1, min(len(all), offset+count), len(all)), tr("[ Закрыть · Enter / Esc ]"))
 	default:
-		lines = []string{heading.Render("О программе"), "", "DSH Launcher TUI · " + version, "Go + Bubble Tea · Linux", "Интерфейс: русский · тёмная тема", fmt.Sprintf("Терминал: %d × %d", m.width, m.height), "", "Рабочая папка:", clean(m.workspace), "", "[ Закрыть · Enter / Esc ]"}
+		lines = []string{heading().Render(tr("О программе")), "", "DSH Launcher TUI · " + version, "Go + Bubble Tea · Linux", tr("Интерфейс: русский · тема из настроек"), fmt.Sprintf(tr("Терминал: %d × %d"), m.width, m.height), "", tr("Рабочая папка:"), clean(m.workspace), "", tr("[ Закрыть · Enter / Esc ]")}
 	}
 	for i, line := range lines {
 		lines[i] = ansi.Truncate(line, inner, "…")
@@ -310,7 +375,7 @@ func (m *model) chromeView(base string) string {
 	if m.chrome.menuOpen {
 		lines := []string{}
 		for i, item := range menuEntries[m.chrome.menu] {
-			lines = append(lines, selectedRow(item, m.chrome.item == i, 24))
+			lines = append(lines, selectedRow(tr(item), m.chrome.item == i, 24))
 		}
 		return overlay(base, panel(28, len(lines)+2, strings.Join(lines, "\n"), "#79c0ff"), min(menuStart(m.chrome.menu), m.width-29), 2, m.width-1)
 	}
@@ -319,6 +384,14 @@ func (m *model) chromeView(base string) string {
 
 func (m *model) chromeMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 	if m.chrome.dialog != "" {
+		if m.chrome.dialog == "help" && (msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown) {
+			if msg.Button == tea.MouseButtonWheelUp {
+				m.chrome.helpOffset -= 3
+			} else {
+				m.chrome.helpOffset += 3
+			}
+			return nil, true
+		}
 		if msg.Button == tea.MouseButtonLeft {
 			box, _ := m.dialogBox()
 			if box.contains(msg.X, msg.Y) {
@@ -327,6 +400,13 @@ func (m *model) chromeMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 					if row == 3 || row == 4 {
 						m.chrome.selection = row - 3
 						return m.togglePreference(row - 3), true
+					}
+					if row == 13 || row == 14 || row == 15 {
+						m.chrome.selection = row - 9
+						return m.togglePreference(m.chrome.selection), true
+					}
+					if row == 12 {
+						return m.openDialog("help"), true
 					}
 					if row == 11 {
 						return m.closeChrome(), true
@@ -340,6 +420,7 @@ func (m *model) chromeMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 	}
 	if msg.Button == tea.MouseButtonLeft && msg.Y == 1 {
 		for i, label := range menuNames {
+			label = tr(label)
 			if (area{menuStart(i), 1, lipgloss.Width(label), 1}).contains(msg.X, msg.Y) {
 				if m.chrome.menuOpen && m.chrome.menu == i {
 					return m.closeChrome(), true

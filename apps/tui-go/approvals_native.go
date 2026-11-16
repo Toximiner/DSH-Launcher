@@ -30,7 +30,7 @@ func followApprovalEvents(ctx context.Context, login, id string, out chan<- appr
 					var accepted bool
 					err := api.rpc(connection, "userQuestions/answer", map[string]any{"agentId": id, "callId": strings.TrimPrefix(eventID, "continued:"), "answer": value}, &accepted)
 					if err == nil && !accepted {
-						return errors.New("вопрос уже завершён")
+						return errors.New(tr("вопрос уже завершён"))
 					}
 					return err
 				}
@@ -100,7 +100,7 @@ func followApprovalEvents(ctx context.Context, login, id string, out chan<- appr
 			return
 		}
 		if err == nil {
-			err = errors.New("канал разрешений закрыт")
+			err = errors.New(tr("канал разрешений закрыт"))
 		}
 		if !post(approvalNotice{generation: generation, err: err}) {
 			return

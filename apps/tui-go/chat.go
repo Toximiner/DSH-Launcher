@@ -194,7 +194,7 @@ func (m *model) submitContent(text string, attachments []promptAttachment) tea.C
 		if m.chat == nil {
 			return nil
 		}
-		m.chat.note = "Просмотр подагента. /session " + m.session.Address.ParentID + " → /agents → F3 — сообщение."
+		m.chat.note = tr("Просмотр подагента. /session ") + m.session.Address.ParentID + tr(" → /agents → F3 — сообщение.")
 		m.input.SetValue(text)
 		m.rebuild()
 		return nil
@@ -203,36 +203,36 @@ func (m *model) submitContent(text string, attachments []promptAttachment) tea.C
 	if m.session != nil && m.isSessionArchived(m.session.ID) {
 		m.input.SetValue(text)
 		m.input.CursorEnd()
-		m.append("Сессия в архиве. /restore — восстановить; текст оставлен в поле ввода.")
+		m.append(tr("Сессия в архиве. /restore — восстановить; текст оставлен в поле ввода."))
 		return nil
 	}
 	if m.settingsLogin == "" {
-		m.append("Введено: " + text)
+		m.append(tr("Введено: ") + text)
 		return nil
 	}
 	if m.chatSessionChanging() {
 		m.input.SetValue(text)
 		m.input.CursorEnd()
-		m.append("Дождитесь переключения сессии; сообщение оставлено в поле ввода.")
+		m.append(tr("Дождитесь переключения сессии; сообщение оставлено в поле ввода."))
 		return nil
 	}
 	if m.session == nil || m.chat == nil || !m.chat.ready {
 		m.input.SetValue(text)
 		m.input.CursorEnd()
-		m.append("Чат ещё не подключён. Создайте /new или подключите /session <id>; дождитесь подключения.")
+		m.append(tr("Чат ещё не подключён. Создайте /new или подключите /session <id>; дождитесь подключения."))
 		return nil
 	}
 	if pending := m.prompts[m.session.ID]; pending != nil && pending.Status != "rejected" {
 		m.input.SetValue(text)
 		m.input.CursorEnd()
-		m.chat.note = "Дождитесь появления предыдущего сообщения в очереди или истории. Новый текст сохранён. При неизвестном результате: /retry-send."
+		m.chat.note = tr("Дождитесь появления предыдущего сообщения в очереди или истории. Новый текст сохранён. При неизвестном результате: /retry-send.")
 		m.rebuild()
 		return nil
 	}
 	id, err := newRequestID()
 	if err != nil {
 		m.input.SetValue(text)
-		m.append("Не удалось подготовить сообщение.")
+		m.append(tr("Не удалось подготовить сообщение."))
 		return nil
 	}
 	p := &pendingPrompt{ID: id, Text: text, Status: "sending", Attachments: attachments}
@@ -273,7 +273,7 @@ func (m *model) sendPrompt(id string, p *pendingPrompt) tea.Cmd {
 		var rejected *rpcRejected
 		result.rejected = errors.As(result.err, &rejected)
 		if result.err == nil && !receipt.Accepted {
-			result.err = errors.New("неподдерживаемое подтверждение отправки")
+			result.err = errors.New(tr("неподдерживаемое подтверждение отправки"))
 		}
 		return result
 	}
@@ -281,16 +281,16 @@ func (m *model) sendPrompt(id string, p *pendingPrompt) tea.Cmd {
 
 func (m *model) retryPrompt() tea.Cmd {
 	if m.chatSessionChanging() {
-		m.append("Дождитесь переключения сессии.")
+		m.append(tr("Дождитесь переключения сессии."))
 		return nil
 	}
 	if m.session == nil || m.chat == nil || !m.chat.ready {
-		m.append("Дождитесь подключения чата.")
+		m.append(tr("Дождитесь подключения чата."))
 		return nil
 	}
 	p := m.prompts[m.session.ID]
 	if p == nil || p.Status != "unknown" {
-		m.chat.note = "Нет отправки с неизвестным результатом."
+		m.chat.note = tr("Нет отправки с неизвестным результатом.")
 		m.rebuild()
 		return nil
 	}
@@ -300,24 +300,24 @@ func (m *model) retryPrompt() tea.Cmd {
 
 func (m *model) cancelChat() tea.Cmd {
 	if m.chatSessionChanging() {
-		m.append("Дождитесь переключения сессии.")
+		m.append(tr("Дождитесь переключения сессии."))
 		return nil
 	}
 	if m.session == nil {
-		m.append("Нет подключённого агента для отмены.")
+		m.append(tr("Нет подключённого агента для отмены."))
 		return nil
 	}
 	id, login, ctx := m.session.ID, m.settingsLogin, m.settingsContext
 	address := m.session.Address
 	if address.Kind == "subagent" && address.Mode != "continuable" {
-		m.append("Остановку этого подагента задаёт его родитель.")
+		m.append(tr("Остановку этого подагента задаёт его родитель."))
 		return nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if m.chat != nil {
-		m.chat.note = "Запрошена отмена; ожидается подтверждение dsh."
+		m.chat.note = tr("Запрошена отмена; ожидается подтверждение dsh.")
 		m.rebuild()
 	}
 	return func() tea.Msg {
@@ -333,7 +333,7 @@ func (m *model) cancelChat() tea.Cmd {
 				err = api.rpc(ctx, "session/cancel", map[string]any{"request": map[string]any{"sessionId": id}}, &receipt)
 			}
 			if err == nil && !receipt.Accepted {
-				err = errors.New("неподдерживаемое подтверждение отмены")
+				err = errors.New(tr("неподдерживаемое подтверждение отмены"))
 			}
 		}
 		return cancelResult{sessionID: id, err: err}
@@ -355,17 +355,17 @@ func (m *model) chatSessionChanging() bool {
 func failureNote(code string) string {
 	switch code {
 	case "MISSING_CREDENTIAL", "INVALID_CREDENTIAL":
-		return "Нет действующего доступа к модели. Настройте провайдера в dsh."
+		return tr("Нет действующего доступа к модели. Настройте провайдера в dsh.")
 	case "NO_ADAPTER", "MODEL_NOT_FOUND":
-		return "Выбранная модель недоступна. Проверьте провайдера и модель в dsh."
+		return tr("Выбранная модель недоступна. Проверьте провайдера и модель в dsh.")
 	case "QUOTA", "ACCOUNT_QUOTA":
-		return "Квота провайдера исчерпана."
+		return tr("Квота провайдера исчерпана.")
 	case "RATE_LIMIT":
-		return "Провайдер ограничил частоту запросов."
+		return tr("Провайдер ограничил частоту запросов.")
 	case "CONTEXT_WINDOW_EXCEEDED":
-		return "Превышен размер контекста модели."
+		return tr("Превышен размер контекста модели.")
 	default:
-		return "Ошибка выполнения агента. Проверьте настройки модели и журнал dsh."
+		return tr("Ошибка выполнения агента. Проверьте настройки модели и журнал dsh.")
 	}
 }
 
@@ -380,7 +380,7 @@ func contentText(content []struct {
 		} else if part.Type == "reasoning" || part.Type == "tool-call" {
 			continue
 		} else {
-			parts = append(parts, "[Нетекстовое содержимое]")
+			parts = append(parts, tr("[Нетекстовое содержимое]"))
 		}
 	}
 	return clean(strings.Join(parts, "\n"))
@@ -473,7 +473,7 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	switch event.Type {
 	case "user/message", "assistant/message", "assistant/attempt", "turn/start", "turn/end", "tool/call", "tool/result", "approval/asked", "approval/decided":
 		if err := json.Unmarshal(event.Data, &data); err != nil {
-			return errors.New("неподдерживаемые данные истории")
+			return errors.New(tr("неподдерживаемые данные истории"))
 		}
 	}
 	var reason struct {
@@ -484,7 +484,7 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	}
 	if event.Type == "turn/end" && len(data.Reason) > 0 {
 		if json.Unmarshal(data.Reason, &reason) != nil {
-			return errors.New("неподдерживаемая причина завершения")
+			return errors.New(tr("неподдерживаемая причина завершения"))
 		}
 	}
 	text, role := "", ""
@@ -494,13 +494,13 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	case "user/message":
 		s.recordAdmission(data.Source.RPCID, event.Seq)
 		if data.Source.Kind == "user-question-reply" {
-			role = "ВЫ · ОТВЕТЫ НА ВОПРОС"
+			role = tr("ВЫ · ОТВЕТЫ НА ВОПРОС")
 			text = questionReplyText(contentText(data.Content))
 		}
 		if data.Source.Kind == "user" || data.Source.Kind == "" {
-			role = "ВЫ"
+			role = tr("ВЫ")
 			if data.Source.Kind == "" {
-				role = "СООБЩЕНИЕ DSH"
+				role = tr("СООБЩЕНИЕ DSH")
 			}
 			text = contentText(data.Content)
 		}
@@ -508,18 +508,18 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 			delete(m.prompts, s.id)
 		}
 	case "assistant/message":
-		role = "АГЕНТ"
+		role = tr("АГЕНТ")
 		text = contentText(data.Message.Content)
 	case "assistant/attempt":
 		a := &chatAttempt{Stream: data.Stream}
 		if note := a.restore(); note != "" {
 			s.note = note
 		}
-		role = "АГЕНТ · НЕЗАВЕРШЁННЫЙ ОТВЕТ"
+		role = tr("АГЕНТ · НЕЗАВЕРШЁННЫЙ ОТВЕТ")
 		text = a.text()
 	case "tool/call":
 		if data.CallID == "" {
-			return errors.New("вызов инструмента без идентификатора")
+			return errors.New(tr("вызов инструмента без идентификатора"))
 		}
 		tool = &chatTool{ID: data.CallID, Name: boundedToolText(data.Name, 256), Arguments: boundedToolText(data.Arguments, toolArgumentsLimit), State: "running", Turn: data.Turn, StartSeq: event.Seq}
 	case "job/registered":
@@ -538,7 +538,7 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 			id = data.Message.ToolCallID
 		}
 		if id == "" {
-			return errors.New("результат инструмента без идентификатора")
+			return errors.New(tr("результат инструмента без идентификатора"))
 		}
 		tool = &chatTool{ID: id, State: "done", Turn: data.Turn}
 		for _, previous := range s.messages {
@@ -563,15 +563,15 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 		}
 	case "approval/asked", "approval/decided":
 		if data.ID == "" || len(data.ID) > 256 {
-			return errors.New("разрешение без корректного идентификатора")
+			return errors.New(tr("разрешение без корректного идентификатора"))
 		}
 		approvalID = data.ID
 		approvalTool = boundedToolText(data.ToolName, 256)
-		role = "РАЗРЕШЕНИЕ · ОЖИДАЕТ ОТВЕТА"
+		role = tr("РАЗРЕШЕНИЕ · ОЖИДАЕТ ОТВЕТА")
 		var detail string
 		if event.Type == "approval/asked" {
 			if len(data.Reason) > 0 && json.Unmarshal(data.Reason, &detail) != nil {
-				return errors.New("неподдерживаемая причина разрешения")
+				return errors.New(tr("неподдерживаемая причина разрешения"))
 			}
 			text = approvalTool + "\n" + boundedToolText(detail, toolArgumentsLimit)
 		} else {
@@ -582,10 +582,10 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 				}
 			}
 			if approvalTool == "" {
-				approvalTool = "Запрос вне окна истории"
+				approvalTool = tr("Запрос вне окна истории")
 			}
 			label := approvalOutcomeLabel(data.Outcome)
-			role = "РАЗРЕШЕНИЕ"
+			role = tr("РАЗРЕШЕНИЕ")
 			text = approvalTool + " · " + label
 		}
 	case "turn/start":
@@ -626,11 +626,11 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 			s.note = failureNote(reason.Error.Code)
 		}
 		if reason.Kind == "aborted" {
-			s.note = "Выполнение остановлено."
+			s.note = tr("Выполнение остановлено.")
 		}
 	}
 	if len(text) > chatTextLimit {
-		return errors.New("сообщение превышает размер, поддерживаемый TUI")
+		return errors.New(tr("сообщение превышает размер, поддерживаемый TUI"))
 	}
 	removed := make(map[int]bool)
 	if len(event.SurfaceOp) > 0 && string(event.SurfaceOp) != "\"append\"" {
@@ -640,7 +640,7 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 			End   int    `json:"endSeq"`
 		}
 		if json.Unmarshal(event.SurfaceOp, &op) != nil || op.Op != "replace" {
-			return errors.New("неподдерживаемая замена истории")
+			return errors.New(tr("неподдерживаемая замена истории"))
 		}
 		start, end := -1, -1
 		for i, seq := range s.surface {
@@ -652,7 +652,7 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 			}
 		}
 		if start < 0 || end < start {
-			return errors.New("замена затрагивает недоступную часть истории; используйте новую сессию")
+			return errors.New(tr("замена затрагивает недоступную часть истории; используйте новую сессию"))
 		}
 		for _, seq := range s.surface[start : end+1] {
 			removed[seq] = true
@@ -724,7 +724,7 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 	switch frame.Type {
 	case "snapshot":
 		if frame.Header.ID != s.id || frame.Cursor < -1 {
-			return errors.New("снимок другой сессии или неверный курсор")
+			return errors.New(tr("снимок другой сессии или неверный курсор"))
 		}
 		next := *s
 		next.messages = nil
@@ -738,7 +738,7 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 		last := -1
 		for _, record := range frame.Records {
 			if record.Type != "event" || record.Event.Seq > frame.Cursor || record.Event.Seq <= last {
-				return errors.New("неподдерживаемый снимок истории")
+				return errors.New(tr("неподдерживаемый снимок истории"))
 			}
 			last = record.Event.Seq
 			if err := m.applyChatEvent(&next, record.Event); err != nil {
@@ -748,13 +748,13 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 		if frame.AssistantStream != nil && frame.AssistantStream.Active != nil {
 			next.live = frame.AssistantStream.Active
 			if next.live.ID == "" || next.live.Next < 0 {
-				return errors.New("неподдерживаемый снимок ответа")
+				return errors.New(tr("неподдерживаемый снимок ответа"))
 			}
 			if note := next.live.restore(); note != "" {
 				next.note = note
 			}
 			if len(next.live.text()) > chatTextLimit {
-				return errors.New("снимок ответа превышает ограничение TUI")
+				return errors.New(tr("снимок ответа превышает ограничение TUI"))
 			}
 		}
 		next.ready = true
@@ -765,13 +765,13 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 		}
 	case "event":
 		if !s.ready {
-			return errors.New("история пришла до снимка")
+			return errors.New(tr("история пришла до снимка"))
 		}
 		if frame.Event.Seq <= s.cursor {
 			return nil
 		}
 		if frame.Event.Seq != s.cursor+1 {
-			return errors.New("пропуск в истории; требуется новый снимок")
+			return errors.New(tr("пропуск в истории; требуется новый снимок"))
 		}
 		if err := m.applyChatEvent(s, frame.Event); err != nil {
 			return err
@@ -779,24 +779,24 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 		s.cursor = frame.Event.Seq
 	case "assistant-stream":
 		if !s.ready {
-			return errors.New("ответ пришёл до снимка")
+			return errors.New(tr("ответ пришёл до снимка"))
 		}
 		f := frame.Frame
 		if f.ID == "" || f.Index < 0 {
-			return errors.New("неверная попытка ответа")
+			return errors.New(tr("неверная попытка ответа"))
 		}
 		switch f.Type {
 		case "start":
 			s.live = &chatAttempt{ID: f.ID, Turn: f.Turn, Step: f.Step}
 		case "chunk":
 			if s.live == nil || s.live.ID != f.ID {
-				return errors.New("неизвестная попытка ответа")
+				return errors.New(tr("неизвестная попытка ответа"))
 			}
 			if f.Index < s.live.Next {
 				return nil
 			}
 			if f.Index != s.live.Next {
-				return errors.New("пропуск фрагмента ответа")
+				return errors.New(tr("пропуск фрагмента ответа"))
 			}
 			next := *s.live
 			next.blocks = make(map[int]string, len(s.live.blocks))
@@ -805,7 +805,7 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 			}
 			note := next.chunk(f.Chunk)
 			if len(next.text()) > chatTextLimit {
-				return errors.New("ответ превышает размер, поддерживаемый TUI")
+				return errors.New(tr("ответ превышает размер, поддерживаемый TUI"))
 			}
 			next.Next++
 			s.live = &next
@@ -817,7 +817,7 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 				return nil
 			}
 			if s.live.ID != f.ID || s.live.Next != f.Index {
-				return errors.New("неполный ответ")
+				return errors.New(tr("неполный ответ"))
 			}
 			if f.Outcome.Kind == "committed" {
 				s.live.committedSeq = &f.Outcome.Seq
@@ -827,13 +827,13 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 			} else if f.Outcome.Kind == "abandoned" {
 				s.live = nil
 			} else {
-				return errors.New("неподдерживаемое завершение ответа")
+				return errors.New(tr("неподдерживаемое завершение ответа"))
 			}
 		default:
-			return errors.New("неподдерживаемый фрагмент ответа")
+			return errors.New(tr("неподдерживаемый фрагмент ответа"))
 		}
 	default:
-		return errors.New("неподдерживаемый поток чата")
+		return errors.New(tr("неподдерживаемый поток чата"))
 	}
 	pruneToolExpansion(s)
 	return nil
@@ -843,14 +843,14 @@ func (m *model) chatView() string {
 	m.chatToolHits = nil
 	s := m.chat
 	if s == nil {
-		return "Ожидание подключения чата…"
+		return tr("Ожидание подключения чата…")
 	}
 	lines := []string{}
 	if !s.ready {
-		lines = append(lines, "◌ Подключение чата…")
+		lines = append(lines, tr("◌ Подключение чата…"))
 	}
 	if s.hasMore {
-		lines = append(lines, muted.Render("Показан последний фрагмент истории; F11 — более ранние сообщения."))
+		lines = append(lines, muted().Render(tr("Показан последний фрагмент истории; F11 — более ранние сообщения.")))
 	}
 	row := strings.Count(ansi.Hardwrap(strings.Join(lines, "\n"), max(1, m.viewport.Width), true), "\n")
 	for _, display := range m.displayMessages() {
@@ -864,29 +864,29 @@ func (m *model) chatView() string {
 			m.chatToolHits = append(m.chatToolHits, chatToolHit{id: message.tool.ID, row: row, end: row + strings.Count(ansi.Hardwrap(card, max(1, m.viewport.Width), true), "\n") + 1})
 			part = card + "\n"
 		} else {
-			part = accent.Bold(true).Render(message.role) + "\n" + m.messageText(message, m.viewport.Width, false) + "\n"
+			part = accent().Bold(true).Render(message.role) + "\n" + m.messageText(message, m.viewport.Width, false) + "\n"
 		}
 		lines = append(lines, part)
 		row += strings.Count(ansi.Hardwrap(part, max(1, m.viewport.Width), true), "\n")
 	}
 	if p := m.prompts[s.id]; p != nil {
-		label := map[string]string{"sending": "ОТПРАВЛЯЕТСЯ", "accepted": "ПРИНЯТО DSH · ОЖИДАНИЕ СОСТОЯНИЯ", "unknown": "РЕЗУЛЬТАТ ОТПРАВКИ НЕИЗВЕСТЕН · /retry-send", "rejected": "НЕ ОТПРАВЛЕНО"}[p.Status]
-		lines = append(lines, heading.Render("ВЫ · "+label)+"\n"+clean(p.Text)+"\n")
+		label := map[string]string{"sending": tr("ОТПРАВЛЯЕТСЯ"), "accepted": tr("ПРИНЯТО DSH · ОЖИДАНИЕ СОСТОЯНИЯ"), "unknown": tr("РЕЗУЛЬТАТ ОТПРАВКИ НЕИЗВЕСТЕН · /retry-send"), "rejected": tr("НЕ ОТПРАВЛЕНО")}[p.Status]
+		lines = append(lines, heading().Render(tr("ВЫ · ")+label)+"\n"+clean(p.Text)+"\n")
 	}
 	if s.live != nil {
-		lines = append(lines, accent.Bold(true).Render("АГЕНТ · ПОТОКОВЫЙ ОТВЕТ")+"\n"+s.live.text()+"\n")
+		lines = append(lines, accent().Bold(true).Render(tr("АГЕНТ · ПОТОКОВЫЙ ОТВЕТ"))+"\n"+s.live.text()+"\n")
 	}
 	if queue := m.queueView(); queue != "" {
 		lines = append(lines, queue+"\n")
 	}
 	if len(s.messages) == 0 && s.live == nil && s.ready {
-		lines = append(lines, "Введите сообщение. Enter — отправить в dsh, F8 — остановить агента.")
+		lines = append(lines, tr("Введите сообщение. Enter — отправить в dsh, F8 — остановить агента."))
 	}
 	if s.note != "" {
 		lines = append(lines, "! "+s.note)
 	}
 	if s.streamError != "" {
-		lines = append(lines, "! "+s.streamError+" · чтение восстанавливается автоматически")
+		lines = append(lines, "! "+s.streamError+tr(" · чтение восстанавливается автоматически"))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -931,10 +931,10 @@ func (m *model) handleChatUpdate(msg chatUpdate) tea.Cmd {
 		}
 	}
 	if msg.notice.err != nil && previousError == "" {
-		m.runtimeNotice("Связь с чатом потеряна; выполняется переподключение.")
+		m.runtimeNotice(tr("Связь с чатом потеряна; выполняется переподключение."))
 	}
 	if f := msg.notice.frame; f != nil && f.Type == "event" && f.Event.Seq > previousCursor && f.Event.Type == "turn/end" {
-		m.runtimeNotice("Выполнение агента завершено.")
+		m.runtimeNotice(tr("Выполнение агента завершено."))
 	}
 	m.reconcileQueuedPrompt()
 	m.rebuild()
@@ -961,7 +961,7 @@ func (m *model) handlePromptResult(msg promptResult) {
 		if msg.err != nil {
 			m.chat.note = msg.err.Error()
 			if msg.rejected && (len(p.Attachments) > 0 || strings.Contains(p.Text, "\n")) {
-				m.chat.note += " · /compose — вернуть исходный текст и вложения."
+				m.chat.note += tr(" · /compose — вернуть исходный текст и вложения.")
 			} else if msg.rejected && m.input.Value() == "" {
 				m.input.SetValue(p.Text)
 				m.input.CursorEnd()
@@ -974,19 +974,19 @@ func (m *model) handlePromptResult(msg promptResult) {
 
 func (m *model) composerText() (string, string) {
 	if m.session != nil && m.session.Address.Kind == "subagent" {
-		return " · подагент · просмотр", "F8 стоп · сообщения через /agents родителя"
+		return tr(" · подагент · просмотр"), tr("F8 стоп · сообщения через /agents родителя")
 	}
 	if m.session != nil && m.isSessionArchived(m.session.ID) {
-		return " · архив", "/restore — восстановить перед отправкой"
+		return tr(" · архив"), tr("/restore — восстановить перед отправкой")
 	}
 	if m.settingsLogin != "" {
 		if m.session == nil {
-			return " · dsh", "Сначала /new или /session <id>"
+			return " · dsh", tr("Сначала /new или /session <id>")
 		}
 		if m.session.Running || m.chat != nil && m.chat.live != nil {
-			return " · dsh", "Enter — в очередь · [F8 Стоп]"
+			return " · dsh", tr("Enter — в очередь · [F8 Стоп]")
 		}
-		return " · dsh", "Enter — отправить · [F8 Стоп]"
+		return " · dsh", tr("Enter — отправить · [F8 Стоп]")
 	}
-	return " · локальный черновик", "Enter — сохранить · ↑/↓ — история"
+	return tr(" · локальный черновик"), tr("Enter — сохранить · ↑/↓ — история")
 }

@@ -66,7 +66,7 @@ func (m *model) openHistory() tea.Cmd {
 		return m.closeHistory()
 	}
 	if m.chat == nil || !m.chat.ready || m.session == nil || m.chatSessionChanging() {
-		m.append("Для истории подключитесь к сессии dsh и дождитесь чата.")
+		m.append(tr("Для истории подключитесь к сессии dsh и дождитесь чата."))
 		return nil
 	}
 	ctx, cancel := context.WithCancel(m.chat.ctx)
@@ -96,7 +96,7 @@ func (m *model) requestHistory(direction string, cut, before int) tea.Cmd {
 	if h == nil || h.busy {
 		return nil
 	}
-	h.busy, h.note = true, "Чтение истории…"
+	h.busy, h.note = true, tr("Чтение истории…")
 	h.serial++
 	serial, login := h.serial, m.settingsLogin
 	snapshot := h.snapshot
@@ -114,7 +114,7 @@ func (m *model) requestHistory(direction string, cut, before int) tea.Cmd {
 				var page historyPage
 				err := api.rpc(ctx, "session/events", map[string]any{"request": map[string]any{"address": h.address.wire(h.sessionID), "throughSeq": cut, "beforeSeq": before, "maxMessages": historyPageMessages}}, &page)
 				if err != nil {
-					err = errors.New("История недоступна. Проверьте подключение; ←/→ или F5 повторят чтение.")
+					err = errors.New(tr("История недоступна. Проверьте подключение; ←/→ или F5 повторят чтение."))
 				}
 				return page, err
 			}
@@ -132,7 +132,7 @@ func (m *model) requestHistory(direction string, cut, before int) tea.Cmd {
 			result.snapshot = snapshot
 			result.err = err
 		} else {
-			result.err = errors.New("История недоступна. Проверьте подключение; ←/→ или F5 повторят чтение.")
+			result.err = errors.New(tr("История недоступна. Проверьте подключение; ←/→ или F5 повторят чтение."))
 		}
 		return result
 	}
@@ -142,7 +142,7 @@ func (m *model) requestHistory(direction string, cut, before int) tea.Cmd {
 // agent state, pending questions, tool observers, or the composer.
 func projectHistory(page historyPage, sessionID string, cut, before int) (*chatState, int, error) {
 	if page.Cursor != cut || before < 0 || before > cut+1 || len(page.Records) > 4096 {
-		return nil, 0, errors.New("Некорректный снимок истории.")
+		return nil, 0, errors.New(tr("Некорректный снимок истории."))
 	}
 	s := &chatState{id: sessionID, ready: true, cursor: cut, clearedThrough: -1, expandedTools: make(map[string]bool)}
 	shadow := &model{chat: s}
@@ -150,21 +150,21 @@ func projectHistory(page historyPage, sessionID string, cut, before int) (*chatS
 	for _, record := range page.Records {
 		e := record.Event
 		if record.Type != "event" || e.Seq < 0 || e.Seq >= before || last >= 0 && e.Seq != last+1 {
-			return nil, 0, errors.New("Пропуск или неверный порядок событий истории.")
+			return nil, 0, errors.New(tr("Пропуск или неверный порядок событий истории."))
 		}
 		if first < 0 {
 			first = e.Seq
 		}
 		last = e.Seq
 		if err := shadow.applyChatEvent(s, e); err != nil {
-			return nil, 0, errors.New("Страница содержит неизвестные данные или замену вне её границ.")
+			return nil, 0, errors.New(tr("Страница содержит неизвестные данные или замену вне её границ."))
 		}
 		if s.hasMore {
-			return nil, 0, errors.New("Страница слишком велика: 100 записей / 4 МиБ. Чат сохранён.")
+			return nil, 0, errors.New(tr("Страница слишком велика: 100 записей / 4 МиБ. Чат сохранён."))
 		}
 	}
 	if before > 0 && last != before-1 || before == 0 && len(page.Records) != 0 || page.HasMore != (first > 0) {
-		return nil, 0, errors.New("Неполная страница истории.")
+		return nil, 0, errors.New(tr("Неполная страница истории."))
 	}
 	for _, message := range s.messages {
 		if message.tool != nil {
@@ -205,7 +205,7 @@ func (m *model) handleHistoryResult(result historyResult) {
 		h.number++
 	case "newer":
 		if len(h.back) == 0 {
-			h.note = "Нет сохранённого перехода к более новой странице."
+			h.note = tr("Нет сохранённого перехода к более новой странице.")
 			return
 		}
 		location := h.back[len(h.back)-1]
@@ -226,7 +226,7 @@ func (m *model) handleHistoryResult(result historyResult) {
 	h.snapshot = snapshot
 	h.selectedSeq = -1
 	m.restoreHistoryTools(result.direction != "older" && result.direction != "newer" && result.direction != "search")
-	h.note = "Tab/Shift+Tab — выбор сообщения · Ctrl+B — ветка · Ctrl+Y — копия · Ctrl+K — код · F6 — инструменты."
+	h.note = tr("Tab/Shift+Tab — выбор сообщения · Ctrl+B — ветка · Ctrl+Y — копия · Ctrl+K — код · F6 — инструменты.")
 	m.resizeHistory()
 	if result.direction == "newer" {
 		h.viewport.SetYOffset(offset)
@@ -252,7 +252,7 @@ func (m *model) resizeHistory() {
 	}
 	h.messageRows = nil
 	h.toolRows = nil
-	content := "Ожидание истории…"
+	content := tr("Ожидание истории…")
 	if h.projection != nil {
 		renderer := &model{chat: h.projection, viewport: h.viewport, toolFocused: h.toolFocused}
 		var parts []string
@@ -263,25 +263,25 @@ func (m *model) resizeHistory() {
 			if message.tool != nil {
 				part = renderer.displayTool(message.tool, display.depth)
 			} else {
-				part = accent.Bold(true).Render(message.role) + "\n" + m.messageText(message, h.viewport.Width, h.rawMarkdown)
+				part = accent().Bold(true).Render(message.role) + "\n" + m.messageText(message, h.viewport.Width, h.rawMarkdown)
 			}
 			if h.search != nil && message.seq == h.search.hitSeq {
 				h.search.anchor = row
-				label := "▶ Совпадение"
+				label := tr("▶ Совпадение")
 				if message.seq == h.selectedSeq {
-					label += fmt.Sprintf(" · точка #%d", message.seq)
+					label += fmt.Sprintf(tr(" · точка #%d"), message.seq)
 				}
 				if message.tool != nil {
-					label += " · инструмент"
+					label += tr(" · инструмент")
 					plain := strings.ToLower(clean(part))
 					if offset := strings.Index(plain, strings.ToLower(h.search.query)); offset >= 0 {
 						h.search.anchor = row + 1 + strings.Count(ansi.Hardwrap(plain[:offset], h.viewport.Width, true), "\n")
 					}
 				}
-				part = heading.Render(label) + "\n" + part
+				part = heading().Render(label) + "\n" + part
 			}
 			if message.seq == h.selectedSeq && (h.search == nil || message.seq != h.search.hitSeq) {
-				part = heading.Render(fmt.Sprintf("◆ Точка ветвления #%d", message.seq)) + "\n" + part
+				part = heading().Render(fmt.Sprintf(tr("◆ Точка ветвления #%d"), message.seq)) + "\n" + part
 			}
 			if message.tool != nil {
 				h.toolRows = append(h.toolRows, chatToolHit{message.tool.ID, row, row + strings.Count(ansi.Hardwrap(part, h.viewport.Width, true), "\n") + 1})
@@ -294,7 +294,7 @@ func (m *model) resizeHistory() {
 		}
 		content = strings.Join(parts, "\n\n")
 		if content == "" {
-			content = "Нет сообщений на странице."
+			content = tr("Нет сообщений на странице.")
 		}
 	}
 	h.viewport.SetContent(ansi.Hardwrap(content, h.viewport.Width, true))
@@ -310,41 +310,45 @@ func (m *model) historyView(base string) string {
 	}
 	box := m.historyBox()
 	width := box.width - 4
-	status := fmt.Sprintf("Страница %d · снимок до события %d", h.number, h.cut)
+	status := fmt.Sprintf(tr("Страница %d · снимок до события %d"), h.number, h.cut)
 	if h.number == 0 {
-		status = "Чтение первой страницы…"
+		status = tr("Чтение первой страницы…")
 	}
 	if h.projection != nil && !h.hasMore {
-		status += " · начало"
+		status += tr(" · начало")
 	}
 	if h.search != nil && h.search.anchor >= 0 {
-		status = fmt.Sprintf("Совпадение: %q · %s · снимок %d", h.search.query, historyScopeLabel(h.search.scope), h.cut)
+		status = fmt.Sprintf(tr("Совпадение: %q · %s · снимок %d"), h.search.query, historyScopeLabel(h.search.scope), h.cut)
 	}
 	note := h.note
 	if h.busy {
-		note = "Чтение истории…"
+		note = tr("Чтение истории…")
 		if h.search != nil && h.search.running {
-			note = "Поиск по истории… Esc — отменить."
+			note = tr("Поиск по истории… Esc — отменить.")
 		}
 	}
 	noteRows := strings.Split(ansi.Hardwrap(note, width, true), "\n")
 	for len(noteRows) < 2 {
 		noteRows = append(noteRows, "")
 	}
-	formatHint := "Ctrl+R исходник"
+	formatHint := tr("Ctrl+R исходник")
 	if h.rawMarkdown {
 		formatHint = "Ctrl+R Markdown"
 	}
-	toolbar, hint := strings.Join(historyButtons, " "), "PgUp/PgDn · Ctrl+F поиск · "+formatHint+" · F3 ещё"
+	buttons := make([]string, len(historyButtons))
+	for i, label := range historyButtons {
+		buttons[i] = tr(label)
+	}
+	toolbar, hint := strings.Join(buttons, " "), tr("PgUp/PgDn · Ctrl+F поиск · ")+formatHint+tr(" · F3 ещё")
 	if h.search != nil && h.search.editing {
 		toolbar = h.search.editor.View()
-		hint = "Enter — найти · Ctrl+T область: " + historyScopeLabel(h.search.editScope) + " · Esc — назад"
+		hint = tr("Enter — найти · Ctrl+T область: ") + historyScopeLabel(h.search.editScope) + tr(" · Esc — назад")
 	}
-	title := "История сессии"
+	title := tr("История сессии")
 	if h.rawMarkdown {
-		title += " · исходник"
+		title += tr(" · исходник")
 	}
-	lines := []string{heading.Render(title), ansi.Truncate(status, width, "…"), toolbar, h.viewport.View(), muted.Render(noteRows[0]), muted.Render(noteRows[1]), muted.Render(hint)}
+	lines := []string{heading().Render(title), ansi.Truncate(status, width, "…"), toolbar, h.viewport.View(), muted().Render(noteRows[0]), muted().Render(noteRows[1]), muted().Render(hint)}
 	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)
 }
 
@@ -396,7 +400,7 @@ func (m *model) historyKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			if h.selectedSeq >= 0 {
 				m.selectHistoryMessage(h.selectedSeq, true)
 			}
-			h.note = "Ctrl+R — Markdown/исходник · Ctrl+F — поиск исходного текста."
+			h.note = tr("Ctrl+R — Markdown/исходник · Ctrl+F — поиск исходного текста.")
 		}
 		return nil, true
 	case "tab", "shift+tab":
@@ -453,6 +457,7 @@ func (m *model) historyMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 		}
 		x := box.x + 2
 		for i, label := range historyButtons {
+			label = tr(label)
 			width := ansi.StringWidth(label)
 			if msg.X >= x && msg.X < x+width {
 				return m.historyKey(tea.KeyMsg{Type: []tea.KeyType{tea.KeyLeft, tea.KeyRight, tea.KeyF5, tea.KeyCtrlF, tea.KeyEsc}[i]})

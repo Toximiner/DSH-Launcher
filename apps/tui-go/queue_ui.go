@@ -36,7 +36,7 @@ func (m *model) openQueue() tea.Cmd {
 	m.queueDialog.confirmKind = ""
 	m.queueDialog.accept = false
 	if m.queueDialog.note == "" {
-		m.queueDialog.note = "Текущая задача продолжает выполняться."
+		m.queueDialog.note = tr("Текущая задача продолжает выполняться.")
 	}
 	return nil
 }
@@ -66,7 +66,7 @@ func (m *model) requestQueueRemoval() {
 	m.queueDialog.confirmKind = "remove"
 	m.queueDialog.confirmText = boundedToolText(contentText(item.Content), toolArgumentsLimit)
 	m.queueDialog.accept = false
-	m.queueDialog.note = "Удалить выбранное задание из очереди?"
+	m.queueDialog.note = tr("Удалить выбранное задание из очереди?")
 }
 func (m *model) removeQueuedItem() tea.Cmd {
 	s := &m.queueDialog
@@ -81,7 +81,7 @@ func (m *model) removeQueuedItem() tea.Cmd {
 	}
 	if !found {
 		s.confirm = ""
-		s.note = "Задание уже покинуло очередь. Состояние обновляется."
+		s.note = tr("Задание уже покинуло очередь. Состояние обновляется.")
 		return nil
 	}
 	id, itemID, epoch, login, ctx := m.session.ID, s.confirm, m.chat.epoch, m.settingsLogin, m.settingsContext
@@ -90,7 +90,7 @@ func (m *model) removeQueuedItem() tea.Cmd {
 	}
 	s.busy = true
 	s.operationID = itemID
-	s.note = "Удаление задания…"
+	s.note = tr("Удаление задания…")
 	return func() tea.Msg {
 		result := queueRemoveResult{epoch: epoch, sessionID: id, itemID: itemID}
 		api, err := openAPI(ctx, login)
@@ -104,7 +104,7 @@ func (m *model) removeQueuedItem() tea.Cmd {
 		}
 		result.err = api.rpc(ctx, "session/updateQueue", map[string]any{"request": map[string]any{"sessionId": id, "itemId": itemID, "action": map[string]any{"kind": "remove"}}}, &receipt)
 		if result.err == nil && !receipt.Accepted {
-			result.err = errors.New("неподдерживаемое подтверждение удаления")
+			result.err = errors.New(tr("неподдерживаемое подтверждение удаления"))
 		}
 		return result
 	}
@@ -120,13 +120,13 @@ func (m *model) handleQueueRemoval(msg queueRemoveResult) tea.Cmd {
 	s.operationID = ""
 	s.busy, s.confirm, s.accept = false, "", false
 	if msg.err == nil {
-		s.note = "Задание удалено. Текущая задача продолжает выполняться."
+		s.note = tr("Задание удалено. Текущая задача продолжает выполняться.")
 	} else {
 		var rejected *rpcRejected
 		if errors.As(msg.err, &rejected) {
-			s.note = "dsh отклонил удаление: задание могло уже начаться. Обновляем очередь."
+			s.note = tr("dsh отклонил удаление: задание могло уже начаться. Обновляем очередь.")
 		} else {
-			s.note = "Удаление не подтверждено. Обновляем очередь; автоматического повтора нет."
+			s.note = tr("Удаление не подтверждено. Обновляем очередь; автоматического повтора нет.")
 		}
 	}
 	m.rebuild()
@@ -172,9 +172,9 @@ func (m *model) queueKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		if s.confirm != "" && !s.busy {
 			s.confirm = ""
 			if s.confirmKind == "steer" {
-				s.note = "Уточнение отменено."
+				s.note = tr("Уточнение отменено.")
 			} else {
-				s.note = "Удаление отменено."
+				s.note = tr("Удаление отменено.")
 			}
 			s.confirmKind = ""
 		} else {
@@ -211,9 +211,9 @@ func (m *model) queueKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		} else if !s.busy {
 			s.confirm = ""
 			if s.confirmKind == "steer" {
-				s.note = "Уточнение отменено."
+				s.note = tr("Уточнение отменено.")
 			} else {
-				s.note = "Удаление отменено."
+				s.note = tr("Удаление отменено.")
 			}
 			s.confirmKind = ""
 		}
@@ -236,7 +236,7 @@ func (m *model) queueDialogView(base string) string {
 	inner := box.width - 4
 	item, index := m.queueSelection()
 	items := m.visibleQueue()
-	lines := []string{heading.Render("Очередь заданий dsh"), muted.Render("F8 останавливает текущую задачу, сохраняя очередь.")}
+	lines := []string{heading().Render(tr("Очередь заданий dsh")), muted().Render(tr("F8 останавливает текущую задачу, сохраняя очередь."))}
 	rows := max(1, min(5, box.height-11))
 	start := max(0, index-rows+1)
 	for i := 0; i < rows; i++ {
@@ -244,14 +244,14 @@ func (m *model) queueDialogView(base string) string {
 		if n := start + i; n < len(items) {
 			text = strconv.Itoa(n+1) + ". " + strings.ReplaceAll(boundedToolText(contentText(items[n].Content), 1024), "\n", " ")
 			if items[n].Placement == "steering" {
-				text = "↳ Уточнение: " + text
+				text = tr("↳ Уточнение: ") + text
 			}
 			text = selectedRow(ansi.Truncate(text, inner, "…"), n == index, inner)
 		}
 		lines = append(lines, text)
 	}
 	if len(items) == 0 {
-		lines[2] = "Нет ожидающих заданий."
+		lines[2] = tr("Нет ожидающих заданий.")
 	}
 	detail := ""
 	if item.ID != "" {
@@ -259,9 +259,9 @@ func (m *model) queueDialogView(base string) string {
 	}
 	if s.confirm != "" {
 		detail = s.confirmText
-		lines[0] = heading.Render("Удалить задание из очереди?")
+		lines[0] = heading().Render(tr("Удалить задание из очереди?"))
 		if s.confirmKind == "steer" {
-			lines[0] = heading.Render("Уточнить текущую задачу?")
+			lines[0] = heading().Render(tr("Уточнить текущую задачу?"))
 		}
 	}
 	details := strings.Split(ansi.Hardwrap(detail, max(1, inner), true), "\n")
@@ -275,7 +275,7 @@ func (m *model) queueDialogView(base string) string {
 	}
 	note := s.note
 	if !m.queueAvailable() {
-		note = "Нет свежего состояния dsh. Изменения недоступны."
+		note = tr("Нет свежего состояния dsh. Изменения недоступны.")
 	}
 	// Keep two note rows visible even at the minimum terminal size.
 	noteLines := strings.Split(ansi.Hardwrap(note, max(1, inner), true), "\n")
@@ -284,30 +284,30 @@ func (m *model) queueDialogView(base string) string {
 		if i < len(noteLines) {
 			text = noteLines[i]
 		}
-		lines = append(lines, muted.Render(text))
+		lines = append(lines, muted().Render(text))
 	}
-	steering := "[ Уточнить Ctrl+G ]"
+	steering := tr("[ Уточнить Ctrl+G ]")
 	if s.confirm != "" || s.busy {
 		steering = ""
 	}
-	lines = append(lines, muted.Render(steering))
-	buttons := "[ Удалить выбранное ] [ Изменить F3 ]"
+	lines = append(lines, muted().Render(steering))
+	buttons := tr("[ Удалить выбранное ] [ Изменить F3 ]")
 	if s.confirm != "" {
 		left := inner / 2
-		action := "[ Удалить ]"
+		action := tr("[ Удалить ]")
 		if s.confirmKind == "steer" {
-			action = "[ Уточнить ]"
+			action = tr("[ Уточнить ]")
 		}
-		buttons = lipgloss.NewStyle().Width(left).Render(selectedRow("[ Назад ]", !s.accept, left)) + selectedRow(action, s.accept, inner-left)
+		buttons = lipgloss.NewStyle().Width(left).Render(selectedRow(tr("[ Назад ]"), !s.accept, left)) + selectedRow(action, s.accept, inner-left)
 	}
 	if s.busy {
-		buttons = "Ожидание подтверждения dsh…"
+		buttons = tr("Ожидание подтверждения dsh…")
 	}
-	hint := "↑/↓ выбор · F3 правка · Enter удалить"
+	hint := tr("↑/↓ выбор · F3 правка · Enter удалить")
 	if s.confirm != "" {
-		hint = "←/→ выбор · Enter ответ · Esc назад"
+		hint = tr("←/→ выбор · Enter ответ · Esc назад")
 	}
-	lines = append(lines, buttons, muted.Render(hint))
+	lines = append(lines, buttons, muted().Render(hint))
 	for i, line := range lines {
 		lines[i] = ansi.Truncate(line, inner, "…")
 	}
@@ -353,7 +353,7 @@ func (m *model) queueMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 		return nil, true
 	}
 	if msg.Y == box.y+box.height-3 {
-		if m.queueDialog.confirm == "" && msg.X >= box.x+2+len([]rune("[ Удалить выбранное ] ")) {
+		if m.queueDialog.confirm == "" && msg.X >= box.x+2+len([]rune(tr("[ Удалить выбранное ] "))) {
 			return m.editQueuedItem(), true
 		}
 		if m.queueDialog.confirm != "" {

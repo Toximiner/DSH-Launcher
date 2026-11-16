@@ -15,7 +15,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const version = "0.2.0-preview.37"
+const version = "0.2.0-preview.38"
 const help = "/runtime — установка и процесс dsh\n/updates — обновления и откат dsh/TUI\n/diagnostics — журнал, отчёт, уведомления\n" + "/compose — многострочное сообщение\n/attach <путь> — прикрепить файл до 2 МиБ\n/workspaces · /files · /terminals — рабочая область\n/presets — пресеты · Ctrl+N новая сессия\n/plugins · /commands · /packages — плагины\n/agents · /tasks · /jobs · /schedules — выполнение\n/parent — вернуться от подагента к родителю\nВ списках: F5 обновить · Esc назад\n" + "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/rename — название текущей · F3 в списке\n/archive · /restore — архив и возврат\nВ списке: a — архив · Ctrl+X — перенести\n/fork — новая ветка · Ctrl+B в списке\n/models · F12 — выбор модели сессии\n/providers — настройки провайдеров\nВ настройках: Enter — форма · F6 — провайдеры\n/mode default|plan|goal — режим\n/goal — состояние цели · F3 правка\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/history — история сессии · F11\nCtrl+F в истории — поиск · F3 — ещё\nCtrl+T в поиске — всё / сообщения / инструменты\nTab в истории — выбор · Ctrl+B — ветка\nCtrl+R в истории — Markdown/исходник\nВ истории: Ctrl+Y — копия · Ctrl+K — код\nF6/Shift+F6 — инструмент истории · Enter — детали\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
@@ -88,6 +88,10 @@ type model struct {
 	sessionSequence     int
 	sessionStale        bool
 	sessionListIndex    int
+	sessionQuery        string
+	sessionSearch       textinput.Model
+	sessionSearching    bool
+	sessionHits         []sessionHit
 	sessionQueue        []sessionAction
 	initialSession      string
 	createSession       bool
@@ -106,16 +110,18 @@ type model struct {
 }
 
 func newModel() *model {
+	activeTheme.Store(false)
+	activeEnglish.Store(false)
 	input := textinput.New()
 	input.Prompt = "> "
-	input.Placeholder = "Сообщение или /help…"
+	input.Placeholder = tr("Сообщение или /help…")
 	input.CharLimit = 65536
-	input.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#e6edf3"))
-	input.PlaceholderStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#8b949e"))
-	input.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#58a6ff"))
+	input.TextStyle = lipgloss.NewStyle().Foreground(uiColor("#e6edf3"))
+	input.PlaceholderStyle = lipgloss.NewStyle().Foreground(uiColor("#8b949e"))
+	input.PromptStyle = lipgloss.NewStyle().Foreground(uiColor("#58a6ff"))
 	input.Focus()
 	cwd, _ := os.Getwd()
-	m := &model{prefs: defaultClientPreferences(), input: input, viewport: viewport.New(78, 17), width: 80, height: 24, workspace: clean(cwd), events: []string{"Открыт интерфейс клиента. Подключение к dsh отсутствует."}}
+	m := &model{prefs: defaultClientPreferences(), input: input, viewport: viewport.New(78, 17), width: 80, height: 24, workspace: clean(cwd), events: []string{tr("Открыт интерфейс клиента. Подключение к dsh отсутствует.")}}
 	m.marketSearch = newMarketSearch()
 	m.prompts = make(map[string]*pendingPrompt)
 	m.resize()
@@ -135,18 +141,18 @@ func (m *model) rebuild() {
 	followTail := m.chat != nil && m.page == chatPage && m.viewport.AtBottom()
 	var lines []string
 	for _, line := range m.lines {
-		label := "СПРАВКА"
+		label := tr("СПРАВКА")
 		text := line
-		if strings.HasPrefix(line, "Введено: ") {
-			label = "ВЫ · ЛОКАЛЬНЫЙ ЧЕРНОВИК"
-			text = strings.TrimPrefix(line, "Введено: ")
+		if strings.HasPrefix(line, tr("Введено: ")) {
+			label = tr("ВЫ · ЛОКАЛЬНЫЙ ЧЕРНОВИК")
+			text = strings.TrimPrefix(line, tr("Введено: "))
 		}
-		lines = append(lines, accent.Bold(true).Render(label)+"\n"+ansi.Hardwrap(clean(text), max(1, m.viewport.Width), true)+"\n")
+		lines = append(lines, accent().Bold(true).Render(label)+"\n"+ansi.Hardwrap(clean(text), max(1, m.viewport.Width), true)+"\n")
 	}
 	content := strings.Join(lines, "\n")
 	if len(m.lines) == 0 {
-		welcome := heading.Render("С чего начнём?") + "\n\n" + muted.Render("Нет подключения к dsh.") + "\n" +
-			"Здесь появится разговор с агентом.\n\n" + muted.Render("Пока можно проверить ввод и навигацию.") + "\n\n" + accent.Render("F1 — справка   Tab — разделы")
+		welcome := heading().Render(tr("С чего начнём?")) + "\n\n" + muted().Render(tr("Нет подключения к dsh.")) + "\n" +
+			tr("Здесь появится разговор с агентом.\n\n") + muted().Render(tr("Пока можно проверить ввод и навигацию.")) + "\n\n" + accent().Render(tr("F1 — справка   Tab — разделы"))
 		content = lipgloss.Place(m.viewport.Width, m.viewport.Height, lipgloss.Center, lipgloss.Center, welcome)
 	}
 	if m.session != nil || m.sessionBusy || m.sessionError != "" {
@@ -158,10 +164,10 @@ func (m *model) rebuild() {
 		}
 		if len(m.lines) == 0 {
 			if m.chat == nil {
-				content = "Ожидание подключения чата. /new — создать сессию.\n/mode default|plan|goal · /goal <описание>"
+				content = tr("Ожидание подключения чата. /new — создать сессию.\n/mode default|plan|goal · /goal <описание>")
 			}
 		}
-		prefix := accent.Render(m.modeDescription()) + "\n\n"
+		prefix := accent().Render(m.modeDescription()) + "\n\n"
 		for i := range m.chatToolHits {
 			offset := strings.Count(ansi.Hardwrap(prefix, max(1, m.viewport.Width), true), "\n")
 			m.chatToolHits[i].row += offset
@@ -177,7 +183,7 @@ func (m *model) rebuild() {
 	case marketPage:
 		content = m.marketView()
 	case logPage:
-		content = heading.Render("Журнал клиента · локально") + "\n\n" + strings.Join(m.events, "\n")
+		content = heading().Render(tr("Журнал клиента · локально")) + "\n\n" + strings.Join(m.events, "\n")
 	}
 	m.viewport.SetContent(ansi.Hardwrap(content, max(1, m.viewport.Width), true))
 	if followTail {
@@ -211,7 +217,7 @@ func (m *model) resize() {
 
 func (m *model) contentSize() (int, int) {
 	w := max(1, m.width-1)
-	if w >= 78 {
+	if m.sidebarVisible() {
 		w -= sidebarWidth + sidebarGap
 	}
 	return w, max(1, m.height-3)
@@ -270,9 +276,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case benchTerminalDone:
 		if m.workbench != nil {
-			m.workbench.note = "Терминал отключён. Ввод не повторяется; F5 — перечитать."
+			m.workbench.note = tr("Терминал отключён. Ввод не повторяется; F5 — перечитать.")
 			if msg.err != nil {
-				m.workbench.note = "Поток терминала прерван. Ввод не повторяется; F5 — перечитать."
+				m.workbench.note = tr("Поток терминала прерван. Ввод не повторяется; F5 — перечитать.")
 			}
 		}
 		return m, nil
@@ -306,13 +312,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.handleQueueRemoval(msg)
 	case cancelResult:
 		if m.chat != nil && m.chat.id == msg.sessionID {
-			if m.chat.note == "Выполнение остановлено." {
+			if m.chat.note == tr("Выполнение остановлено.") {
 				return m, nil
 			}
 			if msg.err != nil {
-				m.chat.note = "Не удалось подтвердить отмену. Проверьте состояние dsh."
+				m.chat.note = tr("Не удалось подтвердить отмену. Проверьте состояние dsh.")
 			} else {
-				m.chat.note = "Запрос отмены принят dsh; состояние обновляется."
+				m.chat.note = tr("Запрос отмены принят dsh; состояние обновляется.")
 			}
 			m.rebuild()
 		}
@@ -334,9 +340,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.marketError = ""
 			if msg.operation {
-				m.marketMessage = "Операция завершена; список обновлён."
+				m.marketMessage = tr("Операция завершена; список обновлён.")
 			} else {
-				m.marketMessage = "Данные маркета обновлены."
+				m.marketMessage = tr("Данные маркета обновлены.")
 			}
 		}
 		m.rebuild()
@@ -426,7 +432,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if msg.err != nil && len(m.sessionQueue) > 0 {
 			m.sessionQueue = nil
-			m.append("Ожидающие запросы не выполнены из-за ошибки dsh.")
+			m.append(tr("Ожидающие запросы не выполнены из-за ошибки dsh."))
 		}
 		if len(m.sessionQueue) > 0 {
 			next := m.sessionQueue[0]
@@ -509,6 +515,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		if cmd, handled := m.historyCopyKey(msg); handled {
+			return m, cmd
+		}
+		if cmd, handled := m.sessionSearchKey(msg); handled {
 			return m, cmd
 		}
 		if cmd, handled := m.archiveKey(msg); handled {
@@ -695,11 +704,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.session != nil && m.session.Address.Kind == "subagent" {
 					return m, m.sessionOperation("connect", m.session.Address.ParentID)
 				}
-				m.append("У текущей сессии нет адреса родителя.")
+				m.append(tr("У текущей сессии нет адреса родителя."))
 				return m, nil
 			case "/compose":
 				return m, m.openCompose()
-			case "/workspaces", "/packages", "/presets", "/files", "/commands", "/plugins", "/jobs", "/schedules", "/agents", "/tasks", "/terminals":
+			case "/operations", "/account", "/workspaces", "/packages", "/presets", "/files", "/commands", "/plugins", "/jobs", "/schedules", "/agents", "/tasks", "/terminals":
 				return m, m.openWorkbench(strings.TrimPrefix(line, "/"))
 			case "/goal":
 				return m, m.openGoal()
@@ -718,7 +727,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if strings.HasPrefix(line, "/mode ") {
 					mode := strings.TrimSpace(strings.TrimPrefix(line, "/mode "))
 					if mode != "default" && mode != "plan" && mode != "goal" {
-						m.append("Режим: default, plan или goal.")
+						m.append(tr("Режим: default, plan или goal."))
 						return m, nil
 					}
 					return m, m.chooseMode(mode)
@@ -736,7 +745,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, m.sessionOperation(action, value)
 				}
 				if strings.HasPrefix(line, "/") {
-					m.append("Неизвестная команда. /help — список команд.")
+					m.append(tr("Неизвестная команда. /help — список команд."))
 					return m, nil
 				}
 				return m, m.submitText(line)

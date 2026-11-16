@@ -254,6 +254,10 @@ class SettingsDialog(Dialog):
         assert wait_for(lambda: self.drv.eval(
             f"!document.getElementById('sec-' + {json.dumps(sid)}).hidden", page=self.TITLE), 5, 0.2), f'section {sid}'
 
+    def shortcut_rows(self, query=''):
+        self.drv.eval(f"filterShortcuts({json.dumps(query)}); 1", page=self.TITLE)
+        return self.drv.eval("Array.from(document.querySelectorAll('[data-shortcut]')).filter(row => !row.hidden).map(row => row.textContent)", page=self.TITLE)
+
     def wait_note(self, pattern, timeout=10):
         return self.wait_text(pattern, timeout)
 

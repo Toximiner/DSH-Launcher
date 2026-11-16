@@ -29,7 +29,7 @@ type markdownCache struct {
 }
 
 func (m *model) messageText(message chatMessage, width int, raw bool) string {
-	if raw || message.role != "АГЕНТ" || message.tool != nil || message.approvalID != "" {
+	if raw || message.role != tr("АГЕНТ") || message.tool != nil || message.approvalID != "" {
 		return message.text
 	}
 	if m.markdown == nil {
@@ -123,7 +123,7 @@ func (r *terminalMarkdown) inline(parent ast.Node, depth int) string {
 			if strings.HasPrefix(value, " ") && strings.HasSuffix(value, " ") && strings.TrimSpace(value) != "" {
 				value = value[1 : len(value)-1]
 			}
-			out.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("#a5d6ff")).Render(value))
+			out.WriteString(lipgloss.NewStyle().Foreground(uiColor("#a5d6ff")).Render(value))
 		case *ast.Emphasis:
 			style := lipgloss.NewStyle().Italic(true)
 			if n.Level == 2 {
@@ -142,7 +142,7 @@ func (r *terminalMarkdown) inline(parent ast.Node, depth int) string {
 		case *ast.AutoLink:
 			out.Write(n.URL(r.source))
 		case *ast.Image:
-			out.WriteString("[Изображение: " + r.inline(n, depth+1) + "] (" + clean(html.UnescapeString(string(n.Destination))) + ")")
+			out.WriteString(tr("[Изображение: ") + r.inline(n, depth+1) + "] (" + clean(html.UnescapeString(string(n.Destination))) + ")")
 		case *ast.RawHTML:
 			out.Write(n.Text(r.source))
 		default:
@@ -171,7 +171,7 @@ func prefixMarkdown(value, prefix string) string {
 	return strings.Join(lines, "\n")
 }
 func (r *terminalMarkdown) code(node ast.Node, language string, width int) string {
-	label := "Код"
+	label := tr("Код")
 	if language != "" {
 		label += " · " + language
 	}
@@ -181,7 +181,7 @@ func (r *terminalMarkdown) code(node ast.Node, language string, width int) strin
 		r.syntax = newSyntaxBudget()
 	}
 	content = highlightCode(content, language, r.syntax)
-	return muted.Render(ansi.Truncate("┌─ "+label, width, "…")) + "\n" + prefixMarkdown(ansi.Hardwrap(content, max(1, width-2), true), "│ ") + "\n" + muted.Render(strings.Repeat("─", min(width, 16)))
+	return muted().Render(ansi.Truncate("┌─ "+label, width, "…")) + "\n" + prefixMarkdown(ansi.Hardwrap(content, max(1, width-2), true), "│ ") + "\n" + muted().Render(strings.Repeat("─", min(width, 16)))
 }
 func (r *terminalMarkdown) block(node ast.Node, width, depth int) string {
 	if depth > 64 {
@@ -192,7 +192,7 @@ func (r *terminalMarkdown) block(node ast.Node, width, depth int) string {
 	case *ast.Paragraph, *ast.TextBlock:
 		return ansi.Wrap(r.inline(node, depth), width, "")
 	case *ast.Heading:
-		return heading.Render(ansi.Wrap(r.inline(n, depth), width, ""))
+		return heading().Render(ansi.Wrap(r.inline(n, depth), width, ""))
 	case *ast.FencedCodeBlock:
 		return r.code(n, string(n.Language(r.source)), width)
 	case *ast.CodeBlock:
@@ -226,7 +226,7 @@ func (r *terminalMarkdown) block(node ast.Node, width, depth int) string {
 		}
 		return strings.Join(items, gap)
 	case *ast.ThematicBreak:
-		return muted.Render(strings.Repeat("─", width))
+		return muted().Render(strings.Repeat("─", width))
 	case *ast.HTMLBlock:
 		return ansi.Hardwrap(strings.TrimSuffix(string(n.Text(r.source)), "\n"), width, true)
 	case *extast.Table:
@@ -309,7 +309,7 @@ func (r *terminalMarkdown) table(table *extast.Table, width, depth int) string {
 				right = padding - left
 			}
 			if index == 0 {
-				value = heading.Render(value)
+				value = heading().Render(value)
 			}
 			cells = append(cells, " "+strings.Repeat(" ", left)+value+strings.Repeat(" ", right)+" ")
 		}

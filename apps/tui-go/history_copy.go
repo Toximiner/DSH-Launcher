@@ -43,7 +43,7 @@ func (m *model) selectedHistoryMessage() (chatMessage, bool) {
 
 func extractHistoryCode(source string) ([]historyCodeBlock, error) {
 	if len(source) > markdownInputLimit {
-		return nil, errors.New("Сообщение больше 256 КиБ: список блоков недоступен. Выделите нужный фрагмент в терминале.")
+		return nil, errors.New(tr("Сообщение больше 256 КиБ: список блоков недоступен. Выделите нужный фрагмент в терминале."))
 	}
 	bytes := []byte(source)
 	document := goldmark.New().Parser().Parse(text.NewReader(bytes))
@@ -58,7 +58,7 @@ func extractHistoryCode(source string) ([]historyCodeBlock, error) {
 		depth++
 		nodes++
 		if depth > 64 || nodes > 20000 {
-			parseErr = errors.New("Слишком сложное сообщение для разбора кода.")
+			parseErr = errors.New(tr("Слишком сложное сообщение для разбора кода."))
 			return ast.WalkStop, nil
 		}
 		language := ""
@@ -70,7 +70,7 @@ func extractHistoryCode(source string) ([]historyCodeBlock, error) {
 			return ast.WalkContinue, nil
 		}
 		if len(blocks) >= 64 {
-			parseErr = errors.New("В сообщении больше 64 блоков кода; уточните фрагмент.")
+			parseErr = errors.New(tr("В сообщении больше 64 блоков кода; уточните фрагмент."))
 			return ast.WalkStop, nil
 		}
 		blocks = append(blocks, historyCodeBlock{language: language, text: string(node.Lines().Value(bytes))})
@@ -83,17 +83,17 @@ func (m *model) copyHistoryMessage() tea.Cmd {
 	message, ok := m.selectedHistoryMessage()
 	if !ok {
 		if m.historyReader != nil {
-			m.historyReader.note = "Tab/Shift+Tab или клик — выберите сообщение для копирования."
+			m.historyReader.note = tr("Tab/Shift+Tab или клик — выберите сообщение для копирования.")
 		}
 		return nil
 	}
-	return m.requestHistoryCopy(message.text, fmt.Sprintf("Сообщение #%d", message.seq), nil)
+	return m.requestHistoryCopy(message.text, fmt.Sprintf(tr("Сообщение #%d"), message.seq), nil)
 }
 func (m *model) openHistoryCode() tea.Cmd {
 	message, ok := m.selectedHistoryMessage()
 	if !ok {
 		if m.historyReader != nil {
-			m.historyReader.note = "Сначала выберите сообщение: Tab/Shift+Tab или клик."
+			m.historyReader.note = tr("Сначала выберите сообщение: Tab/Shift+Tab или клик.")
 		}
 		return nil
 	}
@@ -107,7 +107,7 @@ func (m *model) openHistoryCode() tea.Cmd {
 		return nil
 	}
 	if len(blocks) == 0 {
-		h.note = "В выбранном сообщении нет отдельных блоков кода."
+		h.note = tr("В выбранном сообщении нет отдельных блоков кода.")
 		return nil
 	}
 	h.codeDialog = &historyCodeDialog{seq: message.seq, blocks: blocks}
@@ -125,11 +125,11 @@ func (m *model) requestHistoryCopy(value, label string, dialog *historyCodeDialo
 		}
 	}
 	if value == "" {
-		note("Пустой фрагмент: буфер не изменён.")
+		note(tr("Пустой фрагмент: буфер не изменён."))
 		return nil
 	}
 	if len(value) > clipboardTextLimit {
-		note("Фрагмент больше 64 КиБ: буфер не изменён. Выберите меньший блок.")
+		note(tr("Фрагмент больше 64 КиБ: буфер не изменён. Выберите меньший блок."))
 		return nil
 	}
 	h.copyBusy = true
@@ -139,7 +139,7 @@ func (m *model) requestHistoryCopy(value, label string, dialog *historyCodeDialo
 	if write == nil {
 		write = writeClipboard
 	}
-	note("Копирование…")
+	note(tr("Копирование…"))
 	return func() tea.Msg {
 		receipt, err := write(ctx, value)
 		return historyCopyResult{reader: h, dialog: dialog, operation: operation, serial: serial, label: label, receipt: receipt, err: err}
@@ -156,7 +156,7 @@ func (m *model) handleHistoryCopy(result historyCopyResult) {
 	}
 	note := result.label + ": " + result.receipt
 	if result.err != nil {
-		note = "Копирование не подтверждено. " + result.err.Error()
+		note = tr("Копирование не подтверждено. ") + result.err.Error()
 	}
 	h.note = note
 	if h.codeDialog != nil && h.codeDialog == result.dialog {
@@ -187,7 +187,7 @@ func (m *model) historyCopyKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case tea.KeyDown:
 		d.index = (d.index + 1) % len(d.blocks)
 	case tea.KeyEnter:
-		return m.requestHistoryCopy(d.blocks[d.index].text, fmt.Sprintf("Код %d из сообщения #%d", d.index+1, d.seq), d), true
+		return m.requestHistoryCopy(d.blocks[d.index].text, fmt.Sprintf(tr("Код %d из сообщения #%d"), d.index+1, d.seq), d), true
 	}
 	return nil, true
 }
@@ -207,22 +207,22 @@ func (m *model) historyCodeView(base string) string {
 	d := h.codeDialog
 	box := m.historyCodeBox()
 	width := box.width - 4
-	lines := []string{heading.Render("Копирование блока кода"), fmt.Sprintf("Сообщение #%d · блок %d/%d", d.seq, d.index+1, len(d.blocks)), ""}
+	lines := []string{heading().Render(tr("Копирование блока кода")), fmt.Sprintf(tr("Сообщение #%d · блок %d/%d"), d.seq, d.index+1, len(d.blocks)), ""}
 	start, count := codeWindow(d)
 	for i := start; i < start+count; i++ {
 		block := d.blocks[i]
 		language := clean(block.language)
 		if language == "" {
-			language = "код"
+			language = tr("код")
 		}
 		prefix := "  "
 		if i == d.index {
 			prefix = "› "
 		}
-		label := fmt.Sprintf("%s%d · %s · %d байт", prefix, i+1, language, len(block.text))
+		label := fmt.Sprintf(tr("%s%d · %s · %d байт"), prefix, i+1, language, len(block.text))
 		lines = append(lines, ansi.Truncate(label, width, "…"))
 	}
-	lines = append(lines, "", muted.Render("Фрагмент:"))
+	lines = append(lines, "", muted().Render(tr("Фрагмент:")))
 	preview := strings.Split(ansi.Hardwrap(clean(strings.ReplaceAll(d.blocks[d.index].text, "\t", "    ")), width, true), "\n")
 	available := max(1, box.height-len(lines)-6)
 	if len(preview) > available {
@@ -234,13 +234,13 @@ func (m *model) historyCodeView(base string) string {
 	}
 	note := d.note
 	if h.copyBusy {
-		note = "Копирование…"
+		note = tr("Копирование…")
 	}
 	notes := strings.Split(ansi.Hardwrap(note, width, true), "\n")
 	for len(notes) < 2 {
 		notes = append(notes, "")
 	}
-	lines = append(lines, muted.Render(notes[0]), muted.Render(notes[1]), "↑/↓ — блок · Enter — копировать · Esc — назад")
+	lines = append(lines, muted().Render(notes[0]), muted().Render(notes[1]), tr("↑/↓ — блок · Enter — копировать · Esc — назад"))
 	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)
 }
 func (m *model) historyCodeMouse(msg tea.MouseMsg) tea.Cmd {

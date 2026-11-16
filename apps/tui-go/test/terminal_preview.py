@@ -46,6 +46,29 @@ class TerminalPreview(unittest.TestCase):
 
         wait_for(closed)
 
+    def test_language_theme_and_shortcut_reference(self):
+        self.app.send('preserved draft')
+        self.app.send('\x1bOS')  # F4
+        self.app.wait('Мышь в интерфейсе')
+        self.app.send('\x1b[B' * 4 + '\r')
+        self.app.wait('Тема: светлая')
+        self.app.send('\x1b[B' * 2 + '\r')
+        self.app.wait('TUI Settings')
+        self.app.send('\x1bOP')  # F1
+        self.app.wait('Hotkeys')
+        self.app.send('Schedules')
+        self.app.wait('Ctrl+G')
+        self.assertNotIn('Ctrl+]', self.app.text)
+        self.app.send('\x1b')
+        self.app.wait('preserved draft')
+        self.app.send('\x04')
+        self.app.exited()
+        self.app = Terminal(BINARY, [], self.env)
+        self.app.wait('New conversation')
+        self.app.send('\x1bOS')
+        self.app.wait('TUI Settings')
+        self.app.wait('Theme: light')
+
     def test_mouse_navigation_and_scroll(self):
         self.assertIn(b'\x1b[?1002h', self.app.raw)
         self.assertIn(b'\x1b[?1006h', self.app.raw)

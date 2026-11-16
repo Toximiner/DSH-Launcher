@@ -38,29 +38,29 @@ func (m *model) editQueuedItem() tea.Cmd {
 	}
 	for _, block := range item.Content {
 		if block.Type != "text" || clean(block.Text) != block.Text {
-			s.note = "Только обычный текст: редактирование вложений недоступно."
+			s.note = tr("Только обычный текст: редактирование вложений недоступно.")
 			return nil
 		}
 	}
 	text := contentText(item.Content)
 	if len(text) > queueEditLimit {
-		s.note = "Текст слишком большой для редактора (лимит 64 КиБ)."
+		s.note = tr("Текст слишком большой для редактора (лимит 64 КиБ).")
 		return nil
 	}
 	editor := textarea.New()
 	editor.CharLimit = queueEditLimit
 	editor.ShowLineNumbers = false
 	editor.Prompt = "> "
-	editor.Placeholder = "Текст ожидающего задания…"
+	editor.Placeholder = tr("Текст ожидающего задания…")
 	editor.SetWidth(max(1, m.queueBox().width-4))
 	editor.SetHeight(max(1, m.queueBox().height-8))
 	editor.SetValue(text)
 	if editor.Value() != text {
-		s.note = "Текст нельзя открыть без преобразования. Изменения не внесены."
+		s.note = tr("Текст нельзя открыть без преобразования. Изменения не внесены.")
 		return nil
 	}
 	s.edit = &queueEditDraft{itemID: item.ID, original: append([]queueContent(nil), item.Content...), editor: editor}
-	s.note = "Enter — новая строка. F5 — сохранить в dsh."
+	s.note = tr("Enter — новая строка. F5 — сохранить в dsh.")
 	return s.edit.editor.Focus()
 }
 func (m *model) saveQueuedEdit() tea.Cmd {
@@ -70,16 +70,16 @@ func (m *model) saveQueuedEdit() tea.Cmd {
 		return nil
 	}
 	if !m.queueAvailable() || !d.waitFreshAfter.IsZero() && !m.session.QueueFetchedAt.After(d.waitFreshAfter) {
-		s.note = "Дождитесь свежего состояния dsh. Черновик сохранён."
+		s.note = tr("Дождитесь свежего состояния dsh. Черновик сохранён.")
 		return nil
 	}
 	text := d.editor.Value()
 	if strings.TrimSpace(text) == "" {
-		s.note = "Введите непустой текст задания."
+		s.note = tr("Введите непустой текст задания.")
 		return nil
 	}
 	if len(text) > queueEditLimit || clean(text) != text {
-		s.note = "Текст превышает 64 КиБ или содержит управляющие символы."
+		s.note = tr("Текст превышает 64 КиБ или содержит управляющие символы.")
 		return nil
 	}
 	var current *queuedMessage
@@ -91,17 +91,17 @@ func (m *model) saveQueuedEdit() tea.Cmd {
 		}
 	}
 	if current == nil {
-		s.note = "Задание уже покинуло очередь. Черновик остался в редакторе."
+		s.note = tr("Задание уже покинуло очередь. Черновик остался в редакторе.")
 		return nil
 	}
 	content := []queueContent{{Type: "text", Text: text}}
 	if reflect.DeepEqual(current.Content, content) {
 		s.edit = nil
-		s.note = "Этот текст уже сохранён в очереди dsh."
+		s.note = tr("Этот текст уже сохранён в очереди dsh.")
 		return nil
 	}
 	if !reflect.DeepEqual(current.Content, d.original) {
-		s.note = "Задание изменено другим клиентом. Запись заблокирована."
+		s.note = tr("Задание изменено другим клиентом. Запись заблокирована.")
 		return nil
 	}
 	id, itemID, epoch, login, ctx := m.session.ID, d.itemID, m.chat.epoch, m.settingsLogin, m.settingsContext
@@ -110,7 +110,7 @@ func (m *model) saveQueuedEdit() tea.Cmd {
 	}
 	s.busy = true
 	s.operationID = itemID
-	s.note = "Сохранение задания…"
+	s.note = tr("Сохранение задания…")
 	return func() tea.Msg {
 		result := queueEditResult{epoch: epoch, sessionID: id, itemID: itemID}
 		api, err := openAPI(ctx, login)
@@ -124,7 +124,7 @@ func (m *model) saveQueuedEdit() tea.Cmd {
 		}
 		result.err = api.rpc(ctx, "session/updateQueue", map[string]any{"request": map[string]any{"sessionId": id, "itemId": itemID, "action": map[string]any{"kind": "edit", "content": content}}}, &receipt)
 		if result.err == nil && !receipt.Accepted {
-			result.err = errors.New("неподдерживаемое подтверждение сохранения")
+			result.err = errors.New(tr("неподдерживаемое подтверждение сохранения"))
 		}
 		return result
 	}
@@ -141,14 +141,14 @@ func (m *model) handleQueueEdit(msg queueEditResult) tea.Cmd {
 	s.operationID = ""
 	if msg.err == nil {
 		s.edit = nil
-		s.note = "Задание изменено. Порядок очереди сохранён."
+		s.note = tr("Задание изменено. Порядок очереди сохранён.")
 	} else {
 		s.edit.waitFreshAfter = time.Now()
 		var rejected *rpcRejected
 		if errors.As(msg.err, &rejected) {
-			s.note = "dsh отклонил изменение. Черновик сохранён; обновляем очередь."
+			s.note = tr("dsh отклонил изменение. Черновик сохранён; обновляем очередь.")
 		} else {
-			s.note = "Сохранение не подтверждено. Черновик сохранён; автоповтора нет."
+			s.note = tr("Сохранение не подтверждено. Черновик сохранён; автоповтора нет.")
 		}
 	}
 	m.rebuild()
@@ -164,7 +164,7 @@ func (m *model) queueEditKey(msg tea.KeyMsg) tea.Cmd {
 		case tea.KeyEsc:
 			if !s.busy {
 				s.edit = nil
-				s.note = "Изменения не сохранены."
+				s.note = tr("Изменения не сохранены.")
 			} else {
 				s.visible = false
 			}
@@ -192,22 +192,22 @@ func (m *model) queueEditView(base string) string {
 	d.editor.SetHeight(max(1, box.height-8))
 	note := s.note
 	if !m.queueAvailable() {
-		note = "Нет связи с dsh. Черновик сохранён; запись недоступна."
+		note = tr("Нет связи с dsh. Черновик сохранён; запись недоступна.")
 	}
 	noteLines := strings.Split(ansi.Hardwrap(note, inner, true), "\n")
-	lines := []string{heading.Render("Изменить задание в очереди"), muted.Render("Enter — новая строка · F5 — сохранить"), d.editor.View()}
+	lines := []string{heading().Render(tr("Изменить задание в очереди")), muted().Render(tr("Enter — новая строка · F5 — сохранить")), d.editor.View()}
 	for i := 0; i < 2; i++ {
 		line := ""
 		if i < len(noteLines) {
 			line = noteLines[i]
 		}
-		lines = append(lines, muted.Render(line))
+		lines = append(lines, muted().Render(line))
 	}
-	buttons := "[ Сохранить F5 ]   [ Назад Esc ]"
+	buttons := tr("[ Сохранить F5 ]   [ Назад Esc ]")
 	if s.busy {
-		buttons = "Ожидание подтверждения dsh…"
+		buttons = tr("Ожидание подтверждения dsh…")
 	}
-	lines = append(lines, buttons, muted.Render("Порядок очереди и текущая задача сохранятся."))
+	lines = append(lines, buttons, muted().Render(tr("Порядок очереди и текущая задача сохранятся.")))
 	for i, line := range lines {
 		if i != 2 {
 			lines[i] = ansi.Truncate(line, inner, "…")
@@ -221,7 +221,7 @@ func (m *model) queueEditMouse(msg tea.MouseMsg) tea.Cmd {
 		return nil
 	}
 	if msg.Button == tea.MouseButtonLeft && msg.Y == box.y+box.height-3 && msg.X >= box.x+2 && msg.X < box.x+box.width-2 {
-		if msg.X < box.x+2+lipgloss.Width("[ Сохранить F5 ]") {
+		if msg.X < box.x+2+lipgloss.Width(tr("[ Сохранить F5 ]")) {
 			return m.saveQueuedEdit()
 		}
 		return m.queueEditKey(tea.KeyMsg{Type: tea.KeyEsc})

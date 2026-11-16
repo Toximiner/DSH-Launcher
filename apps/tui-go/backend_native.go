@@ -120,7 +120,7 @@ func prepareMarket(ctx context.Context, options backendOptions, input io.Reader,
 	for {
 		choice := "install"
 		if options.Market != "install" {
-			fmt.Fprintf(out, "\nВ профиле %s нет dshmarket.\n[i] Установить  [s] Не сейчас  [n] Не спрашивать больше: ", options.Profile)
+			fmt.Fprintf(out, tr("\nВ профиле %s нет dshmarket.\n[i] Установить  [s] Не сейчас  [n] Не спрашивать больше: "), options.Profile)
 			type answer struct {
 				line string
 				err  error
@@ -132,7 +132,7 @@ func prepareMarket(ctx context.Context, options backendOptions, input io.Reader,
 				return nil, ctx.Err()
 			case value := <-answers:
 				if value.err != nil && strings.TrimSpace(value.line) == "" {
-					return nil, errors.New("не получен ответ об установке маркета")
+					return nil, errors.New(tr("не получен ответ об установке маркета"))
 				}
 				choice = strings.ToLower(strings.TrimSpace(value.line))
 			}
@@ -147,38 +147,38 @@ func prepareMarket(ctx context.Context, options backendOptions, input io.Reader,
 			return env, nil
 		case "i", "install":
 		default:
-			fmt.Fprintln(out, "Введите i, s или n.")
+			fmt.Fprintln(out, tr("Введите i, s или n."))
 			continue
 		}
 		if !pnpmReady {
 			npm, err := exec.LookPath("npm")
 			if err != nil {
-				return nil, errors.New("для установки маркета нужны npm и pnpm")
+				return nil, errors.New(tr("для установки маркета нужны npm и pnpm"))
 			}
-			fmt.Fprintln(out, "Установка pnpm для текущего пользователя…")
+			fmt.Fprintln(out, tr("Установка pnpm для текущего пользователя…"))
 			if err = runLocal(ctx, npm, []string{"install", "--prefix", prefix, "--no-audit", "--no-fund", "--ignore-scripts", "pnpm@10"}, options.CWD, env, out); err != nil {
 				if options.Market == "install" || ctx.Err() != nil {
-					return nil, errors.New("не удалось установить pnpm")
+					return nil, errors.New(tr("не удалось установить pnpm"))
 				}
-				fmt.Fprintln(out, "Ошибка установки pnpm; можно повторить или пропустить маркет.")
+				fmt.Fprintln(out, tr("Ошибка установки pnpm; можно повторить или пропустить маркет."))
 				continue
 			}
 			if _, err := os.Stat(filepath.Join(toolsBin, "pnpm")); err != nil {
-				return nil, errors.New("pnpm не найден после установки")
+				return nil, errors.New(tr("pnpm не найден после установки"))
 			}
 			pnpmReady = true
 			env = append(env, "PATH="+toolsBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 		}
-		fmt.Fprintf(out, "Установка dshmarket в профиль %s…\n", options.Profile)
+		fmt.Fprintf(out, tr("Установка dshmarket в профиль %s…\n"), options.Profile)
 		err := runLocal(ctx, options.Bin, []string{"plugin", "--profile", options.Profile, "add", "dshmarket"}, options.CWD, env, out)
 		if err == nil && marketInstalled(options.Profile) {
-			fmt.Fprintln(out, "dshmarket установлен.")
+			fmt.Fprintln(out, tr("dshmarket установлен."))
 			return env, nil
 		}
 		if options.Market == "install" || ctx.Err() != nil {
-			return nil, errors.New("предустановка dshmarket не завершена")
+			return nil, errors.New(tr("предустановка dshmarket не завершена"))
 		}
-		fmt.Fprintln(out, "Не удалось установить dshmarket; можно повторить или продолжить без него.")
+		fmt.Fprintln(out, tr("Не удалось установить dshmarket; можно повторить или продолжить без него."))
 	}
 }
 
@@ -238,7 +238,7 @@ func startBackendLogged(ctx context.Context, options backendOptions, env []strin
 	command.Stdout = writer
 	command.Stderr = writer
 	if err := command.Start(); err != nil {
-		return "", nil, nil, errors.New("не удалось запустить dsh; проверьте путь и Node.js 24.9+")
+		return "", nil, nil, errors.New(tr("не удалось запустить dsh; проверьте путь и Node.js 24.9+"))
 	}
 	done := make(chan struct{})
 	go func() { command.Wait(); close(done) }()
@@ -267,10 +267,10 @@ func startBackendLogged(ctx context.Context, options backendOptions, env []strin
 		stop()
 		return "", nil, nil, ctx.Err()
 	case <-done:
-		return "", nil, nil, errors.New("dsh завершился до запуска; откройте журнал")
+		return "", nil, nil, errors.New(tr("dsh завершился до запуска; откройте журнал"))
 	case <-time.After(120 * time.Second):
 		stop()
-		return "", nil, nil, errors.New("истекло время запуска dsh")
+		return "", nil, nil, errors.New(tr("истекло время запуска dsh"))
 	}
 }
 
@@ -278,10 +278,10 @@ func checkBackendNode(ctx context.Context) error {
 	output, err := exec.CommandContext(ctx, "node", "--version").Output()
 	major, minor := 0, 0
 	if err != nil {
-		return errors.New("для dsh нужен Node.js 24.9+; node не найден")
+		return errors.New(tr("для dsh нужен Node.js 24.9+; node не найден"))
 	}
 	if n, _ := fmt.Sscanf(strings.TrimSpace(string(output)), "v%d.%d", &major, &minor); n != 2 || major < 24 || (major == 24 && minor < 9) {
-		return errors.New("для dsh нужен Node.js 24.9+; обновите Node.js перед --start")
+		return errors.New(tr("для dsh нужен Node.js 24.9+; обновите Node.js перед --start"))
 	}
 	return nil
 }

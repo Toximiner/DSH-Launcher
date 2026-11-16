@@ -29,7 +29,7 @@ func followChat(ctx context.Context, login, id string, out chan<- chatNotice, ad
 			return
 		}
 		if err == nil {
-			err = errors.New("поток чата завершён")
+			err = errors.New(tr("поток чата завершён"))
 		}
 		if !post(chatNotice{err: err}) {
 			return
@@ -85,7 +85,7 @@ func readMuxStream(ctx context.Context, api *dshAPI, endpoint string, args map[s
 		response.Body.Close()
 	}
 	if err != nil {
-		return errors.New("не удалось открыть поток dsh; проверьте URL входа и версию dsh")
+		return errors.New(tr("не удалось открыть поток dsh; проверьте URL входа и версию dsh"))
 	}
 	defer conn.Close()
 	stop := context.AfterFunc(ctx, func() { conn.Close() })
@@ -98,7 +98,7 @@ func readMuxStream(ctx context.Context, api *dshAPI, endpoint string, args map[s
 	})
 	streamID, err := newRequestID()
 	if err != nil {
-		return errors.New("не удалось подготовить поток")
+		return errors.New(tr("не удалось подготовить поток"))
 	}
 	additional := make(map[string]bool)
 	known := make(map[string]bool)
@@ -106,7 +106,7 @@ func readMuxStream(ctx context.Context, api *dshAPI, endpoint string, args map[s
 		hooks := subscriptions[0]
 		hooks.open = func(method string, namedArgs map[string]any) (string, error) {
 			if len(additional) >= 32 {
-				return "", errors.New("слишком много потоков ожидания")
+				return "", errors.New(tr("слишком много потоков ожидания"))
 			}
 			id, err := newRequestID()
 			if err != nil {
@@ -131,12 +131,12 @@ func readMuxStream(ctx context.Context, api *dshAPI, endpoint string, args map[s
 	}
 	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	if conn.WriteJSON(map[string]any{"type": "open", "streamId": streamID, "endpoint": endpoint, "payload": map[string]any{"args": args}}) != nil {
-		return errors.New("не удалось подписаться на сессию")
+		return errors.New(tr("не удалось подписаться на сессию"))
 	}
 	for {
 		_, data, err := conn.ReadMessage()
 		if err != nil {
-			return errors.New("соединение с чатом потеряно")
+			return errors.New(tr("соединение с чатом потеряно"))
 		}
 		conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 		var envelope struct {
@@ -145,11 +145,11 @@ func readMuxStream(ctx context.Context, api *dshAPI, endpoint string, args map[s
 			Value json.RawMessage `json:"value"`
 		}
 		if json.Unmarshal(data, &envelope) != nil {
-			return errors.New("неподдерживаемый протокол потока dsh")
+			return errors.New(tr("неподдерживаемый протокол потока dsh"))
 		}
 		if envelope.ID != streamID {
 			if !known[envelope.ID] {
-				return errors.New("неизвестный поток ожидания dsh")
+				return errors.New(tr("неизвестный поток ожидания dsh"))
 			}
 			if envelope.Type == "end" || envelope.Type == "error" {
 				delete(additional, envelope.ID)
@@ -167,7 +167,7 @@ func readMuxStream(ctx context.Context, api *dshAPI, endpoint string, args map[s
 			continue
 		}
 		if envelope.Type != "item" {
-			return errors.New("подписка чата остановлена сервером; проверьте доступ и версию dsh")
+			return errors.New(tr("подписка чата остановлена сервером; проверьте доступ и версию dsh"))
 		}
 		if !receive(envelope.Value) {
 			return nil

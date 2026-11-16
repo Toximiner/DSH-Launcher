@@ -117,14 +117,14 @@ type toolOutputUpdate struct {
 func (s *chatState) registerToolJob(raw json.RawMessage) error {
 	var job toolJob
 	if json.Unmarshal(raw, &job) != nil {
-		return errors.New("неподдерживаемая связь задания с инструментом")
+		return errors.New(tr("неподдерживаемая связь задания с инструментом"))
 	}
 	// Copied history never transfers ownership of a running execution.
 	if job.Owner != s.id || job.ToolCall.ID == "" {
 		return nil
 	}
 	if job.ID == "" || len(job.ID) > 1024 || len(job.ToolCall.ID) > 1024 || job.ToolCall.RootID == "" || len(job.ToolCall.RootID) > 1024 {
-		return errors.New("неверная связь задания с инструментом")
+		return errors.New(tr("неверная связь задания с инструментом"))
 	}
 	if s.jobs == nil {
 		s.jobs = make(map[string]toolJob)
@@ -225,15 +225,15 @@ func (m *model) liveToolOutput(t *chatTool) (string, string) {
 		return "", ""
 	}
 	o := observer.value
-	label := "Вывод команды · stdout/stderr"
+	label := tr("Вывод команды · stdout/stderr")
 	if o.Done {
-		label += " · поток завершён"
+		label += tr(" · поток завершён")
 	}
 	if o.Stale {
-		label += " · нет связи, вывод может быть неполным"
+		label += tr(" · нет связи, вывод может быть неполным")
 	}
 	if o.Gap {
-		label += "\n[Часть вывода недоступна или обрезана]"
+		label += tr("\n[Часть вывода недоступна или обрезана]")
 	}
 	if o.Text == "" && !o.Stale && !o.Gap {
 		return "", ""

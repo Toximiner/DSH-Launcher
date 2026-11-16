@@ -97,7 +97,7 @@ func (b *terminalBridge) Run() error {
 		}
 	}()
 	defer func() { cancel(); conn.Close(); <-done }()
-	io.WriteString(b.out, "\x1b[2J\x1b[HDSH terminal · Ctrl+] — вернуться в TUI (процесс остаётся на сервере)\r\n")
+	io.WriteString(b.out, tr("\x1b[2J\x1b[HDSH terminal · Ctrl+] — вернуться в TUI (процесс остаётся на сервере)\r\n"))
 	writable, opened := false, false
 	sequence, pending := 0, 0
 	lastOutput := -1

@@ -36,11 +36,11 @@ type composeUpload struct {
 
 func (m *model) openCompose() tea.Cmd {
 	if m.session != nil && m.session.Address.Kind == "subagent" {
-		m.append("Сообщения подагенту: /session " + m.session.Address.ParentID + " → /agents → F3.")
+		m.append(tr("Сообщения подагенту: /session ") + m.session.Address.ParentID + " → /agents → F3.")
 		return nil
 	}
 	if m.chat == nil || m.session == nil || !m.chat.ready || m.chatSessionChanging() {
-		m.append("Для редактора подключите сессию dsh.")
+		m.append(tr("Для редактора подключите сессию dsh."))
 		return nil
 	}
 	if m.composer != nil && m.composer.id == m.session.ID {
@@ -59,7 +59,7 @@ func (m *model) openCompose() tea.Cmd {
 	}
 	editor.SetValue(initial)
 	if editor.Value() != initial {
-		m.append("Черновик нельзя открыть без преобразования.")
+		m.append(tr("Черновик нельзя открыть без преобразования."))
 		return nil
 	}
 	m.composer = &composeDialog{id: m.session.ID, epoch: m.chat.epoch, editor: editor, attachments: attached, visible: true, focused: m.input.Focused()}
@@ -78,7 +78,7 @@ func (m *model) uploadCompose(name string) tea.Cmd {
 	d.busy = true
 	d.serial++
 	serial, login, ctx := d.serial, m.settingsLogin, m.chat.ctx
-	d.note = "Загрузка файла в текущую сессию dsh…"
+	d.note = tr("Загрузка файла в текущую сессию dsh…")
 	return func() tea.Msg {
 		result := composeUpload{dialog: d, serial: serial}
 		ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
@@ -106,7 +106,7 @@ func (m *model) uploadCompose(name string) tea.Cmd {
 			}
 		}
 		if err != nil {
-			result.err = errors.New("Загрузка не подтверждена (обычный файл до 2 МиБ). Автоповтора нет.")
+			result.err = errors.New(tr("Загрузка не подтверждена (обычный файл до 2 МиБ). Автоповтора нет."))
 		}
 		return result
 	}
@@ -123,7 +123,7 @@ func (m *model) handleComposeUpload(result composeUpload) {
 	}
 	if result.attachment != nil {
 		d.attachments = append(d.attachments, *result.attachment)
-		d.note = "Файл загружен и прикреплён к черновику. F5 — отправить сообщение."
+		d.note = tr("Файл загружен и прикреплён к черновику. F5 — отправить сообщение.")
 	}
 }
 func (m *model) composeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
@@ -153,22 +153,22 @@ func (m *model) composeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if !msg.Paste && msg.Type == tea.KeyCtrlX {
 		if len(d.attachments) > 0 {
 			d.attachments = d.attachments[:len(d.attachments)-1]
-			d.note = "Последнее вложение убрано из черновика."
+			d.note = tr("Последнее вложение убрано из черновика.")
 		}
 		return nil, true
 	}
 	if !msg.Paste && msg.Type == tea.KeyF5 {
 		text := d.editor.Value()
 		if strings.TrimSpace(text) == "" || len(text) > 65536 || clean(text) != text {
-			d.note = "Введите сообщение до 64 КиБ без управляющих символов."
+			d.note = tr("Введите сообщение до 64 КиБ без управляющих символов.")
 			return nil, true
 		}
 		if m.chat == nil || !m.chat.ready || m.chatSessionChanging() || m.session == nil || m.session.ID != d.id || m.isSessionArchived(d.id) {
-			d.note = "Сессия недоступна; черновик сохранён."
+			d.note = tr("Сессия недоступна; черновик сохранён.")
 			return nil, true
 		}
 		if p := m.prompts[d.id]; p != nil && p.Status != "rejected" {
-			d.note = "Дождитесь подтверждения предыдущего сообщения; черновик сохранён."
+			d.note = tr("Дождитесь подтверждения предыдущего сообщения; черновик сохранён.")
 			return nil, true
 		}
 		cmd := m.submitContent(text, append([]promptAttachment(nil), d.attachments...))
@@ -180,7 +180,7 @@ func (m *model) composeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return tea.Batch(cmd, m.input.Focus()), true
 	}
 	if msg.Type == tea.KeyRunes && (len(d.editor.Value())+len(string(msg.Runes)) > 65536 || strings.ContainsAny(string(msg.Runes), "\r\t") || clean(string(msg.Runes)) != string(msg.Runes)) {
-		d.note = "Вставка не принята: лимит 64 КиБ, без табуляции/CR и управляющих символов."
+		d.note = tr("Вставка не принята: лимит 64 КиБ, без табуляции/CR и управляющих символов.")
 		return nil, true
 	}
 	var cmd tea.Cmd
@@ -196,17 +196,17 @@ func (m *model) composeView(base string) string {
 	w := box.width - 4
 	d.editor.SetWidth(w)
 	d.editor.SetHeight(max(1, box.height-10))
-	lines := []string{heading.Render("Сообщение · многострочный редактор"), "Enter — новая строка · F5 — отправить/в очередь", ""}
+	lines := []string{heading().Render(tr("Сообщение · многострочный редактор")), tr("Enter — новая строка · F5 — отправить/в очередь"), ""}
 	lines = append(lines, strings.Split(d.editor.View(), "\n")...)
 	names := []string{}
 	for _, a := range d.attachments {
-		names = append(names, fmt.Sprintf("%s (%d Б)", a.Name, a.Bytes))
+		names = append(names, fmt.Sprintf(tr("%s (%d Б)"), a.Name, a.Bytes))
 	}
 	note := d.note
 	if d.busy {
-		note = "Загрузка файла…"
+		note = tr("Загрузка файла…")
 	}
-	lines = append(lines, shortText("Вложения: "+strings.Join(names, ", "), w), shortText(note, w), "", shortText("Esc — скрыть с сохранением · /compose — вернуть", w), shortText("Ctrl+X — убрать последнее вложение · /attach <локальный путь>", w))
+	lines = append(lines, shortText(tr("Вложения: ")+strings.Join(names, ", "), w), shortText(note, w), "", shortText(tr("Esc — скрыть с сохранением · /compose — вернуть"), w), shortText(tr("Ctrl+X — убрать последнее вложение · /attach <локальный путь>"), w))
 	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)
 }
 

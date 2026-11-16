@@ -59,7 +59,7 @@ type settingsFormResult struct {
 
 func (m *model) openSettingsForm(providers bool) tea.Cmd {
 	if m.settings == nil || !m.settings.Writable || m.settingsLoading {
-		m.append("Настройки недоступны для записи. Обновите подключение и снимок.")
+		m.append(tr("Настройки недоступны для записи. Обновите подключение и снимок."))
 		return nil
 	}
 	index := m.settingsIndex
@@ -76,7 +76,7 @@ func (m *model) openSettingsForm(providers bool) tea.Cmd {
 		}
 	}
 	if index < 0 || index >= len(m.settings.Namespaces) {
-		m.append("В этом профиле нет формы провайдеров.")
+		m.append(tr("В этом профиле нет формы провайдеров."))
 		return nil
 	}
 	namespace := m.settings.Namespaces[index]
@@ -172,7 +172,7 @@ func (s *formSchema) containsSecret(node formNode, depth int) bool {
 }
 func (d *settingsForm) stage(path []string, value any, unset bool) bool {
 	if len(path) == 0 || len(path) > 32 {
-		d.note = "Нельзя заменить весь раздел."
+		d.note = tr("Нельзя заменить весь раздел.")
 		return false
 	}
 	original := detached(d.value)
@@ -188,7 +188,7 @@ func (d *settingsForm) stage(path []string, value any, unset bool) bool {
 	if unset {
 		if d.secretUnder(path) {
 			d.value = original
-			d.note = "Сброс контейнера с секретами недоступен."
+			d.note = tr("Сброс контейнера с секретами недоступен.")
 			return false
 		}
 		inherited, exists := valueAt(d.namespace.Base, path)
@@ -197,7 +197,7 @@ func (d *settingsForm) stage(path []string, value any, unset bool) bool {
 		preview := value
 		node, _ := d.schema.at(path)
 		if nodeRole(node) == "secret" {
-			preview = "[новый секрет]"
+			preview = tr("[новый секрет]")
 		}
 		d.value = editValue(d.value, path, preview, false)
 	}
@@ -214,7 +214,7 @@ func (d *settingsForm) stage(path []string, value any, unset bool) bool {
 			}
 			if d.secretUnder(path[:i]) {
 				d.value = original
-				d.note = "Редактирование массива с секретами недоступно."
+				d.note = tr("Редактирование массива с секретами недоступно.")
 				return false
 			}
 			op.Path = append([]string{}, path[:i]...)
@@ -235,7 +235,7 @@ func (d *settingsForm) stage(path []string, value any, unset bool) bool {
 	if len(d.ops) > 256 || len(raw) > settingsDraftLimit {
 		d.value = original
 		d.ops = originalOps
-		d.note = "Лимит изменений: 256 полей / 64 КиБ."
+		d.note = tr("Лимит изменений: 256 полей / 64 КиБ.")
 		return false
 	}
 	for key := range d.conflicts {
@@ -245,7 +245,7 @@ func (d *settingsForm) stage(path []string, value any, unset bool) bool {
 			delete(d.conflicts, key)
 		}
 	}
-	d.note = fmt.Sprintf("Изменений: %d · F5 — сохранить · Esc — назад.", len(d.ops))
+	d.note = fmt.Sprintf(tr("Изменений: %d · F5 — сохранить · Esc — назад."), len(d.ops))
 	return true
 }
 func (op settingsPathOp) MarshalJSON() ([]byte, error) {
@@ -257,12 +257,12 @@ func (op settingsPathOp) MarshalJSON() ([]byte, error) {
 }
 func (d *settingsForm) edit(row formRow, add bool) tea.Cmd {
 	if !row.known && !add {
-		d.note = "Поле отсутствует в поддерживаемой схеме; доступно только чтение."
+		d.note = tr("Поле отсутствует в поддерживаемой схеме; доступно только чтение.")
 		return nil
 	}
 	if !add && formContainer(row.node) {
 		if len(d.path) >= 32 {
-			d.note = "Достигнут предел глубины формы."
+			d.note = tr("Достигнут предел глубины формы.")
 			return nil
 		}
 		d.path = row.path
@@ -270,7 +270,7 @@ func (d *settingsForm) edit(row formRow, add bool) tea.Cmd {
 		return nil
 	}
 	if !add && d.secretUnder(row.path) && nodeRole(row.node) != "secret" {
-		d.note = "Поле с вложенными секретами недоступно для изменения целиком."
+		d.note = tr("Поле с вложенными секретами недоступно для изменения целиком.")
 		return nil
 	}
 	if !add && row.node.Type == "string" {
@@ -280,9 +280,9 @@ func (d *settingsForm) edit(row formRow, add bool) tea.Cmd {
 	}
 	editor := textinput.New()
 	editor.CharLimit = settingsDraftLimit
-	editor.Prompt = "Значение: "
+	editor.Prompt = tr("Значение: ")
 	if add {
-		editor.Prompt = "Имя: "
+		editor.Prompt = tr("Имя: ")
 	} else if nodeRole(row.node) == "secret" {
 		editor.EchoMode = textinput.EchoPassword
 		editor.EchoCharacter = '•'
@@ -290,7 +290,7 @@ func (d *settingsForm) edit(row formRow, add bool) tea.Cmd {
 		value, _ := row.value.(string)
 		editor.SetValue(value)
 		if editor.Value() != value {
-			d.note = "Значение нельзя открыть без преобразования (многострочное или слишком большое)."
+			d.note = tr("Значение нельзя открыть без преобразования (многострочное или слишком большое).")
 			return nil
 		}
 	} else if row.value != nil {
@@ -303,7 +303,7 @@ func (d *settingsForm) edit(row formRow, add bool) tea.Cmd {
 func (m *model) formEnter() tea.Cmd {
 	d := m.settingsForm
 	if d.blocked {
-		d.note = "Сначала перечитайте раздел через Ctrl+R."
+		d.note = tr("Сначала перечитайте раздел через Ctrl+R.")
 		return nil
 	}
 	if row, ok := d.selection(); ok {
@@ -338,12 +338,12 @@ func (m *model) acceptSettingsField() tea.Cmd {
 	}
 	if field.add {
 		if value == "" || len(value) > 256 || clean(value) != value {
-			d.note = "Введите непустое имя до 256 символов."
+			d.note = tr("Введите непустое имя до 256 символов.")
 			return nil
 		}
 		path := append(append([]string{}, d.path...), value)
 		if _, exists := valueAt(d.value, path); exists {
-			d.note = "Такое имя уже существует."
+			d.note = tr("Такое имя уже существует.")
 			return nil
 		}
 		node, _ := d.schema.at(d.path)
@@ -356,29 +356,29 @@ func (m *model) acceptSettingsField() tea.Cmd {
 	}
 	var parsed any = value
 	if len(value) > settingsDraftLimit {
-		d.note = "Значение превышает 64 КиБ."
+		d.note = tr("Значение превышает 64 КиБ.")
 		return nil
 	}
 	if field.row.node.Type != "string" {
 		if len(value) > settingsDraftLimit || json.Unmarshal([]byte(value), &parsed) != nil {
-			d.note = "Введите корректное значение JSON для этого типа."
+			d.note = tr("Введите корректное значение JSON для этого типа.")
 			return nil
 		}
 		switch field.row.node.Type {
 		case "number":
 			if _, ok := parsed.(float64); !ok {
-				d.note = "Ожидается число."
+				d.note = tr("Ожидается число.")
 				return nil
 			}
 		case "boolean":
 			if _, ok := parsed.(bool); !ok {
-				d.note = "Ожидается true или false."
+				d.note = tr("Ожидается true или false.")
 				return nil
 			}
 		}
 	}
 	if nodeRole(field.row.node) == "credential-ref" && value != "" && !credentialRefPattern.MatchString(value) {
-		d.note = "Имя ключа: буквы, цифры и _, первый символ — буква или _."
+		d.note = tr("Имя ключа: буквы, цифры и _, первый символ — буква или _.")
 		return nil
 	}
 	if choices := d.schema.enums(field.row.node); len(choices) > 0 {
@@ -392,7 +392,7 @@ func (m *model) acceptSettingsField() tea.Cmd {
 			}
 		}
 		if !found {
-			d.note = "Выберите одно из значений схемы."
+			d.note = tr("Выберите одно из значений схемы.")
 			return nil
 		}
 	}
@@ -426,14 +426,14 @@ func (m *model) saveSettingsForm() tea.Cmd {
 	}
 	raw, err := json.Marshal(d.ops)
 	if err != nil || len(raw) > settingsDraftLimit {
-		d.note = "Изменения превышают лимит."
+		d.note = tr("Изменения превышают лимит.")
 		return nil
 	}
 	var ops []settingsPathOp
 	_ = json.Unmarshal(raw, &ops)
 	d.busy, d.writing = true, true
 	d.serial++
-	d.note = "Сохранение в dsh…"
+	d.note = tr("Сохранение в dsh…")
 	serial, revision, namespace, login := d.serial, d.namespace.Revision, d.namespace.NS, m.settingsLogin
 	return func() tea.Msg {
 		result := settingsFormResult{dialog: d, serial: serial}
@@ -454,11 +454,11 @@ func (m *model) saveSettingsForm() tea.Cmd {
 		if err != nil {
 			var rejected *rpcRejected
 			if errors.As(err, &rejected) && rejected.code == "settings/conflict" {
-				result.err = errors.New("Раздел изменён другим клиентом. Ctrl+R — перечитать; изменения сохранены в форме.")
+				result.err = errors.New(tr("Раздел изменён другим клиентом. Ctrl+R — перечитать; изменения сохранены в форме."))
 			} else if errors.As(err, &rejected) && rejected.code == "settings/rejected" {
-				result.err = errors.New("dsh отклонил настройки. Проверьте значения; Ctrl+R — перечитать.")
+				result.err = errors.New(tr("dsh отклонил настройки. Проверьте значения; Ctrl+R — перечитать."))
 			} else {
-				result.err = errors.New("Сохранение не подтверждено. Ctrl+R — перечитать; повтора нет.")
+				result.err = errors.New(tr("Сохранение не подтверждено. Ctrl+R — перечитать; повтора нет."))
 			}
 		}
 		return result
@@ -494,7 +494,7 @@ func (m *model) refreshSettingsForm() tea.Cmd {
 			result.snapshot = snapshot
 		}
 		if err != nil {
-			result.err = errors.New("Раздел недоступен для записи. Предыдущий снимок сохранён.")
+			result.err = errors.New(tr("Раздел недоступен для записи. Предыдущий снимок сохранён."))
 		}
 		return result
 	}
@@ -518,12 +518,12 @@ func (m *model) handleSettingsForm(result settingsFormResult) {
 		if d.field != nil {
 			d.field.info = *result.credential
 		}
-		d.note = "Существующий ключ не читается. Enter — сохранить новое значение."
+		d.note = tr("Существующий ключ не читается. Enter — сохранить новое значение.")
 		return
 	}
 	if result.credentialSaved {
 		d.field = nil
-		d.note = "Новый ключ записан; доступ к провайдеру проверяется при следующем запросе."
+		d.note = tr("Новый ключ записан; доступ к провайдеру проверяется при следующем запросе.")
 		return
 	}
 	if result.namespace != nil {
@@ -554,16 +554,16 @@ func (m *model) handleSettingsForm(result settingsFormResult) {
 					d.conflicts[pathKey(op.Path)] = true
 				}
 			}
-			d.note = "Перечитана свежая ревизия; изменения оставлены для проверки. F5 — сохранить."
+			d.note = tr("Перечитана свежая ревизия; изменения оставлены для проверки. F5 — сохранить.")
 			if len(d.conflicts) > 0 {
-				d.note = "Конфликт полей: откройте и проверьте правку либо Ctrl+X отмените её. F5 заблокирован."
+				d.note = tr("Конфликт полей: откройте и проверьте правку либо Ctrl+X отмените её. F5 заблокирован.")
 			}
 		} else {
-			d.note = "Настройки сохранены. Условия применения не указаны dsh."
+			d.note = tr("Настройки сохранены. Условия применения не указаны dsh.")
 			if d.namespace.Applies == "live" {
-				d.note = "Настройки сохранены. Применяются dsh без перезапуска."
+				d.note = tr("Настройки сохранены. Применяются dsh без перезапуска.")
 			} else if d.namespace.Applies != "" {
-				d.note = "Настройки сохранены. Применение: " + clean(d.namespace.Applies)
+				d.note = tr("Настройки сохранены. Применение: ") + clean(d.namespace.Applies)
 			}
 		}
 		if m.settings != nil {
@@ -611,5 +611,5 @@ func (d *settingsForm) dropDraft(path []string) {
 	fresh, exists := valueAt(d.namespace.Value, reset)
 	d.value = editValue(d.value, reset, detached(fresh), !exists)
 	d.ops = kept
-	d.note = "Правка отменена; показано перечитанное значение этого поля."
+	d.note = tr("Правка отменена; показано перечитанное значение этого поля.")
 }

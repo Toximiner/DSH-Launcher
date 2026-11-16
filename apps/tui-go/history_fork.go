@@ -11,7 +11,7 @@ import (
 // attempt previews and hidden service context are not exact-message boundaries.
 func historyForkable(message chatMessage) bool {
 	return message.tool == nil && message.approvalID == "" && message.text != "" &&
-		(message.role == "АГЕНТ" || strings.HasPrefix(message.role, "ВЫ"))
+		(message.role == tr("АГЕНТ") || strings.HasPrefix(message.role, tr("ВЫ")))
 }
 
 func (m *model) selectHistoryMessage(seq int, reveal bool) {
@@ -31,7 +31,7 @@ func (m *model) selectHistoryMessage(seq int, reveal bool) {
 	}
 	h.toolFocused = false
 	h.selectedSeq = seq
-	h.note = fmt.Sprintf("Событие #%d · Ctrl+Y — копия · Ctrl+K — код · Ctrl+B — ветка.", seq)
+	h.note = fmt.Sprintf(tr("Событие #%d · Ctrl+Y — копия · Ctrl+K — код · Ctrl+B — ветка."), seq)
 	m.resizeHistory()
 	if reveal {
 		for _, row := range h.messageRows {
@@ -90,6 +90,6 @@ func (m *model) forkHistorySelection() tea.Cmd {
 			return nil
 		}
 	}
-	h.note = "Tab/Shift+Tab или клик — выберите сообщение; Ctrl+B — ветка."
+	h.note = tr("Tab/Shift+Tab или клик — выберите сообщение; Ctrl+B — ветка.")
 	return nil
 }

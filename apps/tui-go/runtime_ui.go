@@ -77,7 +77,7 @@ func runtimePoll() tea.Cmd {
 }
 func (m *model) openRuntime(kind string) tea.Cmd {
 	if m.runtime == nil {
-		m.append("Управление установкой доступно в нативном Linux-клиенте.")
+		m.append(tr("Управление установкой доступно в нативном Linux-клиенте."))
 		return nil
 	}
 	d := &runtimeDialog{kind: kind, focused: m.input.Focused(), input: textinput.New(), view: viewport.New(1, 1)}
@@ -177,12 +177,12 @@ func (m *model) runRuntime(action, value string) tea.Cmd {
 	}
 	// Never acquire process ownership merely by attaching to a login URL.
 	if (action == "start" || action == "restart") && m.settingsLogin != "" && !m.runtimeState.Owned {
-		m.runtimeDialog.note = "Подключён внешний dsh. Откройте отдельный клиент без --url для своего процесса."
+		m.runtimeDialog.note = tr("Подключён внешний dsh. Откройте отдельный клиент без --url для своего процесса.")
 		return nil
 	}
 	if action == "stop" || action == "restart" {
 		if !m.runtimeState.Owned {
-			m.runtimeDialog.note = "Нет своего работающего процесса."
+			m.runtimeDialog.note = tr("Нет своего работающего процесса.")
 			return nil
 		}
 		m.stopChat()
@@ -234,7 +234,7 @@ func (m *model) handleRuntimeTick() tea.Cmd {
 		m.stopChat()
 		m.chat = nil
 		m.settingsLogin = ""
-		m.append("Процесс dsh завершился. /runtime — журнал и повторный запуск.")
+		m.append(tr("Процесс dsh завершился. /runtime — журнал и повторный запуск."))
 	}
 	return tea.Batch(runtimePoll(), connect)
 }
@@ -245,18 +245,18 @@ func (m *model) runtimeView(base string) string {
 	}
 	width, height := min(96, m.width-3), m.height-4
 	w := width - 4
-	title := map[string]string{"runtime": "Установка и процесс dsh", "updates": "Обновления и откат", "diagnostics": "Диагностика и уведомления"}[d.kind]
+	title := map[string]string{"runtime": tr("Установка и процесс dsh"), "updates": tr("Обновления и откат"), "diagnostics": tr("Диагностика и уведомления")}[d.kind]
 	trim := func(s string) string { return ansi.Truncate(clean(s), w, "…") }
-	lines := []string{heading.Render(title), trim(m.runtimeState.Status)}
+	lines := []string{heading().Render(title), trim(m.runtimeState.Status)}
 	actions := d.actions()
 	listH := min(len(actions), max(3, (height-10)/2))
 	start := max(0, min(d.index-listH/2, len(actions)-listH))
 	for i := start; i < start+listH; i++ {
-		lines = append(lines, selectedRow(actions[i].label, d.index == i, w))
+		lines = append(lines, selectedRow(tr(actions[i].label), d.index == i, w))
 	}
-	body := actions[d.index].hint + "\n" + m.runtimeState.Detail
+	body := tr(actions[d.index].hint) + "\n" + m.runtimeState.Detail
 	if d.kind == "updates" {
-		body = actions[d.index].hint + "\n" + m.runtimeState.Log + "\n" + m.runtimeState.Detail
+		body = tr(actions[d.index].hint) + "\n" + m.runtimeState.Log + "\n" + m.runtimeState.Detail
 	}
 	if m.runtimeState.Busy {
 		body = m.runtimeState.Log
@@ -276,7 +276,7 @@ func (m *model) runtimeView(base string) string {
 		state = d.note
 	}
 	if m.runtimeState.Busy {
-		state = "Выполняется… Ctrl+D — выйти с отменой операции."
+		state = tr("Выполняется… Ctrl+D — выйти с отменой операции.")
 	}
 	if d.editing {
 		d.input.Width = w - 3
@@ -284,13 +284,13 @@ func (m *model) runtimeView(base string) string {
 	} else {
 		lines = append(lines, trim(state))
 	}
-	hint := "↑/↓ выбор · Enter действие · PgUp/PgDn детали · Esc назад"
+	hint := tr("↑/↓ выбор · Enter действие · PgUp/PgDn детали · Esc назад")
 	if d.confirm {
-		hint = "Подтвердить: Enter · Отменить: Esc"
-		lines[len(lines)-1] = trim("Подтвердить: " + actions[d.index].label + " " + d.input.Value())
+		hint = tr("Подтвердить: Enter · Отменить: Esc")
+		lines[len(lines)-1] = trim(tr("Подтвердить: ") + tr(actions[d.index].label) + " " + d.input.Value())
 	}
 	if d.editing {
-		hint = "Введите значение · Enter далее · Esc отмена"
+		hint = tr("Введите значение · Enter далее · Esc отмена")
 	}
 	lines = append(lines, trim(hint))
 	// Fill the box deterministically at the minimum terminal size.

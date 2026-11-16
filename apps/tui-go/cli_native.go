@@ -19,21 +19,28 @@ import (
 )
 
 func run(args []string, out io.Writer) error {
+	activeEnglish.Store(false)
+	if path, err := clientPreferencesPath(); err == nil {
+		if prefs, err := readClientPreferences(path); err == nil {
+			activeEnglish.Store(prefs.Language == "en")
+		}
+	}
+
 	f := flag.NewFlagSet("dsh-launcher-tui-go", flag.ContinueOnError)
 	f.SetOutput(out)
-	helpFlag := f.Bool("help", false, "показать справку")
-	loginFlag := f.String("url", os.Getenv("DSH_TUI_URL"), "URL входа dsh для настроек и сессий")
-	sessionFlag := f.String("session", "", "идентификатор сессии dsh")
-	newFlag := f.Bool("new", false, "создать и подключить новую сессию dsh")
-	startFlag := f.Bool("start", false, "запустить локальный dsh с предложением установить маркет")
-	binFlag := f.String("dsh", "dsh", "путь к dsh")
-	profileFlag := f.String("profile", "web", "профиль запуска dsh")
-	portFlag := f.Int("port", 3080, "порт локального dsh")
-	cwdFlag := f.String("cwd", "", "рабочая папка dsh")
-	marketFlag := f.String("market", "ask", "предустановка маркета: ask, install или skip")
-	noMouseFlag := f.Bool("no-mouse", false, "отключить мышь для обычного выделения текста")
-	rollbackFlag := f.Bool("rollback-tui", false, "восстановить предыдущий TUI; работает также из .previous")
-	versionFlag := f.Bool("version", false, "показать версию")
+	helpFlag := f.Bool("help", false, tr("показать справку"))
+	loginFlag := f.String("url", os.Getenv("DSH_TUI_URL"), tr("URL входа dsh для настроек и сессий"))
+	sessionFlag := f.String("session", "", tr("идентификатор сессии dsh"))
+	newFlag := f.Bool("new", false, tr("создать и подключить новую сессию dsh"))
+	startFlag := f.Bool("start", false, tr("запустить локальный dsh с предложением установить маркет"))
+	binFlag := f.String("dsh", "dsh", tr("путь к dsh"))
+	profileFlag := f.String("profile", "web", tr("профиль запуска dsh"))
+	portFlag := f.Int("port", 3080, tr("порт локального dsh"))
+	cwdFlag := f.String("cwd", "", tr("рабочая папка dsh"))
+	marketFlag := f.String("market", "ask", tr("предустановка маркета: ask, install или skip"))
+	noMouseFlag := f.Bool("no-mouse", false, tr("отключить мышь для обычного выделения текста"))
+	rollbackFlag := f.Bool("rollback-tui", false, tr("восстановить предыдущий TUI; работает также из .previous"))
+	versionFlag := f.Bool("version", false, tr("показать версию"))
 	if err := f.Parse(args); err != nil {
 		return err
 	}
@@ -41,7 +48,7 @@ func run(args []string, out io.Writer) error {
 		return fmt.Errorf("unexpected positional arguments")
 	}
 	if *helpFlag {
-		fmt.Fprintln(out, "dsh-launcher-tui-go [--help] [--version] [--no-mouse] [--url URL]\nGo-прототип: F10 — меню, F4 — настройки TUI, Tab — разделы, Esc — чат. /help, /clear, /exit.\nНастройки dsh доступны через --url или DSH_TUI_URL.\nПодключение: --session ID или --new. Режимы: /mode default|plan|goal.\nЛокальный запуск: --start [--dsh PATH] [--profile web] [--port 3080] [--market ask|install|skip].\nС сессией dsh: Enter — отправить, F8 — остановить. Без подключения — локальный черновик.\n/runtime — установка/процесс · /updates — обновление/откат · /diagnostics — отчёт.\nNode.js нужен только бэкенду dsh.")
+		fmt.Fprintln(out, tr("dsh-launcher-tui-go [--help] [--version] [--no-mouse] [--url URL]\nGo-прототип: F10 — меню, F4 — настройки TUI, Tab — разделы, Esc — чат. /help, /clear, /exit.\nНастройки dsh доступны через --url или DSH_TUI_URL.\nПодключение: --session ID или --new. Режимы: /mode default|plan|goal.\nЛокальный запуск: --start [--dsh PATH] [--profile web] [--port 3080] [--market ask|install|skip].\nС сессией dsh: Enter — отправить, F8 — остановить. Без подключения — локальный черновик.\n/runtime — установка/процесс · /updates — обновление/откат · /diagnostics — отчёт.\nNode.js нужен только бэкенду dsh."))
 		return nil
 	}
 	if *versionFlag {
@@ -61,7 +68,7 @@ func run(args []string, out io.Writer) error {
 		if err = c.rollbackTUI(context.Background()); err != nil {
 			return err
 		}
-		fmt.Fprintln(out, "Предыдущий TUI восстановлен. Запустите его снова.")
+		fmt.Fprintln(out, tr("Предыдущий TUI восстановлен. Запустите его снова."))
 		return nil
 	}
 
@@ -125,7 +132,7 @@ func run(args []string, out io.Writer) error {
 		if _, err := exec.LookPath(control.selectedBin()); err != nil {
 			reader := bufio.NewReader(os.Stdin)
 			for {
-				fmt.Fprint(out, "dsh не найден. [i] Установить в каталог TUI · [q] Выйти: ")
+				fmt.Fprint(out, tr("dsh не найден. [i] Установить в каталог TUI · [q] Выйти: "))
 				type reply struct {
 					line string
 					err  error
@@ -143,7 +150,7 @@ func run(args []string, out io.Writer) error {
 					answer = r.line
 				}
 				if strings.TrimSpace(answer) != "i" {
-					return fmt.Errorf("установка отменена; запустите без --start для /runtime")
+					return fmt.Errorf("%s", tr("установка отменена; запустите без --start для /runtime"))
 				}
 				control.live = out
 				err = control.Execute(ctx, "install", "latest")
@@ -160,7 +167,7 @@ func run(args []string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(out, "Запуск dsh…")
+		fmt.Fprintln(out, tr("Запуск dsh…"))
 		owner, err := lockRuntime(control.root)
 		if err != nil {
 			return err
@@ -182,10 +189,10 @@ func run(args []string, out io.Writer) error {
 	m := newModel()
 	if controlErr == nil {
 		m.runtime = control
-		control.setStatus("Управление dsh готово.", "")
+		control.setStatus(tr("Управление dsh готово."), "")
 		m.runtimeState = control.Snapshot()
 	} else {
-		m.events = append(m.events, "Управление установкой недоступно: "+redactDiagnostic(controlErr.Error()))
+		m.events = append(m.events, tr("Управление установкой недоступно: ")+redactDiagnostic(controlErr.Error()))
 	}
 	defer m.stopChat()
 	m.mouseForcedOff = *noMouseFlag
@@ -193,11 +200,13 @@ func run(args []string, out io.Writer) error {
 		m.prefs, prefErr = readClientPreferences(path)
 		m.savePreferences = func(prefs clientPreferences) error { return writeClientPreferences(path, prefs) }
 		if prefErr != nil {
-			m.preferencesNote = "Ошибка чтения настроек; используются стандартные."
+			m.preferencesNote = tr("Ошибка чтения настроек; используются стандартные.")
 		}
 	} else {
-		m.preferencesNote = "Папка настроек недоступна; выбор не сохраняется."
+		m.preferencesNote = tr("Папка настроек недоступна; выбор не сохраняется.")
 	}
+	m.applyClientAppearance()
+	m.resize()
 	m.settingsLogin = *loginFlag
 	m.settingsContext = ctx
 	m.initialSession = *sessionFlag

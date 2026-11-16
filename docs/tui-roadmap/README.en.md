@@ -2,10 +2,40 @@
 
 [Русский](README.md) | **English**
 
-Baseline: November 16, 2026, Go client `0.2.0-preview.37`.
+Baseline: November 16, 2026, Go client `0.2.0-preview.38`.
 Terminal minimum: 80×24; recommended: 100×30.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.
+
+
+## Preview.38: remaining client work
+
+- TUI/GUI settings now include a searchable keyboard reference with contexts.
+- TUI settings persist dark/light theme, RU/EN language and sidebar visibility.
+  Session search filters titles/IDs locally; clicking selects a session.
+  Background session refresh no longer shifts the list or flashes a loading label.
+- `/account` uses actual DeepSeek account APIs: safe state, browser sign-in,
+  cancellation, profile/balance and sign-out after checking running account work.
+  Live identity-provider acceptance still needs an interactive browser login.
+- `/files` previews PNG/JPEG/GIF thumbnails, PDF text through `pdftotext`
+  (poppler-utils), and local HTML text without scripts. Full-file reads use the
+  typed binary carrier and size limits. Scanned PDFs require OCR elsewhere.
+- [Plugin SDK](../../packages/tui-plugin-sdk/README.en.md): versioned declarative
+  fields/actions/status/tables over existing commands. Two different examples
+  run through the same renderer against actual dsh.
+- `/packages`: direct installation, compatible version selection, explicit
+  approval of named blocked build scripts, backend rollback outcome.
+  `/operations` stores private receipts across client restarts. Unknown outcomes
+  require inventory checks and are never replayed automatically.
+- CI adds an actual-dsh/pnpm local-registry lifecycle suite (including failed
+  update preservation) and clean installs on Ubuntu 24.04/26.04 and Debian 13.
+
+Remaining external contracts: workspace file writes with revision checks,
+permanent session deletion with descendants/tasks/workspace semantics, and team
+mutation APIs. The pinned workspaceFiles service explicitly exposes no writes.
+Do not replace these contracts with direct edits of backend files. Other providers'
+OAuth and arbitrary web-only plugin workflows need their own supported adapters.
+First public TUI delivery is the final release check after green CI.
 
 ## Preview.37: stages 11–13
 
@@ -141,16 +171,16 @@ The check used an isolated temporary profile; credentials are not bundled.
 | Models and accounts | Catalog, session model/reasoning selection, provider creation, API keys | OAuth, specialized editors, remaining account flows | 5, partial |
 | dsh settings | Forms, multiline/JSON editor, local/backend validation, persistence, revision conflicts | Basic client increment complete; specialized editors are future improvements | 5 ✓ |
 | Agent modes | Editable goals, plan review, presets | Client increment implemented | 6 ✓ |
-| Workspace | Workspace selection, directory tree, paged text reads | File writes and richer document previews | 7, partial |
+| Workspace | Workspace selection, directory tree, paged text reads | File writes need API; PDF/HTML/thumbnails implemented | 7, partial |
 | Input and attachments | Multiline editor and receipt-based uploads | Basic input/attachments implemented | 7 ✓ |
-| Additional panes | Native interactive TTY | PDF/image/web documents and terminal equivalents of browser workflows | 7, partial |
-| Plugins | Inventory, shared schemas/commands, market/packages | Declarative contract/SDK and dedicated adapters | 8–9, partial |
-| Marketplace | Basic operations | Compatibility, build approvals, restart, rollback, pending operation recovery | 9 |
+| Additional panes | Native interactive TTY | Basic previews implemented; arbitrary web workflows need adapters | 7, partial |
+| Plugins | Inventory, shared schemas/commands, market/packages | Basic contract/SDK implemented; dedicated adapters depend on API | 8–9, partial |
+| Marketplace | Basic operations | Client implemented; additional adapters depend on API | 9 |
 | Subagents and jobs | Subagents, read-only team tasks, jobs, schedules; actual flows/reconnect | Team-task writes need API; plugin workflows belong to stages 8–9 | 10, client ✓ |
 | dsh installation/process | Discovery, install progress, logs, owned processes/retry | Baseline client work complete | 11 ✓ |
 | Updates and rollback | dsh/TUI check, install, backup/recovery | Public TUI delivery needs its first dedicated release | 12, client ✓ |
 | Diagnostics/notifications | Owned dsh log, masked report, notices/BEL | Baseline client work complete | 13 ✓ |
-| Appearance/interaction | Fixed theme/language, basic mouse | Themes, language, search, panes, shortcuts, improved mouse | 14 |
+| Appearance/interaction | Themes, RU/EN, search, sidebar, shortcut reference, mouse | Release delivery checks | 14 |
 
 ## Milestones and acceptance criteria
 
@@ -273,7 +303,7 @@ The check used an isolated temporary profile; credentials are not bundled.
 
 ## Shared TUI and GUI tasks
 
-- [ ] Add a keyboard-shortcut list to both clients’ settings: binding, action,
+- [x] Add a keyboard-shortcut list to both clients’ settings: binding, action,
   and scope. Reflect TUI/GUI differences and update the list with binding changes.
   Requested November 16, 2026.
 

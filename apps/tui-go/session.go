@@ -92,10 +92,10 @@ func readSession(ctx context.Context, api *dshAPI, id string) (*sessionView, err
 		return nil, err
 	}
 	if projection == nil {
-		return nil, errors.New("сессия не найдена")
+		return nil, errors.New(tr("сессия не найдена"))
 	}
 	if projection.Kind != "sequenced" {
-		return nil, errors.New("сессии нужна миграция; откройте её в dsh")
+		return nil, errors.New(tr("сессии нужна миграция; откройте её в dsh"))
 	}
 	view := &sessionView{ID: id, Address: sessionReadAddress{Kind: "session", SessionID: id}}
 	if raw := projection.Values["subagent"]; len(raw) > 0 && string(raw) != "null" {
@@ -103,7 +103,7 @@ func readSession(ctx context.Context, api *dshAPI, id string) (*sessionView, err
 			Mode string `json:"mode"`
 		}
 		if json.Unmarshal(raw, &identity) != nil {
-			return nil, errors.New("Не удалось прочитать адрес подагента.")
+			return nil, errors.New(tr("Не удалось прочитать адрес подагента."))
 		}
 		var list struct {
 			Items []struct {
@@ -132,7 +132,7 @@ func readSession(ctx context.Context, api *dshAPI, id string) (*sessionView, err
 			}
 		}
 		if !found {
-			return nil, errors.New("Родитель подагента недоступен; откройте его из каталога родителя.")
+			return nil, errors.New(tr("Родитель подагента недоступен; откройте его из каталога родителя."))
 		}
 	}
 	if data, ok := projection.Values["title"]; ok {
@@ -140,13 +140,13 @@ func readSession(ctx context.Context, api *dshAPI, id string) (*sessionView, err
 	}
 	if data, ok := projection.Values["plan"]; ok {
 		if json.Unmarshal(data, &view.Plan) != nil {
-			return nil, errors.New("неподдерживаемое состояние планирования")
+			return nil, errors.New(tr("неподдерживаемое состояние планирования"))
 		}
 	}
 	if data, ok := projection.Values["goal"]; ok {
 		view.GoalSupported = true
 		if json.Unmarshal(data, &view.Goal) != nil {
-			return nil, errors.New("неподдерживаемое состояние цели")
+			return nil, errors.New(tr("неподдерживаемое состояние цели"))
 		}
 	}
 	if data, ok := projection.Values["userQuestions"]; ok {
@@ -154,7 +154,7 @@ func readSession(ctx context.Context, api *dshAPI, id string) (*sessionView, err
 			Active []continuedQuestion `json:"active"`
 		}
 		if json.Unmarshal(data, &questions) != nil {
-			return nil, errors.New("неподдерживаемые вопросы сессии")
+			return nil, errors.New(tr("неподдерживаемые вопросы сессии"))
 		}
 		view.Questions = questions.Active
 	}
@@ -192,7 +192,7 @@ func executePlan(ctx context.Context, api *dshAPI, id string, active bool) error
 		return err
 	}
 	if execution == nil || execution.Result.Kind != "success" {
-		return errors.New("dsh не подтвердил команду планирования")
+		return errors.New(tr("dsh не подтвердил команду планирования"))
 	}
 	return nil
 }
@@ -203,12 +203,12 @@ func changeSessionMode(ctx context.Context, api *dshAPI, id, action, objective s
 		return nil, err
 	}
 	if current.Address.Kind == "subagent" {
-		return current, errors.New("Режим подагента задаётся его родителем.")
+		return current, errors.New(tr("Режим подагента задаётся его родителем."))
 	}
 	goalActive := current.Goal != nil && current.Goal.Goal.Phase == "active"
 	goalOp := func(operation string) error {
 		if current.Goal == nil {
-			return errors.New("в этой сессии нет цели")
+			return errors.New(tr("в этой сессии нет цели"))
 		}
 		ref := map[string]any{"id": current.Goal.Goal.ID, "revision": current.Goal.Goal.Revision}
 		return api.rpc(ctx, "goals/"+operation, map[string]any{"agentId": id, "ref": ref}, nil)
@@ -216,7 +216,7 @@ func changeSessionMode(ctx context.Context, api *dshAPI, id, action, objective s
 	switch action {
 	case "default", "plan":
 		if action == "plan" && current.Plan == nil {
-			return nil, errors.New("планирование недоступно в этой сессии")
+			return nil, errors.New(tr("планирование недоступно в этой сессии"))
 		}
 		if goalActive {
 			if err = goalOp("pause"); err != nil {
@@ -230,7 +230,7 @@ func changeSessionMode(ctx context.Context, api *dshAPI, id, action, objective s
 		}
 	case "goal", "resume":
 		if !current.GoalSupported {
-			return nil, errors.New("режим цели недоступен в этой сессии")
+			return nil, errors.New(tr("режим цели недоступен в этой сессии"))
 		}
 		if current.Plan != nil && (current.Plan.Active || current.Plan.Pending) {
 			if err = executePlan(ctx, api, id, false); err != nil {
@@ -241,17 +241,17 @@ func changeSessionMode(ctx context.Context, api *dshAPI, id, action, objective s
 				return nil, err
 			}
 			if next.Plan != nil && (next.Plan.Active || next.Plan.Pending) {
-				return next, errors.New("выход из планирования ожидает следующего шага; повторите запуск цели после переключения")
+				return next, errors.New(tr("выход из планирования ожидает следующего шага; повторите запуск цели после переключения"))
 			}
 		}
 		if action == "resume" {
 			err = goalOp("resume")
 		} else {
 			if strings.TrimSpace(objective) == "" {
-				return nil, errors.New("укажите цель: /goal <описание>")
+				return nil, errors.New(tr("укажите цель: /goal <описание>"))
 			}
 			if current.Goal != nil && current.Goal.Goal.Phase != "complete" {
-				return nil, errors.New("цель уже существует; используйте /goal resume, /goal pause или /goal clear")
+				return nil, errors.New(tr("цель уже существует; используйте /goal resume, /goal pause или /goal clear"))
 			}
 			err = api.rpc(ctx, "goals/create", map[string]any{"agentId": id, "request": map[string]any{"objective": objective}}, nil)
 		}
@@ -263,20 +263,20 @@ func changeSessionMode(ctx context.Context, api *dshAPI, id, action, objective s
 			return nil, err
 		}
 	default:
-		return nil, errors.New("неизвестный режим")
+		return nil, errors.New(tr("неизвестный режим"))
 	}
 	return readSession(ctx, api, id)
 }
 
 func (m *model) sessionOperation(action, value string) tea.Cmd {
 	if m.settingsLogin == "" {
-		m.append("Укажите URL входа dsh через --url или DSH_TUI_URL.")
+		m.append(tr("Укажите URL входа dsh через --url или DSH_TUI_URL."))
 		return nil
 	}
 	if m.sessionBusy {
 		if action != "refresh" {
 			if len(m.sessionQueue) >= 8 {
-				m.append("Очередь запросов dsh заполнена; повторите после завершения.")
+				m.append(tr("Очередь запросов dsh заполнена; повторите после завершения."))
 			} else {
 				m.sessionQueue = append(m.sessionQueue, sessionAction{action, value})
 			}
@@ -284,11 +284,11 @@ func (m *model) sessionOperation(action, value string) tea.Cmd {
 		return nil
 	}
 	if action != "new" && action != "connect" && action != "list" && m.session == nil {
-		m.append("Сначала подключите сессию: /session <id> или /new.")
+		m.append(tr("Сначала подключите сессию: /session <id> или /new."))
 		return nil
 	}
 	if m.session != nil && m.isSessionArchived(m.session.ID) && action != "refresh" && action != "connect" && action != "list" && action != "new" {
-		m.append("Сессия в архиве. /restore — восстановить.")
+		m.append(tr("Сессия в архиве. /restore — восстановить."))
 		return nil
 	}
 	m.sessionBusy = true
@@ -332,7 +332,7 @@ func (m *model) sessionOperation(action, value string) tea.Cmd {
 			}
 			id = created.ID
 			if id == "" {
-				result.err = errors.New("dsh не вернул идентификатор сессии")
+				result.err = errors.New(tr("dsh не вернул идентификатор сессии"))
 				return result
 			}
 		}
@@ -355,18 +355,18 @@ func (m *model) sessionTimer() tea.Cmd {
 }
 func (m *model) modeLabel() string {
 	if m.session == nil {
-		return "не подключён"
+		return tr("не подключён")
 	}
 	if m.sessionStale {
-		return "не подтверждён · ошибка связи"
+		return tr("не подтверждён · ошибка связи")
 	}
 	if m.session.Plan != nil && m.session.Plan.Active {
-		return "планирование"
+		return tr("планирование")
 	}
 	if m.session.Goal != nil && m.session.Goal.Goal.Phase == "active" {
-		return "цель"
+		return tr("цель")
 	}
-	return "обычный"
+	return tr("обычный")
 }
 func (m *model) chooseMode(mode string) tea.Cmd {
 	if mode == "goal" {
@@ -390,28 +390,34 @@ func (m *model) sessionRequestVisible() bool {
 
 func (m *model) sessionInfo() string {
 	width := max(1, m.viewport.Width)
-	lines := []string{heading.Render("Сессии dsh"), "Enter вход · F3 имя · Ctrl+B ветка", "Ctrl+X архив/возврат · a фильтр · r новые"}
+	m.sessionHits = nil
+	lines := []string{heading().Render(tr("Сессии dsh")), tr("Enter вход · F3 имя · Ctrl+B ветка"), tr("Ctrl+X архив/возврат · a фильтр · r новые")}
+	query := m.sessionQuery
+	if m.sessionSearching {
+		query = m.sessionSearch.View()
+	}
+	lines = append(lines, tr("Поиск / Ctrl+F: ")+query)
 	if m.session != nil {
-		lines = append(lines, ansi.Truncate("Текущая: "+clean(m.session.ID), width, "…"))
+		lines = append(lines, ansi.Truncate(tr("Текущая: ")+clean(m.session.ID), width, "…"))
 	}
 	if m.sessionRequestVisible() {
-		lines = append(lines, "", "Запрос dsh…")
+		lines = append(lines, "", tr("Запрос dsh…"))
 	}
 	if m.sessionError != "" {
-		lines = append(lines, "", "Ошибка: "+m.sessionError)
+		lines = append(lines, "", tr("Ошибка: ")+m.sessionError)
 	}
-	filter := "Активные сессии · a — показать архив"
+	filter := tr("Активные сессии · a — показать архив")
 	if m.showArchived {
-		filter = "Архив сессий · a — показать активные"
+		filter = tr("Архив сессий · a — показать активные")
 	}
 	lines = append(lines, "", filter)
 	if m.archive == nil || !m.archive.ready {
-		lines = append(lines, "Статус архива не подтверждён · подключение…")
+		lines = append(lines, tr("Статус архива не подтверждён · подключение…"))
 	}
 	for i, item := range m.visibleSessions() {
 		state := ""
 		if item.Running {
-			state = " · выполняется"
+			state = tr(" · выполняется")
 		}
 		prefix := "  "
 		if i == m.sessionListIndex {
@@ -423,47 +429,49 @@ func (m *model) sessionInfo() string {
 		} else {
 			name += " · " + clean(item.ID)
 		}
+		row := strings.Count(ansi.Hardwrap(clean(strings.Join(lines, "\n")), width, true), "\n") + 1
+		m.sessionHits = append(m.sessionHits, sessionHit{index: i, row: row})
 		lines = append(lines, ansi.Truncate(prefix+name+state, width, "…"))
 	}
 	if m.settingsLogin == "" {
-		lines = append(lines, "", "Сессии dsh недоступны без подключения.")
+		lines = append(lines, "", tr("Сессии dsh недоступны без подключения."))
 	}
 	return strings.Join(lines, "\n")
 }
 func (m *model) modeDescription() string {
-	label := "Режим: " + m.modeLabel()
+	label := tr("Режим: ") + m.modeLabel()
 	if m.session != nil && m.isSessionArchived(m.session.ID) {
-		label += "\nСессия в архиве. /restore — восстановить."
+		label += tr("\nСессия в архиве. /restore — восстановить.")
 	}
 	if m.session != nil {
 		if m.session.Running {
-			label += "\nАгент: выполняется"
+			label += tr("\nАгент: выполняется")
 		} else {
-			label += "\nАгент: не выполняется"
+			label += tr("\nАгент: не выполняется")
 		}
 		if len(m.session.PendingInput) > 0 {
-			label += "\nОжидается подтверждение/ответ. F7 — вопросы/разрешения · F8 — отмена."
+			label += tr("\nОжидается подтверждение/ответ. F7 — вопросы/разрешения · F8 — отмена.")
 			for _, kind := range m.session.PendingInput {
 				if kind == "question" {
-					label += "\nВопросы агента: F7 — открыть."
+					label += tr("\nВопросы агента: F7 — открыть.")
 				}
 			}
 		}
 	}
 	if m.sessionRequestVisible() {
-		label += " · запрос…"
+		label += tr(" · запрос…")
 	}
 	if m.session != nil && m.session.Plan != nil && m.session.Plan.Pending {
-		label += " · смена ожидает следующего шага"
+		label += tr(" · смена ожидает следующего шага")
 	}
 	if m.session != nil && m.session.Goal != nil {
-		label += "\nЦель: " + clean(m.session.Goal.Goal.Objective) + " · " + m.session.Goal.Goal.Phase + fmt.Sprintf(" · раундов %d", m.session.Goal.Rounds)
+		label += tr("\nЦель: ") + clean(m.session.Goal.Goal.Objective) + " · " + m.session.Goal.Goal.Phase + fmt.Sprintf(tr(" · раундов %d"), m.session.Goal.Rounds)
 		if m.session.Goal.Goal.BlockedReason != nil {
-			label += "\nПричина: " + clean(m.session.Goal.Goal.BlockedReason.Message)
+			label += tr("\nПричина: ") + clean(m.session.Goal.Goal.BlockedReason.Message)
 		}
 	}
 	if m.sessionError != "" {
-		label += "\nОшибка: " + m.sessionError
+		label += tr("\nОшибка: ") + m.sessionError
 	}
 	return label
 }

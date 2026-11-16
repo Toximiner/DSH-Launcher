@@ -17,20 +17,20 @@ func (m *model) openCredential() tea.Cmd {
 	}
 	row, ok := d.selection()
 	if !ok || nodeRole(row.node) != "credential-ref" {
-		d.note = "Ctrl+K доступен у поля ссылки на ключ (например apiKeyEnv)."
+		d.note = tr("Ctrl+K доступен у поля ссылки на ключ (например apiKeyEnv).")
 		return nil
 	}
 	if len(d.ops) > 0 {
-		d.note = "Сначала сохраните изменения настроек через F5."
+		d.note = tr("Сначала сохраните изменения настроек через F5.")
 		return nil
 	}
 	ref, _ := row.value.(string)
 	if !credentialRefPattern.MatchString(ref) {
-		d.note = "Сначала задайте и сохраните имя ключа в этом поле."
+		d.note = tr("Сначала задайте и сохраните имя ключа в этом поле.")
 		return nil
 	}
 	editor := textinput.New()
-	editor.Prompt = "Новый ключ: "
+	editor.Prompt = tr("Новый ключ: ")
 	editor.CharLimit = 16384
 	editor.EchoMode = textinput.EchoPassword
 	editor.EchoCharacter = '•'
@@ -56,7 +56,7 @@ func (m *model) openCredential() tea.Cmd {
 			}
 		}
 		if err != nil {
-			result.err = errors.New("Статус ключа недоступен. Закройте поле и повторите чтение.")
+			result.err = errors.New(tr("Статус ключа недоступен. Закройте поле и повторите чтение."))
 		}
 		return result
 	}
@@ -68,18 +68,18 @@ func (m *model) writeCredential() tea.Cmd {
 		return nil
 	}
 	if !field.info.Writable {
-		d.note = "Хранилище не разрешает запись этого ключа."
+		d.note = tr("Хранилище не разрешает запись этого ключа.")
 		return nil
 	}
 	value := field.editor.Value()
 	if value == "" || len(value) > 16384 || clean(value) != value || strings.ContainsAny(value, "\n\r\t") {
-		d.note = "Введите непустой однострочный ключ до 16 КиБ."
+		d.note = tr("Введите непустой однострочный ключ до 16 КиБ.")
 		return nil
 	}
 	field.editor.SetValue("")
 	d.busy, d.writing = true, true
 	d.serial++
-	d.note = "Запись нового ключа…"
+	d.note = tr("Запись нового ключа…")
 	serial, login, ref := d.serial, m.settingsLogin, field.ref
 	return func() tea.Msg {
 		result := settingsFormResult{dialog: d, serial: serial}
@@ -92,7 +92,7 @@ func (m *model) writeCredential() tea.Cmd {
 		}
 		value = ""
 		if err != nil {
-			result.err = errors.New("Запись ключа не подтверждена. Ввод очищен; Ctrl+R — перечитать, повтора нет.")
+			result.err = errors.New(tr("Запись ключа не подтверждена. Ввод очищен; Ctrl+R — перечитать, повтора нет."))
 		} else {
 			result.credentialSaved = true
 		}

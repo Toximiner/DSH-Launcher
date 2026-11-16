@@ -56,22 +56,22 @@ type goalDialogResult struct {
 func readLiveGoal(ctx context.Context, api *dshAPI, id string) (*liveGoal, error) {
 	var goal *liveGoal
 	if err := api.rpc(ctx, "goals/get", map[string]any{"agentId": id}, &goal); err != nil {
-		return nil, errors.New("Состояние цели недоступно. F5 — обновить.")
+		return nil, errors.New(tr("Состояние цели недоступно. F5 — обновить."))
 	}
 	if goal != nil {
 		validPhase := goal.Phase == "active" || goal.Phase == "paused" || goal.Phase == "blocked" || goal.Phase == "complete"
 		if goal.ID == "" || goal.Revision < 1 || !validPhase || goal.MaxRounds < 1 || goal.MaxRounds > maxGoalRounds || goal.Rounds < 0 || len(goal.Objective) > goalObjectiveLimit || goal.Activation != "armed" && goal.Activation != "disarmed" {
-			return nil, errors.New("Состояние цели не поддержано или слишком велико.")
+			return nil, errors.New(tr("Состояние цели не поддержано или слишком велико."))
 		}
 		if goal.BlockedReason != nil && len(goal.BlockedReason.Message) > goalObjectiveLimit {
-			return nil, errors.New("Описание блокировки слишком велико.")
+			return nil, errors.New(tr("Описание блокировки слишком велико."))
 		}
 	}
 	return goal, nil
 }
 func (m *model) openGoal() tea.Cmd {
 	if m.session == nil || m.chat == nil || !m.chat.ready || m.chatSessionChanging() {
-		m.append("Для просмотра цели подключитесь к сессии dsh.")
+		m.append(tr("Для просмотра цели подключитесь к сессии dsh."))
 		return nil
 	}
 	ctx, cancel := context.WithCancel(m.chat.ctx)
@@ -100,7 +100,7 @@ func (m *model) loadGoal() tea.Cmd {
 	}
 	d.busy = true
 	d.serial++
-	d.note = "Чтение цели dsh…"
+	d.note = tr("Чтение цели dsh…")
 	serial, login := d.serial, m.settingsLogin
 	return func() tea.Msg {
 		result := goalDialogResult{dialog: d, serial: serial}
@@ -111,7 +111,7 @@ func (m *model) loadGoal() tea.Cmd {
 			defer api.close()
 			result.goal, result.err = readLiveGoal(ctx, api, d.id)
 		} else {
-			result.err = errors.New("Состояние цели недоступно. Ctrl+R — перечитать.")
+			result.err = errors.New(tr("Состояние цели недоступно. Ctrl+R — перечитать."))
 		}
 		return result
 	}
@@ -131,18 +131,18 @@ func (m *model) editGoal() tea.Cmd {
 	editor.Prompt = "> "
 	editor.SetValue(d.current.Objective)
 	if editor.Value() != d.current.Objective {
-		d.note = "Описание нельзя открыть без преобразования."
+		d.note = tr("Описание нельзя открыть без преобразования.")
 		return nil
 	}
 	cap := textinput.New()
-	cap.Prompt = "Лимит раундов: "
+	cap.Prompt = tr("Лимит раундов: ")
 	cap.CharLimit = 16
 	cap.SetValue(strconv.FormatInt(d.current.MaxRounds, 10))
 	d.draft = &goalDraft{base: *d.current, objective: editor, cap: cap}
 	d.editing = true
-	d.note = "F5 — сохранить описание и лимит; фаза цели сохраняется."
+	d.note = tr("F5 — сохранить описание и лимит; фаза цели сохраняется.")
 	if d.current.Activation == "armed" {
-		d.note += " Автопродолжение уже включено."
+		d.note += tr(" Автопродолжение уже включено.")
 	}
 	return d.focusField()
 }
@@ -162,11 +162,11 @@ func (m *model) saveGoal() tea.Cmd {
 	objective := strings.TrimSpace(d.draft.objective.Value())
 	rounds, err := strconv.ParseInt(d.draft.cap.Value(), 10, 64)
 	if objective == "" || len(objective) > goalObjectiveLimit || clean(objective) != objective {
-		d.note = "Введите непустое описание до 64 КиБ без управляющих символов."
+		d.note = tr("Введите непустое описание до 64 КиБ без управляющих символов.")
 		return nil
 	}
 	if err != nil || rounds < 1 || rounds > maxGoalRounds {
-		d.note = "Лимит — целое число от 1 до 9007199254740991."
+		d.note = tr("Лимит — целое число от 1 до 9007199254740991.")
 		return nil
 	}
 	base := d.draft.base
@@ -180,12 +180,12 @@ func (m *model) saveGoal() tea.Cmd {
 	if len(request) == 0 {
 		d.editing = false
 		d.draft = nil
-		d.note = "Изменений нет; запись не нужна."
+		d.note = tr("Изменений нет; запись не нужна.")
 		return nil
 	}
 	d.busy, d.writing = true, true
 	d.serial++
-	d.note = "Сохранение цели…"
+	d.note = tr("Сохранение цели…")
 	serial, login := d.serial, m.settingsLogin
 	return func() tea.Msg {
 		result := goalDialogResult{dialog: d, serial: serial}
@@ -200,7 +200,7 @@ func (m *model) saveGoal() tea.Cmd {
 			}
 		}
 		if err != nil {
-			result.err = errors.New("Запись цели не подтверждена; черновик сохранён. Ctrl+R — перечитать, повтора нет.")
+			result.err = errors.New(tr("Запись цели не подтверждена; черновик сохранён. Ctrl+R — перечитать, повтора нет."))
 		} else {
 			result.saved = true
 		}
@@ -230,13 +230,13 @@ func (m *model) handleGoalDialog(result goalDialogResult) {
 	if result.saved {
 		d.editing = false
 		d.draft = nil
-		d.note = "Изменения цели подтверждены dsh."
+		d.note = tr("Изменения цели подтверждены dsh.")
 	} else {
-		d.note = "Снимок цели обновлён. F3 — редактировать · F5 — обновить."
+		d.note = tr("Снимок цели обновлён. F3 — редактировать · F5 — обновить.")
 		if d.draft != nil && (d.current == nil || d.current.ID != d.draft.base.ID || d.current.Revision != d.draft.base.Revision) {
 			d.conflict = true
 			d.editing = false
-			d.note = "Цель изменилась. Свежие данные показаны ниже. Ctrl+B — продолжить черновик с этой ревизией; Esc — отменить."
+			d.note = tr("Цель изменилась. Свежие данные показаны ниже. Ctrl+B — продолжить черновик с этой ревизией; Esc — отменить.")
 		}
 	}
 	d.viewport.GotoTop()

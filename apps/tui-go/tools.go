@@ -29,7 +29,7 @@ func boundedToolText(text string, limit int) string {
 	if len(text) <= limit {
 		return text
 	}
-	return strings.ToValidUTF8(text[:limit], "") + "\n[Вывод обрезан по ограничению TUI]"
+	return strings.ToValidUTF8(text[:limit], "") + tr("\n[Вывод обрезан по ограничению TUI]")
 }
 func (message chatMessage) byteSize() int {
 	size := len(message.text)
@@ -40,10 +40,10 @@ func (message chatMessage) byteSize() int {
 }
 func (m *model) toolView(t *chatTool) string { return m.toolViewWidth(t, m.viewport.Width) }
 func (m *model) toolViewWidth(t *chatTool, width int) string {
-	labels := map[string]string{"running": "◌ Выполняется", "done": "✓ Готово", "error": "! Ошибка", "stopped": "■ Остановлено", "unknown": "? Результат не получен"}
+	labels := map[string]string{"running": tr("◌ Выполняется"), "done": tr("✓ Готово"), "error": tr("! Ошибка"), "stopped": tr("■ Остановлено"), "unknown": tr("? Результат не получен")}
 	state := labels[t.State]
 	if t.State == "running" && !m.chat.ready {
-		state = "? Нет связи · состояние уточняется"
+		state = tr("? Нет связи · состояние уточняется")
 	}
 	if t.State != "error" && t.State != "stopped" && m.approvals != nil {
 		for _, request := range m.approvals.requests {
@@ -52,9 +52,9 @@ func (m *model) toolViewWidth(t *chatTool, width int) string {
 				callID = request.Request.Wait.CallID
 			}
 			if callID == t.ID {
-				state = "◌ Ожидает разрешения · F7"
+				state = tr("◌ Ожидает разрешения · F7")
 				if request.Event == "user-questions/request" {
-					state = "◌ Ожидает ответа · F7"
+					state = tr("◌ Ожидает ответа · F7")
 				}
 				break
 			}
@@ -62,21 +62,21 @@ func (m *model) toolViewWidth(t *chatTool, width int) string {
 	}
 	name := t.Name
 	if name == "" {
-		name = "Инструмент · вызов вне окна истории"
+		name = tr("Инструмент · вызов вне окна истории")
 	}
 	indicator := "▸"
 	if m.chat.expandedTools[t.ID] {
 		indicator = "▾"
 	}
 	label := indicator + " " + name + " · " + state
-	style := accent.Bold(true)
+	style := accent().Bold(true)
 	if m.toolFocused && m.chat.selectedTool == t.ID {
 		label = "> " + label
-		style = heading
+		style = heading()
 	}
 	lines := []string{style.Render(ansi.Truncate(label, max(1, width), "…"))}
 	if t.Nested {
-		lines = append(lines, muted.Render(ansi.Truncate(m.nestedRelation(t), max(1, width), "…")))
+		lines = append(lines, muted().Render(ansi.Truncate(m.nestedRelation(t), max(1, width), "…")))
 	}
 	args := t.Arguments
 	var pretty bytes.Buffer
@@ -85,20 +85,20 @@ func (m *model) toolViewWidth(t *chatTool, width int) string {
 	}
 	if args != "" {
 		if m.chat.expandedTools[t.ID] {
-			lines = append(lines, muted.Render("Аргументы:"), args)
+			lines = append(lines, muted().Render(tr("Аргументы:")), args)
 		} else {
-			lines = append(lines, muted.Render(ansi.Truncate("  "+strings.Join(strings.Fields(args), " "), max(1, width), "…")))
+			lines = append(lines, muted().Render(ansi.Truncate("  "+strings.Join(strings.Fields(args), " "), max(1, width), "…")))
 		}
 	}
 	if t.ErrorCode != "" {
-		lines = append(lines, "Код ошибки: "+t.ErrorCode)
+		lines = append(lines, tr("Код ошибки: ")+t.ErrorCode)
 	}
 	result := t.Result
 	if t.State == "running" {
 		var notice string
 		result, notice = m.liveToolOutput(t)
 		if notice != "" {
-			lines = append(lines, muted.Render(notice))
+			lines = append(lines, muted().Render(notice))
 		}
 	}
 	if result != "" {
@@ -106,18 +106,18 @@ func (m *model) toolViewWidth(t *chatTool, width int) string {
 			wrapped := strings.Split(ansi.Hardwrap(strings.TrimRight(result, "\n"), max(1, width), true), "\n")
 			if len(wrapped) > 3 {
 				if t.State == "running" {
-					result = "… [Раскрыть]\n" + strings.Join(wrapped[len(wrapped)-3:], "\n")
+					result = tr("… [Раскрыть]\n") + strings.Join(wrapped[len(wrapped)-3:], "\n")
 				} else {
-					result = strings.Join(wrapped[:3], "\n") + "\n… [Раскрыть]"
+					result = strings.Join(wrapped[:3], "\n") + tr("\n… [Раскрыть]")
 				}
 			}
 		}
 		lines = append(lines, result)
 	} else if t.State == "done" {
-		lines = append(lines, muted.Render("Без текстового результата."))
+		lines = append(lines, muted().Render(tr("Без текстового результата.")))
 	}
 	if m.chat.expandedTools[t.ID] {
-		lines = append(lines, muted.Render("[Свернуть] · Enter / клик"))
+		lines = append(lines, muted().Render(tr("[Свернуть] · Enter / клик")))
 	}
 	return strings.Join(lines, "\n")
 }

@@ -25,12 +25,12 @@ type archiveUpdate struct {
 
 func archiveIDs(ids []string) (map[string]bool, error) {
 	if ids == nil || len(ids) > 100000 {
-		return nil, errors.New("неподдерживаемый список архива")
+		return nil, errors.New(tr("неподдерживаемый список архива"))
 	}
 	result := make(map[string]bool, len(ids))
 	for _, id := range ids {
 		if id == "" || result[id] {
-			return nil, errors.New("некорректный список архива")
+			return nil, errors.New(tr("некорректный список архива"))
 		}
 		result[id] = true
 	}
@@ -46,10 +46,10 @@ func parseArchiveFrame(raw json.RawMessage, baseline bool) (map[string]bool, boo
 		IDs []string `json:"archivedSessionIds"`
 	}
 	if json.Unmarshal(raw, &frame) != nil {
-		return nil, false, errors.New("некорректное состояние архива")
+		return nil, false, errors.New(tr("некорректное состояние архива"))
 	}
 	if !baseline && frame.Type != "baseline" {
-		return nil, false, errors.New("нет начального состояния архива")
+		return nil, false, errors.New(tr("нет начального состояния архива"))
 	}
 	switch frame.Type {
 	case "baseline", "replace":
@@ -61,7 +61,7 @@ func parseArchiveFrame(raw json.RawMessage, baseline bool) (map[string]bool, boo
 	case "upsert", "remove", "order", "pinned":
 		return nil, false, nil
 	default:
-		return nil, false, errors.New("неизвестное состояние архива")
+		return nil, false, errors.New(tr("неизвестное состояние архива"))
 	}
 }
 
@@ -110,12 +110,9 @@ func (m *model) handleArchiveUpdate(update archiveUpdate) tea.Cmd {
 }
 func (m *model) isSessionArchived(id string) bool { return m.archive != nil && m.archive.ids[id] }
 func (m *model) visibleSessions() []sessionItem {
-	if m.archive == nil {
-		return m.sessionItems
-	}
 	var items []sessionItem
 	for _, item := range m.sessionItems {
-		if m.isSessionArchived(item.ID) == m.showArchived {
+		if (m.archive == nil || m.isSessionArchived(item.ID) == m.showArchived) && (m.sessionQuery == "" || strings.Contains(strings.ToLower(item.ID+" "+item.Projections.Values.Title), strings.ToLower(m.sessionQuery))) {
 			items = append(items, item)
 		}
 	}

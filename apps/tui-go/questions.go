@@ -59,29 +59,29 @@ type questionForm struct {
 
 func validateQuestions(questions []userQuestion) error {
 	if len(questions) == 0 || len(questions) > 32 {
-		return errors.New("Поддерживается от 1 до 32 вопросов в запросе.")
+		return errors.New(tr("Поддерживается от 1 до 32 вопросов в запросе."))
 	}
 	ids := make(map[string]bool)
 	size := 0
 	for _, q := range questions {
 		if q.ID == "" || len(q.ID) > 256 || ids[q.ID] {
-			return errors.New("Некорректные идентификаторы вопросов.")
+			return errors.New(tr("Некорректные идентификаторы вопросов."))
 		}
 		ids[q.ID] = true
 		if len(q.Options) > 64 {
-			return errors.New("В одном вопросе поддерживается до 64 вариантов.")
+			return errors.New(tr("В одном вопросе поддерживается до 64 вариантов."))
 		}
 		labels := make(map[string]bool)
 		for _, o := range q.Options {
 			if o.Label == "" || len(o.Label) > 4096 || labels[o.Label] {
-				return errors.New("Некорректные варианты ответа.")
+				return errors.New(tr("Некорректные варианты ответа."))
 			}
 			labels[o.Label] = true
 			size += len(o.Label) + len(o.Description)
 		}
 		size += len(q.Question) + len(q.Detail) + len(q.Header) + len(q.Intent)
 		if size > chatTextLimit {
-			return errors.New("Вопросы превышают ограничение размера TUI.")
+			return errors.New(tr("Вопросы превышают ограничение размера TUI."))
 		}
 	}
 	return nil
@@ -105,7 +105,7 @@ func (m *model) prepareQuestion(request approvalFrame) *questionForm {
 			input.CharLimit = 65536
 			input.ShowLineNumbers = false
 			input.Prompt = "> "
-			input.Placeholder = "Свой ответ…"
+			input.Placeholder = tr("Свой ответ…")
 			input.SetHeight(3)
 			input.Blur()
 			f.drafts = append(f.drafts, questionDraft{selected: make(map[int]bool), custom: input})
@@ -201,7 +201,7 @@ func (m *model) answerQuestion() tea.Cmd {
 			if len(a.Selected) == 0 && a.Custom == "" {
 				f.index = i
 				f.cursor = -1
-				f.err = "Ответьте на вопрос или нажмите «Пропуск»."
+				f.err = tr("Ответьте на вопрос или нажмите «Пропуск».")
 				s.viewport.GotoTop()
 				return nil
 			}
@@ -210,7 +210,7 @@ func (m *model) answerQuestion() tea.Cmd {
 	}
 	id, epoch, generation, reply := s.requests[0].ID, s.epoch, s.generation, s.reply
 	s.busy = true
-	s.note = "Отправка ответов…"
+	s.note = tr("Отправка ответов…")
 	f.err = ""
 	return func() tea.Msg {
 		return approvalAnswerResult{epoch: epoch, generation: generation, id: id, err: reply(id, batch)}
@@ -297,7 +297,7 @@ func (m *model) questionKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 func questionButtons(inner int) string {
-	return lipgloss.NewStyle().Width(5).Render("[←]") + lipgloss.NewStyle().Width(5).Render("[→]") + lipgloss.NewStyle().Width(11).Render("[Пропуск]") + "[Ответить]"
+	return lipgloss.NewStyle().Width(5).Render("[←]") + lipgloss.NewStyle().Width(5).Render("[→]") + lipgloss.NewStyle().Width(11).Render(tr("[Пропуск]")) + tr("[Ответить]")
 }
 func (m *model) questionView(base string) string {
 	s := m.approvals
@@ -306,15 +306,15 @@ func (m *model) questionView(base string) string {
 	inner := box.width - 4
 	s.viewport.Width = inner
 	s.viewport.Height = max(1, box.height-11)
-	title, progress, body := "Вопрос агента", "", ""
+	title, progress, body := tr("Вопрос агента"), "", ""
 	if !f.invalid {
-		progress = fmt.Sprintf("Вопрос %d/%d · ", f.index+1, len(f.drafts))
+		progress = fmt.Sprintf(tr("Вопрос %d/%d · "), f.index+1, len(f.drafts))
 		if len(q.Options) == 0 {
-			progress += "Свободный ответ"
+			progress += tr("Свободный ответ")
 		} else if q.MultiSelect {
-			progress += "Выбор нескольких"
+			progress += tr("Выбор нескольких")
 		} else {
-			progress += "Выбор одного"
+			progress += tr("Выбор одного")
 		}
 		body = clean(q.Header) + "\n" + clean(q.Question)
 		if len(q.Intent) > 0 {
@@ -323,9 +323,9 @@ func (m *model) questionView(base string) string {
 			}
 			if json.Unmarshal(q.Intent, &intent) == nil {
 				if intent.Kind == "approval" {
-					body += "\nПодтверждение действия"
+					body += tr("\nПодтверждение действия")
 				} else if intent.Kind == "plan-review" {
-					body += "\nСогласование плана"
+					body += tr("\nСогласование плана")
 				}
 			}
 		}
@@ -366,26 +366,26 @@ func (m *model) questionView(base string) string {
 		}
 		f.reveal = false
 	}
-	label := "Свой ответ · Tab — выбрать поле"
+	label := tr("Свой ответ · Tab — выбрать поле")
 	editor := strings.Repeat("\n", 2)
 	if d != nil {
 		d.custom.SetWidth(inner)
 		d.custom.SetHeight(3)
 		editor = d.custom.View()
 		if f.cursor == len(q.Options) {
-			label = "Свой ответ · Enter — новая строка"
+			label = tr("Свой ответ · Enter — новая строка")
 		}
 	}
 	note := s.note
 	if note == "" {
-		note = "F5 — отправить все ответы"
+		note = tr("F5 — отправить все ответы")
 	}
 	if f.err != "" {
 		note = f.err
 	} else if d != nil && d.skipped {
-		note = "Вопрос пропущен. F5 — отправить."
+		note = tr("Вопрос пропущен. F5 — отправить.")
 	}
-	lines := []string{heading.Render(title), muted.Render(ansi.Truncate(progress, inner, "…")), s.viewport.View(), muted.Render(ansi.Truncate(label, inner, "…")), editor, ansi.Truncate(note, inner, "…"), questionButtons(inner), muted.Render(ansi.Truncate("Tab выбор · Enter отметить · F5 ответ", inner, "…"))}
+	lines := []string{heading().Render(title), muted().Render(ansi.Truncate(progress, inner, "…")), s.viewport.View(), muted().Render(ansi.Truncate(label, inner, "…")), editor, ansi.Truncate(note, inner, "…"), questionButtons(inner), muted().Render(ansi.Truncate(tr("Tab выбор · Enter отметить · F5 ответ"), inner, "…"))}
 	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#79c0ff"), box.x, box.y, m.width-1)
 }
 func (m *model) questionMouse(msg tea.MouseMsg) tea.Cmd {
@@ -510,7 +510,7 @@ func questionReplyText(text string) string {
 	if json.Unmarshal([]byte(text), &batch) != nil || len(batch.Answers) == 0 {
 		return text
 	}
-	lines := []string{"Ответы пользователя:"}
+	lines := []string{tr("Ответы пользователя:")}
 	for _, a := range batch.Answers {
 		values := append([]string{}, a.Selected...)
 		if a.Custom != "" {
@@ -518,7 +518,7 @@ func questionReplyText(text string) string {
 		}
 		value := strings.Join(values, ", ")
 		if value == "" {
-			value = "Пропущен"
+			value = tr("Пропущен")
 		}
 		lines = append(lines, clean(a.ID)+": "+clean(value))
 	}

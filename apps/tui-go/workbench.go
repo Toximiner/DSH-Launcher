@@ -28,6 +28,9 @@ type benchAction struct {
 }
 type workbench struct {
 	lastResult                               string
+	pendingBuilds                            []string
+	pendingSpec                              string
+	pluginPanel                              *pluginPanel
 	documentOwner                            string
 	fileBody                                 string
 	ctx                                      context.Context
@@ -47,15 +50,18 @@ type workbench struct {
 }
 type benchTerminalDone struct{ err error }
 type benchResult struct {
-	feedback string
-	dialog   *workbench
-	serial   int
-	rows     []benchRow
-	document string
-	fileEOF  bool
-	err      error
-	action   bool
-	connect  string
+	feedback      string
+	pluginPanel   *pluginPanel
+	pendingBuilds []string
+	pendingSpec   string
+	dialog        *workbench
+	serial        int
+	rows          []benchRow
+	document      string
+	fileEOF       bool
+	err           error
+	action        bool
+	connect       string
 }
 
 func prettyValue(v any) string                      { b, _ := json.MarshalIndent(v, "", "  "); return string(b) }
@@ -69,18 +75,18 @@ func projectionValues(ctx context.Context, api *dshAPI, id string) (map[string]a
 	}
 	err := api.rpc(ctx, "session/projections", map[string]any{"request": map[string]any{"sessionId": id}}, &p)
 	if err != nil || p.Kind != "sequenced" {
-		return nil, errors.New("Не удалось прочитать сессию.")
+		return nil, errors.New(tr("Не удалось прочитать сессию."))
 	}
 	return p.Values, nil
 }
 func (m *model) openWorkbench(kind string) tea.Cmd {
 	if m.chat == nil || m.session == nil || !m.chat.ready || m.chatSessionChanging() {
-		m.append("Подключите сессию dsh.")
+		m.append(tr("Подключите сессию dsh."))
 		return nil
 	}
 	ctx, cancel := context.WithCancel(m.chat.ctx)
 	search := textinput.New()
-	search.Prompt = "Поиск: "
+	search.Prompt = tr("Поиск: ")
 	search.CharLimit = 128
 	d := &workbench{ctx: ctx, cancel: cancel, id: m.session.ID, epoch: m.chat.epoch, kind: kind, editor: textarea.New(), focused: m.input.Focused(), search: search, view: viewport.New(1, 1), fileOffset: 1}
 	m.workbench = d
@@ -125,6 +131,10 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 		rows = append(rows, benchRow{id, clean(title), clean(body), data})
 	}
 	switch d.kind {
+	case "account":
+		rows, err = readAccount(ctx, api)
+	case "operations":
+		rows, err = packageReceipts(api.origin)
 	case "workspaces":
 		raw, e := firstBenchFrame(ctx, api, "workspace/follow", map[string]any{})
 		err = e
@@ -134,8 +144,29 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 			} else {
 				for _, v := range arrayValue(objectValue(objectValue(value)["value"])["items"]) {
 					r := objectValue(v)
-					add(stringValue(r, "workspaceId"), stringValue(r, "title"), fmt.Sprintf("Папка: %v\nСессии: %v\nCtrl+N — новая сессия здесь. F3 — новая сессия в другой папке.", r["path"], r["sessionIds"]), r)
+					add(stringValue(r, "workspaceId"), stringValue(r, "title"), fmt.Sprintf(tr("Папка: %v\nСессии: %v\nCtrl+N — новая сессия здесь. F3 — новая сессия в другой папке."), r["path"], r["sessionIds"]), r)
 				}
+			}
+		}
+	case "package-versions":
+		err = api.rpc(ctx, "pluginManager/listVersions", map[string]any{"name": d.location}, &value)
+		if err == nil {
+			listing := objectValue(value)
+			if listing["status"] != "listed" {
+				return nil, "", false, errors.New(tr("Не удалось получить версии пакета; F5 повторить."))
+			}
+			for _, item := range arrayValue(listing["versions"]) {
+				v := objectValue(item)
+				v["name"] = d.location
+				v["registry"] = listing["registry"]
+				title := stringValue(v, "version")
+				if v["incompatible"] != nil {
+					title += tr(" · несовместима")
+				}
+				if v["bundle"] != true {
+					title += tr(" · не пакет dsh")
+				}
+				add(stringValue(v, "version"), title, prettyValue(v), v)
 			}
 		}
 	case "packages":
@@ -154,10 +185,10 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 				id := stringValue(r, "id")
 				title := id + " · " + stringValue(r, "name")
 				if r["isDefault"] == true {
-					title += " · по умолчанию"
+					title += tr(" · по умолчанию")
 				}
 				if stringValue(r, "broken") != "" {
-					title += " · недоступен"
+					title += tr(" · недоступен")
 				}
 				add(id, title, stringValue(r, "description"), r)
 			}
@@ -166,7 +197,7 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 			p, e := projectionValues(ctx, api, d.id)
 			err = e
 			if e == nil {
-				return rows, "Текущий пресет: " + fmt.Sprint(p["agentPreset"]) + "\nВыбор для текущей сессии разрешён dsh только до первого хода.\nCtrl+N — новая сессия с выбранным пресетом.", false, nil
+				return rows, tr("Текущий пресет: ") + fmt.Sprint(p["agentPreset"]) + tr("\nВыбор для текущей сессии разрешён dsh только до первого хода.\nCtrl+N — новая сессия с выбранным пресетом."), false, nil
 			}
 		}
 	case "commands":
@@ -184,11 +215,15 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 			for _, v := range arrayValue(objectValue(value)["entries"]) {
 				r := objectValue(v)
 				id := stringValue(r, "entryId")
-				add(id, stringValue(r, "moduleName")+" · "+fmt.Sprint(r["fiberPhase"]), fmt.Sprintf("ID: %s\nВключён: %v\nСостояние: %v\n\nF4 — настройки dsh по схемам.\n/commands — доступные команды плагинов.\n/market — установка и обновление.\nВеб-экраны требуют отдельного адаптера.", id, r["enabled"], r["fiberPhase"]), r)
+				add(id, stringValue(r, "moduleName")+" · "+fmt.Sprint(r["fiberPhase"]), fmt.Sprintf(tr("ID: %s\nВключён: %v\nСостояние: %v\n\nF4 — настройки dsh по схемам.\n/commands — доступные команды плагинов.\n/market — установка и обновление.\nВеб-экраны требуют отдельного адаптера."), id, r["enabled"], r["fiberPhase"]), r)
 			}
 		}
 	case "files":
 		if d.document != "" {
+			if documentPreviewKind(d.document) != "" {
+				text, err := readDocumentPreview(ctx, api, d.id, d.document)
+				return nil, text, true, err
+			}
 			var file struct {
 				Text          string `json:"text"`
 				Offset, Lines int
@@ -197,26 +232,26 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 			}
 			err = api.rpc(ctx, "workspaceFiles/read", map[string]any{"workspaceFileScopeId": d.id, "path": d.document, "range": map[string]any{"offset": d.fileOffset, "limit": 200}}, &file)
 			if err == nil {
-				return nil, fmt.Sprintf("%s · строки %d–%d · версия %s\n\n%s", d.document, file.Offset, file.Offset+file.Lines-1, file.Version, file.Text), file.EOF, nil
+				return nil, fmt.Sprintf(tr("%s · строки %d–%d · версия %s\n\n%s"), d.document, file.Offset, file.Offset+file.Lines-1, file.Version, file.Text), file.EOF, nil
 			}
 		} else {
 			err = api.rpc(ctx, "workspaceFiles/list", map[string]any{"workspaceFileScopeId": d.id, "path": path.Join(".", d.location)}, &value)
 			if err == nil {
 				r := objectValue(value)
 				if r["truncated"] == true {
-					return nil, "", false, errors.New("Каталог превышает лимит dsh; сузьте путь.")
+					return nil, "", false, errors.New(tr("Каталог превышает лимит dsh; сузьте путь."))
 				}
 				for _, v := range arrayValue(r["entries"]) {
 					entry := objectValue(v)
 					name := stringValue(entry, "name")
 					if name == "" || path.Base(name) != name || name == "." || name == ".." {
-						return nil, "", false, errors.New("Неподдерживаемое имя файла.")
+						return nil, "", false, errors.New(tr("Неподдерживаемое имя файла."))
 					}
 					label := name
 					if entry["type"] == "directory" {
 						label += "/"
 					}
-					add(path.Join(d.location, name), label, fmt.Sprintf("Тип: %v · байты: %v", entry["type"], entry["size"]), entry)
+					add(path.Join(d.location, name), label, fmt.Sprintf(tr("Тип: %v · байты: %v"), entry["type"], entry["size"]), entry)
 				}
 			}
 		}
@@ -229,18 +264,18 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 		err = e
 		if err == nil {
 			if json.Unmarshal(raw, &value) != nil {
-				err = errors.New("Некорректный список заданий.")
+				err = errors.New(tr("Некорректный список заданий."))
 			} else {
 				for _, v := range arrayValue(objectValue(value)["jobs"]) {
 					r := objectValue(v)
 					owner := stringValue(r, "owner")
 					if owner != "" && owner != d.id {
-						return nil, "", false, errors.New("Список содержит задание другой сессии; F5 перечитать.")
+						return nil, "", false, errors.New(tr("Список содержит задание другой сессии; F5 перечитать."))
 					}
 					if owner == "" {
-						owner = "Общее задание Host"
+						owner = tr("Общее задание Host")
 					}
-					add(stringValue(r, "id"), stringValue(r, "label")+" · "+stringValue(r, "status"), fmt.Sprintf("Тип: %s\nСостояние: %s\nВладелец: %s\nПрогресс: %s\n\nCtrl+X — запросить остановку задания.", stringValue(r, "kind"), stringValue(r, "status"), owner, stringValue(r, "progress")), r)
+					add(stringValue(r, "id"), stringValue(r, "label")+" · "+stringValue(r, "status"), fmt.Sprintf(tr("Тип: %s\nСостояние: %s\nВладелец: %s\nПрогресс: %s\n\nCtrl+X — запросить остановку задания."), stringValue(r, "kind"), stringValue(r, "status"), owner, stringValue(r, "progress")), r)
 				}
 			}
 		}
@@ -248,15 +283,15 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 		if d.document != "" {
 			err = api.rpc(ctx, "schedule/history", map[string]any{"request": map[string]any{"id": d.document, "limit": 100}}, &value)
 			if err != nil || stringValue(objectValue(value), "code") != "" || objectValue(value)["records"] == nil {
-				return nil, "", false, errors.New("История расписания недоступна; F5 обновить.")
+				return nil, "", false, errors.New(tr("История расписания недоступна; F5 обновить."))
 			}
-			return nil, "История расписания · последние 100 записей\n" + clean(prettyValue(value)), true, nil
+			return nil, tr("История расписания · последние 100 записей\n") + clean(prettyValue(value)), true, nil
 		}
 		err = api.rpc(ctx, "schedule/list", map[string]any{"request": map[string]any{"limit": 200, "offset": 0}}, &value)
 		if err == nil {
 			r := objectValue(value)
 			if total, ok := r["total"].(float64); ok && total > 200 {
-				return nil, "", false, errors.New("Более 200 расписаний; используйте фильтр на сервере.")
+				return nil, "", false, errors.New(tr("Более 200 расписаний; используйте фильтр на сервере."))
 			}
 			for _, v := range arrayValue(r["items"]) {
 				r := objectValue(v)
@@ -270,7 +305,7 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 			if d.kind == "agents" {
 				for _, v := range arrayValue(p["subagentCatalog"]) {
 					r := objectValue(v)
-					add(stringValue(r, "id"), stringValue(r, "name")+" · "+stringValue(r, "label")+" · "+stringValue(r, "mode"), fmt.Sprintf("Сессия: %v\nРежим: %v\nEnter — подключить дочернюю сессию.\nCtrl+X — запросить остановку.", r["id"], r["mode"]), r)
+					add(stringValue(r, "id"), stringValue(r, "name")+" · "+stringValue(r, "label")+" · "+stringValue(r, "mode"), fmt.Sprintf(tr("Сессия: %v\nРежим: %v\nEnter — подключить дочернюю сессию.\nCtrl+X — запросить остановку."), r["id"], r["mode"]), r)
 				}
 			} else {
 				for _, v := range arrayValue(objectValue(p["agentTeam"])["tasks"]) {
@@ -284,22 +319,22 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 		if err == nil {
 			for _, v := range arrayValue(value) {
 				r := objectValue(v)
-				add(stringValue(r, "id"), stringValue(r, "title")+" · "+stringValue(r, "state"), fmt.Sprintf("Папка: %v\nОболочка: %v\nСостояние: %v\nCtrl+X — закрыть терминал.\nEnter — открыть интерактивный терминал. Ctrl+] — вернуться в TUI.", r["cwd"], objectValue(r["shell"])["path"], r["state"]), r)
+				add(stringValue(r, "id"), stringValue(r, "title")+" · "+stringValue(r, "state"), fmt.Sprintf(tr("Папка: %v\nОболочка: %v\nСостояние: %v\nCtrl+X — закрыть терминал.\nEnter — открыть интерактивный терминал. Ctrl+] — вернуться в TUI."), r["cwd"], objectValue(r["shell"])["path"], r["state"]), r)
 			}
 		}
 	default:
-		err = errors.New("Раздел не поддержан.")
+		err = errors.New(tr("Раздел не поддержан."))
 	}
 	if err != nil {
-		return nil, "", false, errors.New("Не удалось прочитать раздел dsh. Старый снимок сохранён; F5 — обновить.")
+		return nil, "", false, errors.New(tr("Не удалось прочитать раздел dsh. Старый снимок сохранён; F5 — обновить."))
 	}
 	if len(rows) > 2000 {
-		return nil, "", false, errors.New("Слишком большой список (лимит 2000).")
+		return nil, "", false, errors.New(tr("Слишком большой список (лимит 2000)."))
 	}
 	seen := map[string]bool{}
 	for _, r := range rows {
 		if r.ID == "" || seen[r.ID] {
-			return nil, "", false, errors.New("Некорректные идентификаторы списка dsh.")
+			return nil, "", false, errors.New(tr("Некорректные идентификаторы списка dsh."))
 		}
 		seen[r.ID] = true
 	}
@@ -315,7 +350,7 @@ func (m *model) loadWorkbench() tea.Cmd {
 	}
 	d.busy = true
 	d.serial++
-	d.note = "Чтение снимка dsh…"
+	d.note = tr("Чтение снимка dsh…")
 	serial, login := d.serial, m.settingsLogin
 	// The worker receives a detached navigation snapshot.
 	snapshot := *d
@@ -328,7 +363,7 @@ func (m *model) loadWorkbench() tea.Cmd {
 			defer api.close()
 			result.rows, result.document, result.fileEOF, result.err = readBench(ctx, api, &snapshot)
 		} else {
-			result.err = errors.New("Раздел dsh недоступен.")
+			result.err = errors.New(tr("Раздел dsh недоступен."))
 		}
 		return result
 	}
@@ -355,16 +390,26 @@ func (m *model) handleBench(result benchResult) tea.Cmd {
 		d.editing = false
 		d.editor.SetValue("")
 		d.lastResult = result.feedback
-		d.note = "Ответ dsh получен. F5 — перечитать состояние."
+		d.pendingBuilds = result.pendingBuilds
+		d.pendingSpec = result.pendingSpec
+		d.note = tr("Ответ dsh получен. F5 — перечитать состояние.")
 		if result.feedback != "" {
-			d.note = result.feedback + " · F5 перечитать"
+			d.note = result.feedback + tr(" · F5 перечитать")
 		}
 		d.blocked = true
+		if result.pluginPanel != nil {
+			d.pluginPanel = result.pluginPanel
+			d.blocked = false
+			d.note = tr("Панель плагина загружена.")
+		}
+		if d.kind == "account" && result.feedback == "" {
+			return m.loadWorkbench()
+		}
 		return nil
 	}
 	d.rows = result.rows
 	d.fileEOF = result.fileEOF
-	d.note = "Снимок dsh · F5 обновить · Esc назад"
+	d.note = tr("Снимок dsh · F5 обновить · Esc назад")
 	d.blocked = false
 	d.action = nil
 	d.confirm = false
@@ -393,6 +438,7 @@ func (m *model) benchExecute() tea.Cmd {
 		result := benchResult{dialog: d, serial: serial, action: true}
 		duration := 20 * time.Second
 		var value any
+		var receipt *packageReceipt
 		if strings.HasPrefix(action.Method, "pluginManager/") {
 			duration = 10 * time.Minute
 		}
@@ -403,12 +449,46 @@ func (m *model) benchExecute() tea.Cmd {
 			defer api.close()
 			if strings.HasPrefix(action.Method, "pluginManager/") {
 				api.client.Timeout = 10 * time.Minute
+				id, e := newRequestID()
+				if e != nil {
+					result.err = errors.New(tr("Не удалось создать журнал операции."))
+					return result
+				}
+				options := objectValue(action.Args["options"])
+				if existing := stringValue(options, "requestId"); existing != "" {
+					id = existing
+				}
+				target := stringValue(action.Args, "name")
+				if target == "" {
+					target = stringValue(action.Args, "spec")
+				}
+				receipt = &packageReceipt{ID: id, Origin: api.origin, Method: action.Method, Target: redactDiagnostic(target), State: "unconfirmed"}
+				if savePackageReceipt(*receipt) != nil {
+					result.err = errors.New(tr("Журнал операции недоступен; запрос не отправлен."))
+					return result
+				}
 			}
 			target := any(&value)
 			if action.Method == "terminal/close" {
 				target = nil
 			}
-			err = api.rpc(ctx, action.Method, action.Args, target)
+			if strings.HasPrefix(action.Method, "account/") && action.Method != "account/details" {
+				result.feedback = ""
+			}
+			if action.Method == "account/details" {
+				result.feedback, err = accountDetails(ctx, api)
+			} else {
+				if action.Method == "account/signOut" {
+					var running bool
+					err = api.rpc(ctx, "account/hasRunningAccountTasks", map[string]any{}, &running)
+					if err == nil && running {
+						err = errors.New("running account tasks")
+					}
+				}
+				if err == nil {
+					err = api.rpc(ctx, action.Method, action.Args, target)
+				}
+			}
 			if action.Method == "job/kill" || action.Method == "terminal/close" {
 				if err == nil {
 					result.action = true
@@ -422,6 +502,9 @@ func (m *model) benchExecute() tea.Cmd {
 					err = errors.New("command failed")
 				}
 				r := objectValue(value)
+				if strings.HasPrefix(action.Method, "account/") && action.Method != "account/details" && r["status"] != "signed-out" && r["status"] != "credential-stored" {
+					err = errors.New("account change unconfirmed")
+				}
 				switch action.Method {
 				case "subagents/interruptByParent":
 					if r["accepted"] != true {
@@ -463,6 +546,8 @@ func (m *model) benchExecute() tea.Cmd {
 		if err == nil {
 			if action.Method == "commands/execute" {
 				result.feedback = shortText(stringValue(objectValue(objectValue(value)["result"]), "text"), 65536)
+				source := strings.TrimPrefix(strings.SplitN(stringValue(action.Args, "line"), " ", 2)[0], "/")
+				result.pluginPanel, err = decodePluginPanel(result.feedback, source)
 			}
 			if strings.HasPrefix(action.Method, "pluginManager/") {
 				r := objectValue(value)
@@ -472,20 +557,40 @@ func (m *model) benchExecute() tea.Cmd {
 				application := stringValue(r, "application")
 				switch application {
 				case "applied", "restart-required", "overridden", "failed", "cancelled":
-					result.feedback = "Применение: " + application + " · причина перезапуска: " + stringValue(r, "restartReason")
+					result.feedback = tr("Применение: ") + application + tr(" · причина перезапуска: ") + stringValue(r, "restartReason")
+					for _, name := range arrayValue(r["pendingBuilds"]) {
+						if text, ok := name.(string); ok {
+							result.pendingBuilds = append(result.pendingBuilds, text)
+						}
+					}
+					if len(result.pendingBuilds) > 0 {
+						result.pendingSpec = stringValue(action.Args, "spec")
+						result.feedback += tr(" · заблокированы скрипты: ") + strings.Join(result.pendingBuilds, ", ") + tr("; F2 — разрешить явно")
+					}
 				default:
 					err = errors.New("unknown application")
 				}
 				if restore := objectValue(objectValue(value)["restore"]); restore != nil {
-					result.feedback += " · откат: " + stringValue(restore, "application")
+					result.feedback += tr(" · откат: ") + stringValue(restore, "application")
 				}
 				if code := stringValue(objectValue(r["error"]), "code"); code != "" {
-					result.feedback += " · отказ: " + code
+					result.feedback += tr(" · отказ: ") + code
 				}
 			}
 		}
+		if receipt != nil {
+			if err == nil {
+				receipt.State = "confirmed"
+				receipt.Outcome = redactDiagnostic(result.feedback)
+			} else {
+				receipt.State = "unknown"
+			}
+			if savePackageReceipt(*receipt) != nil {
+				result.feedback += tr(" · Не удалось сохранить итог; /operations содержит неподтверждённый запрос.")
+			}
+		}
 		if err != nil {
-			result.err = errors.New("Действие не подтверждено. Автоповтора нет; черновик сохранён. Esc — отменить, F5 — перечитать.")
+			result.err = errors.New(tr("Действие не подтверждено. Автоповтора нет; черновик сохранён. Esc — отменить, F5 — перечитать."))
 		}
 		return result
 	}
@@ -512,7 +617,7 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 	if d.kind == "jobs" && ok && key == tea.KeyEnter {
 		d.documentOwner = stringValue(r.Data, "owner")
 		if d.documentOwner != "" && d.documentOwner != d.id {
-			d.note = "Задание принадлежит другой сессии; F5 перечитать."
+			d.note = tr("Задание принадлежит другой сессии; F5 перечитать.")
 			return nil
 		}
 		d.document = r.ID
@@ -520,59 +625,107 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 	}
 	if d.kind == "agents" && ok && key == tea.KeyEnter {
 		if r.Data["mode"] == "external" || r.Data["mode"] == "unknown" {
-			d.note = "У этого агента нет доступной локальной сессии."
+			d.note = tr("У этого агента нет доступной локальной сессии.")
 			return nil
 		}
 		m.closeWorkbench()
 		return m.sessionOperation("connect", r.ID)
 	}
 	if d.kind == "terminals" && ok && key == tea.KeyEnter {
-		d.note = "Ctrl+] — вернуться в TUI; ввод не повторяется при разрыве."
+		d.note = tr("Ctrl+] — вернуться в TUI; ввод не повторяется при разрыве.")
 		return startBenchTerminal(d.ctx, m.settingsLogin, d.id, r.ID)
 	}
-	if !ok && !((d.kind == "schedules" || d.kind == "terminals") && key == tea.KeyCtrlN) && !(d.kind == "workspaces" && key == tea.KeyF3) {
+	if !ok && !((d.kind == "schedules" || d.kind == "terminals" || d.kind == "packages") && key == tea.KeyCtrlN) && !(d.kind == "workspaces" && key == tea.KeyF3) {
 		return nil
 	}
 	var action *benchAction
 	switch d.kind {
+	case "account":
+		args := map[string]any{"client": accountClient()}
+		switch key {
+		case tea.KeyCtrlN:
+			u, err := settingsURL(m.settingsLogin)
+			if err != nil {
+				d.note = tr("Нужен URL входа localhost.")
+				return nil
+			}
+			args["callbackOrigin"] = u.Scheme + "://" + u.Host
+			args["loginSource"] = "web"
+			action = &benchAction{"account/startSignIn", args, tr("Начать вход: ссылка появится в этом окне")}
+		case tea.KeyCtrlX:
+			action = &benchAction{"account/signOut", args, tr("Выйти из аккаунта; сначала остановите задания, использующие аккаунт")}
+		case tea.KeyCtrlG:
+			attempt := objectValue(r.Data["attempt"])
+			if stringValue(attempt, "id") == "" {
+				d.note = tr("Нет попытки входа.")
+				return nil
+			}
+			action = &benchAction{"account/cancelSignIn", map[string]any{"attemptId": attempt["id"]}, tr("Отменить текущую попытку входа")}
+		case tea.KeyF3:
+			action = &benchAction{"account/details", args, tr("Запросить профиль и баланс у платформы")}
+		}
+
 	case "workspaces":
 		if key == tea.KeyCtrlN || key == tea.KeyEnter {
-			action = &benchAction{"session/create", map[string]any{"request": map[string]any{"workspaceId": r.ID}}, "Создать сессию в рабочей области " + r.Title}
+			action = &benchAction{"session/create", map[string]any{"request": map[string]any{"workspaceId": r.ID}}, tr("Создать сессию в рабочей области ") + r.Title}
 		}
 		if key == tea.KeyF3 {
-			action = &benchAction{"session/create", map[string]any{}, "Создать новую сессию в указанной папке"}
+			action = &benchAction{"session/create", map[string]any{}, tr("Создать новую сессию в указанной папке")}
 			d.startEditor(prettyValue(map[string]any{"cwd": m.workspace}), action)
 			return d.editor.Focus()
 		}
+	case "package-versions":
+		if key == tea.KeyEnter {
+			if r.Data["incompatible"] != nil || r.Data["bundle"] != true {
+				d.note = tr("Выбранная версия несовместима с dsh.")
+				return nil
+			}
+			requestID, err := newRequestID()
+			if err != nil {
+				return nil
+			}
+			action = &benchAction{"pluginManager/updateBundle", map[string]any{"name": d.location, "version": r.ID, "options": map[string]any{"registry": r.Data["registry"], "requestId": requestID}}, tr("Обновить ") + d.location + tr(" до ") + r.ID}
+		}
+
 	case "packages":
+		if key == tea.KeyCtrlN {
+			id, err := newRequestID()
+			if err != nil {
+				return nil
+			}
+			action = &benchAction{"pluginManager/installBundle", map[string]any{"options": map[string]any{"requestId": id, "saveExact": true}}, tr("Установить пакет")}
+			d.startEditor("", action)
+			d.note = tr("Введите npm-пакет@версия или путь · F5 проверить · Esc отменить")
+			return d.editor.Focus()
+		}
 		if r.Data["readOnlyReason"] != nil {
-			d.note = "Этот пакет доступен только для чтения."
+			d.note = tr("Этот пакет доступен только для чтения.")
 			return nil
 		}
 		if key == tea.KeySpace {
-			action = &benchAction{"pluginManager/setBundleEnabled", map[string]any{"name": r.ID, "enabled": r.Data["enabled"] != true}, "Переключить пакет " + r.ID + "; может потребоваться перезапуск"}
+			action = &benchAction{"pluginManager/setBundleEnabled", map[string]any{"name": r.ID, "enabled": r.Data["enabled"] != true}, tr("Переключить пакет ") + r.ID + tr("; может потребоваться перезапуск")}
 		}
 		if key == tea.KeyCtrlX && r.Data["removable"] == true {
-			action = &benchAction{"pluginManager/removeBundle", map[string]any{"name": r.ID}, "Удалить пакет " + r.ID}
+			action = &benchAction{"pluginManager/removeBundle", map[string]any{"name": r.ID}, tr("Удалить пакет ") + r.ID}
 		}
 		if key == tea.KeyF3 && r.Data["updatable"] == true {
-			action = &benchAction{"pluginManager/updateBundle", map[string]any{"name": r.ID}, "Обновить пакет " + r.ID + "; совместимость и откат проверяет dsh"}
+			action = &benchAction{"pluginManager/updateBundle", map[string]any{"name": r.ID}, tr("Обновить пакет ") + r.ID + tr("; совместимость и откат проверяет dsh")}
 			d.startEditor("", action)
 			return d.editor.Focus()
 		}
 	case "presets":
 		if stringValue(r.Data, "broken") != "" {
-			d.note = "Пресет недоступен."
+			d.note = tr("Пресет недоступен.")
 			return nil
 		}
 		if key == tea.KeyCtrlN {
-			action = &benchAction{"session/create", map[string]any{"request": map[string]any{"agentPreset": r.ID}}, "Создать новую сессию с пресетом " + r.ID}
+			action = &benchAction{"session/create", map[string]any{"request": map[string]any{"agentPreset": r.ID}}, tr("Создать новую сессию с пресетом ") + r.ID}
 		} else if key == tea.KeyEnter {
-			action = &benchAction{"agentPresets/select", map[string]any{"agentId": d.id, "agentPreset": r.ID}, "Выбрать пресет " + r.ID + " для текущей сессии"}
+			action = &benchAction{"agentPresets/select", map[string]any{"agentId": d.id, "agentPreset": r.ID}, tr("Выбрать пресет ") + r.ID + tr(" для текущей сессии")}
 		}
 	case "commands":
 		if key == tea.KeyEnter {
-			action = &benchAction{"commands/execute", map[string]any{"agentId": d.id, "line": "/" + r.ID, "submittedAttachments": []any{}}, "Выполнить команду /" + r.ID}
+			action = &benchAction{"commands/execute", map[string]any{"agentId": d.id, "line": "/" + r.ID, "submittedAttachments": []any{}}, tr("Выполнить команду /") + r.ID}
 			if r.Data["input"] != nil {
 				d.startEditor("/"+r.ID+" ", action)
 				return d.editor.Focus()
@@ -580,13 +733,13 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 		}
 	case "schedules":
 		if key == tea.KeyCtrlN {
-			action = &benchAction{"schedule/create", map[string]any{}, "Создать расписание: будущие срабатывания могут запускать агента"}
-			d.startEditor(prettyValue(map[string]any{"title": "Новая задача", "prompt": "Описание задачи", "timing": map[string]any{"kind": "after", "after_seconds": 3600}}), action)
+			action = &benchAction{"schedule/create", map[string]any{}, tr("Создать расписание: будущие срабатывания могут запускать агента")}
+			d.startEditor(prettyValue(map[string]any{"title": tr("Новая задача"), "prompt": tr("Описание задачи"), "timing": map[string]any{"kind": "after", "after_seconds": 3600}}), action)
 			return d.editor.Focus()
 		}
 		request := map[string]any{"id": r.ID, "action": "update", "expectedUpdatedAt": r.Data["updatedAt"]}
 		if r.Data["updatedAt"] == nil {
-			d.note = "У расписания нет ревизии updatedAt; изменение недоступно."
+			d.note = tr("У расписания нет ревизии updatedAt; изменение недоступно.")
 			return nil
 		}
 		switch key {
@@ -594,23 +747,23 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 			d.document = r.ID
 			return m.loadWorkbench()
 		case tea.KeyCtrlG:
-			action = &benchAction{"schedule/run", map[string]any{"request": map[string]any{"id": r.ID}}, "Запустить расписание сейчас: агент получит задание " + r.Title}
+			action = &benchAction{"schedule/run", map[string]any{"request": map[string]any{"id": r.ID}}, tr("Запустить расписание сейчас: агент получит задание ") + r.Title}
 		case tea.KeyF3:
-			action = &benchAction{"schedule/edit", map[string]any{"request": request}, "Изменить расписание " + r.Title}
+			action = &benchAction{"schedule/edit", map[string]any{"request": request}, tr("Изменить расписание ") + r.Title}
 			d.startEditor(prettyValue(map[string]any{"title": r.Data["title"], "prompt": r.Data["prompt"]}), action)
 			return d.editor.Focus()
 		case tea.KeyCtrlX:
 			request["action"] = "delete"
-			action = &benchAction{"schedule/edit", map[string]any{"request": request}, "Удалить расписание и его историю: " + r.Title}
+			action = &benchAction{"schedule/edit", map[string]any{"request": request}, tr("Удалить расписание и его историю: ") + r.Title}
 		case tea.KeySpace:
 			request["patch"] = map[string]any{"active": r.Data["status"] != "active"}
-			action = &benchAction{"schedule/edit", map[string]any{"request": request}, "Переключить паузу расписания " + r.Title}
+			action = &benchAction{"schedule/edit", map[string]any{"request": request}, tr("Переключить паузу расписания ") + r.Title}
 		}
 	case "jobs":
 		if key == tea.KeyCtrlX {
-			action = &benchAction{"job/kill", map[string]any{"request": map[string]any{"sessionId": d.id, "jobId": r.ID}}, "Запросить остановку задания " + r.Title}
+			action = &benchAction{"job/kill", map[string]any{"request": map[string]any{"sessionId": d.id, "jobId": r.ID}}, tr("Запросить остановку задания ") + r.Title}
 			if stringValue(r.Data, "owner") == "" {
-				action.Label = "Остановить общее задание Host: " + r.Title
+				action.Label = tr("Остановить общее задание Host: ") + r.Title
 			}
 		}
 	case "agents":
@@ -619,12 +772,12 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 			if e != nil {
 				return nil
 			}
-			action = &benchAction{"subagents/prompt", map[string]any{"request": map[string]any{"requestId": requestID, "parentSessionId": d.id, "childSessionId": r.ID, "mode": "continuable", "delivery": "queue"}}, "Отправить сообщение в очередь подагента " + r.Title}
+			action = &benchAction{"subagents/prompt", map[string]any{"request": map[string]any{"requestId": requestID, "parentSessionId": d.id, "childSessionId": r.ID, "mode": "continuable", "delivery": "queue"}}, tr("Отправить сообщение в очередь подагента ") + r.Title}
 			d.startEditor("", action)
 			return d.editor.Focus()
 		}
 		if key == tea.KeyCtrlX && r.Data["mode"] == "continuable" {
-			action = &benchAction{"subagents/interruptByParent", map[string]any{"childSessionId": r.ID, "parentSessionId": d.id, "mode": "continuable"}, "Запросить остановку подагента " + r.Title}
+			action = &benchAction{"subagents/interruptByParent", map[string]any{"childSessionId": r.ID, "parentSessionId": d.id, "mode": "continuable"}, tr("Запросить остановку подагента ") + r.Title}
 		}
 	case "terminals":
 		if key == tea.KeyCtrlN {
@@ -632,20 +785,20 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 			if err != nil {
 				return nil
 			}
-			action = &benchAction{"terminal/create", map[string]any{"agentId": d.id, "request": map[string]any{"id": "tui-" + id, "cols": m.width, "rows": m.height}}, "Запустить пользовательскую оболочку в рабочей папке сессии"}
+			action = &benchAction{"terminal/create", map[string]any{"agentId": d.id, "request": map[string]any{"id": "tui-" + id, "cols": m.width, "rows": m.height}}, tr("Запустить пользовательскую оболочку в рабочей папке сессии")}
 		}
 		if key == tea.KeyCtrlX {
-			action = &benchAction{"terminal/close", map[string]any{"agentId": d.id, "id": r.ID}, "Закрыть терминал и его процесс " + r.Title}
+			action = &benchAction{"terminal/close", map[string]any{"agentId": d.id, "id": r.ID}, tr("Закрыть терминал и его процесс ") + r.Title}
 		}
 	}
 	if action != nil {
 		if m.isSessionArchived(d.id) {
-			d.note = "Сессия в архиве; действия недоступны."
+			d.note = tr("Сессия в архиве; действия недоступны.")
 			return nil
 		}
 		d.action = action
 		d.confirm = true
-		d.note = action.Label + ". Enter подтвердить · Esc отменить."
+		d.note = action.Label + tr(". Enter подтвердить · Esc отменить.")
 	}
 	return nil
 }
@@ -657,7 +810,7 @@ func (d *workbench) startEditor(text string, action *benchAction) {
 	d.editor.SetValue(text)
 	d.action = action
 	d.editing = true
-	d.note = "F5 — проверить и перейти к подтверждению · Esc отменить"
+	d.note = tr("F5 — проверить и перейти к подтверждению · Esc отменить")
 }
 func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	d := m.workbench
@@ -682,7 +835,7 @@ func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if d.confirm {
 		if msg.Type == tea.KeyEsc {
 			d.confirm = false
-			d.note = "Подтверждение отменено."
+			d.note = tr("Подтверждение отменено.")
 			if !d.editing {
 				d.action = nil
 			}
@@ -692,6 +845,9 @@ func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			return m.benchExecute(), true
 		}
 		return nil, true
+	}
+	if d.pluginPanel != nil {
+		return m.pluginPanelKey(msg), true
 	}
 	if d.editing {
 		if msg.Type == tea.KeyEsc && !msg.Paste {
@@ -703,12 +859,12 @@ func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		if msg.Type == tea.KeyF5 && !msg.Paste {
 			text := d.editor.Value()
 			if len(text) > 65536 || strings.TrimSpace(text) == "" {
-				d.note = "Введите значение до 64 КиБ."
+				d.note = tr("Введите значение до 64 КиБ.")
 				return nil, true
 			}
 			if d.kind == "commands" {
 				if strings.ContainsAny(text, "\r\n") {
-					d.note = "Команда должна занимать одну строку."
+					d.note = tr("Команда должна занимать одну строку.")
 					return nil, true
 				}
 				prefix := "/"
@@ -716,23 +872,31 @@ func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 					prefix += r.ID
 				}
 				if text != prefix && !strings.HasPrefix(text, prefix+" ") {
-					d.note = "Нельзя подменить выбранную команду."
+					d.note = tr("Нельзя подменить выбранную команду.")
 					return nil, true
 				}
 				d.action.Args["line"] = text
 			} else if d.kind == "agents" {
 				objectValue(d.action.Args["request"])["content"] = []any{map[string]any{"type": "text", "text": text}}
+			} else if d.kind == "packages" && d.action.Method == "pluginManager/installBundle" {
+				spec := strings.TrimSpace(text)
+				if strings.ContainsAny(spec, "\r\n\t") || len(spec) > 2048 {
+					d.note = tr("Введите один пакет или путь до 2048 байт.")
+					return nil, true
+				}
+				d.action.Args["spec"] = spec
+				d.action.Label = tr("Установить пакет ") + redactDiagnostic(clean(spec))
 			} else if d.kind == "packages" {
 				version := strings.TrimSpace(text)
 				if strings.ContainsAny(version, " \r\n\t") || len(version) > 128 {
-					d.note = "Введите точную версию пакета."
+					d.note = tr("Введите точную версию пакета.")
 					return nil, true
 				}
 				d.action.Args["version"] = version
 			} else {
 				var data map[string]any
 				if json.Unmarshal([]byte(text), &data) != nil || len(data) == 0 {
-					d.note = "Введите объект JSON."
+					d.note = tr("Введите объект JSON.")
 					return nil, true
 				}
 				if d.action.Method == "schedule/create" || d.action.Method == "session/create" {
@@ -742,11 +906,11 @@ func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 				}
 			}
 			d.confirm = true
-			d.note = d.action.Label + ". Enter подтвердить · Esc назад."
+			d.note = d.action.Label + tr(". Enter подтвердить · Esc назад.")
 			return nil, true
 		}
 		if msg.Type == tea.KeyRunes && (len(d.editor.Value())+len(string(msg.Runes)) > 65536 || strings.ContainsAny(string(msg.Runes), "\r\t")) {
-			d.note = "Вставка не принята: лимит 64 КиБ, без табуляции/CR."
+			d.note = tr("Вставка не принята: лимит 64 КиБ, без табуляции/CR.")
 			return nil, true
 		}
 		var cmd tea.Cmd
@@ -756,6 +920,13 @@ func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if !msg.Paste {
 		switch msg.Type {
 		case tea.KeyEsc, tea.KeyLeft:
+			if d.kind == "package-versions" {
+				d.kind = "packages"
+				d.location = ""
+				d.index = 0
+				d.search.SetValue("")
+				return m.loadWorkbench(), true
+			}
 			if d.kind == "files" || d.kind == "jobs" || d.kind == "schedules" {
 				if d.document != "" {
 					d.document = ""
@@ -774,6 +945,30 @@ func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			return m.closeWorkbench(), true
 		case tea.KeyF5:
 			return m.loadWorkbench(), true
+		case tea.KeyF2:
+			if d.kind == "packages" && len(d.pendingBuilds) > 0 && d.pendingSpec != "" {
+				id, err := newRequestID()
+				if err != nil {
+					return nil, true
+				}
+				d.action = &benchAction{"pluginManager/installBundle", map[string]any{"spec": d.pendingSpec, "options": map[string]any{"requestId": id, "saveExact": true, "approvedBuilds": d.pendingBuilds}}, tr("Разрешить выполнение скриптов ") + strings.Join(d.pendingBuilds, ", ") + tr("; повторить установку ") + clean(d.pendingSpec)}
+				d.blocked = false
+				d.confirm = true
+				d.note = d.action.Label
+				return nil, true
+			}
+		case tea.KeyF6:
+			if d.kind == "packages" {
+				if r, ok := d.selected(); ok && r.Data["updatable"] == true {
+					d.kind = "package-versions"
+					d.location = r.ID
+					d.index = 0
+					d.search.SetValue("")
+					return m.loadWorkbench(), true
+				}
+				d.note = tr("Для этого пакета нет списка обновлений.")
+				return nil, true
+			}
 		case tea.KeyF4:
 			if d.kind == "plugins" {
 				m.closeWorkbench()
@@ -837,13 +1032,16 @@ func (m *model) benchView(base string) string {
 	if d == nil {
 		return base
 	}
+	if d.pluginPanel != nil {
+		return m.pluginPanelView(base)
+	}
 	box := m.benchBox()
 	w := box.width - 4
 	h := box.height - 10
-	title := map[string]string{"workspaces": "Рабочие области", "packages": "Управление пакетами dsh", "presets": "Пресеты агента", "files": "Файлы рабочей области", "commands": "Команды плагинов", "plugins": "Плагины dsh", "jobs": "Фоновые задания", "schedules": "Расписания · весь Host", "agents": "Подагенты сессии", "tasks": "Задачи команды", "terminals": "Терминалы сессии"}[d.kind]
+	title := map[string]string{"operations": tr("Журнал операций пакетов · этот TUI"), "account": tr("Аккаунт DeepSeek"), "workspaces": tr("Рабочие области"), "packages": tr("Управление пакетами dsh"), "package-versions": tr("Версии пакета"), "presets": tr("Пресеты агента"), "files": tr("Файлы рабочей области"), "commands": tr("Команды плагинов"), "plugins": tr("Плагины dsh"), "jobs": tr("Фоновые задания"), "schedules": tr("Расписания · весь Host"), "agents": tr("Подагенты сессии"), "tasks": tr("Задачи команды"), "terminals": tr("Терминалы сессии")}[d.kind]
 	trim := func(s string) string { return ansi.Truncate(clean(s), w, "…") }
 	d.search.Width = max(1, w-8)
-	lines := []string{heading.Render(title), trim(d.id + " / " + d.location), d.search.View()}
+	lines := []string{heading().Render(title), trim(d.id + " / " + d.location), d.search.View()}
 	if d.editing {
 		d.editor.SetWidth(w)
 		d.editor.SetHeight(max(1, h))
@@ -851,7 +1049,11 @@ func (m *model) benchView(base string) string {
 	} else if (d.kind == "files" || d.kind == "jobs" || d.kind == "schedules") && d.document != "" {
 		d.view.Width = w
 		d.view.Height = h
-		d.view.SetContent(ansi.Hardwrap(clean(d.fileBody), w, true))
+		body := clean(d.fileBody)
+		if d.kind == "files" && documentPreviewKind(d.document) == "image" {
+			body = d.fileBody
+		}
+		d.view.SetContent(ansi.Hardwrap(body, w, true))
 		lines = append(lines, strings.Split(d.view.View(), "\n")...)
 	} else {
 		rows := d.visible()
@@ -867,11 +1069,11 @@ func (m *model) benchView(base string) string {
 		for len(lines) < 3+listHeight {
 			lines = append(lines, "")
 		}
-		body := "Нет записей."
+		body := tr("Нет записей.")
 		if r, ok := d.selected(); ok {
 			body = r.Body
 			if d.lastResult != "" {
-				body += "\n\nПоследний результат:\n" + d.lastResult
+				body += tr("\n\nПоследний результат:\n") + d.lastResult
 			}
 		}
 		d.view.Width = w
@@ -881,41 +1083,45 @@ func (m *model) benchView(base string) string {
 	}
 	note := d.note
 	if d.busy {
-		note = "Запрос dsh…"
+		note = tr("Запрос dsh…")
 	}
 	notes := strings.Split(ansi.Hardwrap(clean(note), w, true), "\n")
 	for len(notes) < 3 {
 		notes = append(notes, "")
 	}
-	lines = append(lines, muted.Render(notes[0]), muted.Render(notes[1]), muted.Render(notes[2]))
-	hint := "↑/↓ выбор · Enter открыть · F5 обновить · Esc назад"
-	hint2 := "Снимок · PgUp/PgDn детали · поиск по имени"
+	lines = append(lines, muted().Render(notes[0]), muted().Render(notes[1]), muted().Render(notes[2]))
+	hint := tr("↑/↓ выбор · Enter открыть · F5 обновить · Esc назад")
+	hint2 := tr("Снимок · PgUp/PgDn детали · поиск по имени")
 	switch d.kind {
+	case "account":
+		hint2 = tr("Ctrl+N вход · Ctrl+X выход · Ctrl+G отменить вход · F3 профиль")
 	case "workspaces":
-		hint2 = "Ctrl+N новая сессия здесь · F3 другая папка"
+		hint2 = tr("Ctrl+N новая сессия здесь · F3 другая папка")
 	case "packages":
-		hint2 = "Space включить · F3 точная версия/обновить · Ctrl+X удалить"
+		hint2 = tr("Ctrl+N установка · F6 версии · F3 обновить · Space вкл · Ctrl+X удалить")
+	case "package-versions":
+		hint2 = tr("Enter установить совместимую версию · Left / Esc назад")
 	case "presets":
-		hint2 = "Enter выбрать · Ctrl+N новая сессия · после первого хода пресет закреплён"
+		hint2 = tr("Enter выбрать · Ctrl+N новая сессия · после первого хода пресет закреплён")
 	case "schedules":
-		hint2 = "Enter история · Ctrl+N создать · F3 правка · Space пауза · Ctrl+G запуск · Ctrl+X удалить"
+		hint2 = tr("Enter история · Ctrl+N создать · F3 правка · Space пауза · Ctrl+G запуск · Ctrl+X удалить")
 	case "terminals":
-		hint2 = "Enter терминал · Ctrl+N оболочка · Ctrl+X закрыть · Ctrl+] вернуться"
+		hint2 = tr("Enter терминал · Ctrl+N оболочка · Ctrl+X закрыть · Ctrl+] вернуться")
 	case "jobs":
-		hint2 = "Enter снимок вывода · Ctrl+X остановить · F5 перечитать"
+		hint2 = tr("Enter снимок вывода · Ctrl+X остановить · F5 перечитать")
 	case "agents":
-		hint2 = "Enter сессия · F3 сообщение в очередь · Ctrl+X остановить"
+		hint2 = tr("Enter сессия · F3 сообщение в очередь · Ctrl+X остановить")
 	case "plugins":
-		hint2 = "F4 настройки · /commands команды · /market пакеты"
+		hint2 = tr("F4 настройки · /commands команды · /market пакеты")
 	case "files":
-		hint2 = "PgUp/PgDn страницы файла · Left назад · снимок без записи"
+		hint2 = tr("PgUp/PgDn страницы файла · Left назад · снимок без записи")
 	}
 	if d.editing {
-		hint = "Enter новая строка · F5 проверить · Esc отменить"
+		hint = tr("Enter новая строка · F5 проверить · Esc отменить")
 	}
 	if d.confirm {
-		hint = "Enter — подтвердить действие · Esc — отменить"
-		hint2 = "Запрос не повторяется автоматически."
+		hint = tr("Enter — подтвердить действие · Esc — отменить")
+		hint2 = tr("Запрос не повторяется автоматически.")
 	}
 	lines = append(lines, trim(hint), trim(hint2))
 	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)
@@ -924,6 +1130,14 @@ func (m *model) benchView(base string) string {
 func (m *model) benchMouse(msg tea.MouseMsg) tea.Cmd {
 	d := m.workbench
 	if d == nil || d.busy || d.confirm || d.editing {
+		return nil
+	}
+	if d.pluginPanel != nil {
+		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+			var cmd tea.Cmd
+			d.view, cmd = d.view.Update(msg)
+			return cmd
+		}
 		return nil
 	}
 	box := m.benchBox()

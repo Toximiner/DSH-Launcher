@@ -9,7 +9,7 @@ import (
 
 func (d *settingsForm) editMultiline(row formRow) tea.Cmd {
 	if !row.known || len(row.path) == 0 || d.secretUnder(row.path) {
-		d.note = "Редактор доступен для полей схемы без секретов."
+		d.note = tr("Редактор доступен для полей схемы без секретов.")
 		return nil
 	}
 	text := ""
@@ -27,7 +27,7 @@ func (d *settingsForm) editMultiline(row formRow) tea.Cmd {
 		text = string(raw)
 	}
 	if len(text) > settingsDraftLimit {
-		d.note = "Значение превышает 64 КиБ."
+		d.note = tr("Значение превышает 64 КиБ.")
 		return nil
 	}
 	editor := textarea.New()
@@ -36,10 +36,10 @@ func (d *settingsForm) editMultiline(row formRow) tea.Cmd {
 	editor.Prompt = "> "
 	editor.SetValue(text)
 	if editor.Value() != text {
-		d.note = "Значение нельзя открыть без преобразования."
+		d.note = tr("Значение нельзя открыть без преобразования.")
 		return nil
 	}
 	d.field = &settingsField{row: row, multiline: &editor}
-	d.note = "F5 — принять в черновик формы; сохранение в dsh — следующим F5."
+	d.note = tr("F5 — принять в черновик формы; сохранение в dsh — следующим F5.")
 	return editor.Focus()
 }

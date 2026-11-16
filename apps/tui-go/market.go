@@ -33,7 +33,11 @@ func (p marketPlugin) pkg() string {
 	return p.Name
 }
 func (p marketPlugin) description() string {
-	for _, lang := range []string{"ru", "en", "zh"} {
+	langs := []string{"ru", "en", "zh"}
+	if activeEnglish.Load() {
+		langs = []string{"en", "ru", "zh"}
+	}
+	for _, lang := range langs {
 		if p.Description[lang] != "" {
 			return p.Description[lang]
 		}
@@ -90,7 +94,7 @@ func (api *dshAPI) marketRequest(ctx context.Context, method, path string, body 
 	}
 	req, err := http.NewRequestWithContext(ctx, method, api.origin+"/dsh-market/"+path, payload)
 	if err != nil {
-		return errors.New("не удалось подготовить запрос маркета")
+		return errors.New(tr("не удалось подготовить запрос маркета"))
 	}
 	req.Header.Set("Origin", api.origin)
 	if body != nil {
@@ -102,19 +106,19 @@ func (api *dshAPI) marketRequest(ctx context.Context, method, path string, body 
 	}
 	response, err := client.Do(req)
 	if err != nil {
-		return errors.New("маркет не ответил; результат операции может быть неизвестен — обновите список")
+		return errors.New(tr("маркет не ответил; результат операции может быть неизвестен — обновите список"))
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		switch response.StatusCode {
 		case 404:
-			return errors.New("маркет недоступен: установите dshmarket и перезапустите dsh")
+			return errors.New(tr("маркет недоступен: установите dshmarket и перезапустите dsh"))
 		case 409:
-			return errors.New("маркет или агенты заняты; повторите после завершения работы")
+			return errors.New(tr("маркет или агенты заняты; повторите после завершения работы"))
 		case 401, 403:
-			return errors.New("маркет отказал в доступе; проверьте URL входа и права")
+			return errors.New(tr("маркет отказал в доступе; проверьте URL входа и права"))
 		}
-		return fmt.Errorf("маркет отклонил запрос (HTTP %d)", response.StatusCode)
+		return fmt.Errorf(tr("маркет отклонил запрос (HTTP %d)"), response.StatusCode)
 	}
 	limit := 8 << 20
 	if path == "registry" {
@@ -122,10 +126,10 @@ func (api *dshAPI) marketRequest(ctx context.Context, method, path string, body 
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, int64(limit+1)))
 	if err != nil || len(data) > limit {
-		return errors.New("не удалось прочитать ответ маркета")
+		return errors.New(tr("не удалось прочитать ответ маркета"))
 	}
 	if json.Unmarshal(data, target) != nil {
-		return errors.New("неподдерживаемый ответ маркета")
+		return errors.New(tr("неподдерживаемый ответ маркета"))
 	}
 	return nil
 }
@@ -139,7 +143,7 @@ func readMarket(ctx context.Context, api *dshAPI, catalog bool) (*marketSnapshot
 		return nil, err
 	}
 	if caps.APIVersion != 1 || caps.Profile == "" {
-		return nil, errors.New("неподдерживаемая версия API маркета")
+		return nil, errors.New(tr("неподдерживаемая версия API маркета"))
 	}
 	var installed struct {
 		Installed map[string]string `json:"installed"`
@@ -149,7 +153,7 @@ func readMarket(ctx context.Context, api *dshAPI, catalog bool) (*marketSnapshot
 		return nil, err
 	}
 	if installed.Installed == nil {
-		return nil, errors.New("маркет не вернул список установленных пакетов")
+		return nil, errors.New(tr("маркет не вернул список установленных пакетов"))
 	}
 	snapshot := &marketSnapshot{Profile: caps.Profile, Version: caps.MarketVersion, Installed: installed.Installed, Present: installed.Present}
 	if err := api.marketRequest(ctx, "GET", "status", nil, &snapshot.Status); err != nil {
@@ -167,7 +171,7 @@ func readMarket(ctx context.Context, api *dshAPI, catalog bool) (*marketSnapshot
 		}
 		if registry.Registry.Plugins == nil {
 			snapshot.CatalogError = true
-			return snapshot, errors.New("маркет не вернул каталог")
+			return snapshot, errors.New(tr("маркет не вернул каталог"))
 		}
 		snapshot.Plugins = registry.Registry.Plugins
 		sort.SliceStable(snapshot.Plugins, func(i, j int) bool { return snapshot.Plugins[i].Name < snapshot.Plugins[j].Name })
@@ -180,35 +184,35 @@ func runMarketIntent(ctx context.Context, api *dshAPI, intent marketIntent) (*ma
 		return before, err
 	}
 	if before.Profile != intent.Profile {
-		return before, errors.New("профиль маркета изменился; подтвердите операцию заново")
+		return before, errors.New(tr("профиль маркета изменился; подтвердите операцию заново"))
 	}
 	if before.Status.Busy || before.Status.Active {
-		return before, errors.New("маркет занят другой операцией")
+		return before, errors.New(tr("маркет занят другой операцией"))
 	}
 	if !npmPackage.MatchString(intent.Package) {
-		return before, errors.New("неподдерживаемое имя пакета")
+		return before, errors.New(tr("неподдерживаемое имя пакета"))
 	}
 	if intent.Package == "dshmarket" || intent.Package == "dsh-market" || intent.Package == "@deepseek-ai/dsh-base" || intent.Package == "@deepseek-ai/dsh-web-app" {
-		return before, errors.New("этот пакет обслуживается отдельно от TUI маркета")
+		return before, errors.New(tr("этот пакет обслуживается отдельно от TUI маркета"))
 	}
 	_, installed := before.Installed[intent.Package]
 	var body map[string]any
 	switch intent.Action {
 	case "install":
 		if installed {
-			return before, errors.New("пакет уже установлен")
+			return before, errors.New(tr("пакет уже установлен"))
 		}
 		if !strings.HasPrefix(intent.URL, "https://") {
-			return before, errors.New("установка этого источника пока не поддерживается")
+			return before, errors.New(tr("установка этого источника пока не поддерживается"))
 		}
 		body = map[string]any{"url": intent.URL}
 	case "update", "uninstall":
 		if !installed {
-			return before, errors.New("пакет больше не установлен")
+			return before, errors.New(tr("пакет больше не установлен"))
 		}
 		body = map[string]any{"name": intent.Package}
 	default:
-		return before, errors.New("неизвестная операция маркета")
+		return before, errors.New(tr("неизвестная операция маркета"))
 	}
 	var result struct {
 		OK        *bool `json:"ok"`
@@ -216,7 +220,7 @@ func runMarketIntent(ctx context.Context, api *dshAPI, intent marketIntent) (*ma
 	}
 	err = api.marketRequest(ctx, "POST", intent.Action, body, &result)
 	if err == nil && (result.OK == nil || !*result.OK) {
-		err = errors.New("маркет не подтвердил выполнение операции")
+		err = errors.New(tr("маркет не подтвердил выполнение операции"))
 	}
 	after, readErr := readMarket(ctx, api, false)
 	if err != nil {
@@ -233,7 +237,7 @@ func (m *model) loadMarket() tea.Cmd {
 		return nil
 	}
 	if m.settingsLogin == "" {
-		m.marketError = "Укажите URL входа dsh; для предустановки маркета используйте --start."
+		m.marketError = tr("Укажите URL входа dsh; для предустановки маркета используйте --start.")
 		m.rebuild()
 		return nil
 	}
@@ -293,7 +297,7 @@ func (m *model) confirmMarket(action string) {
 	}
 	p := rows[min(m.marketIndex, len(rows)-1)]
 	if action == "install" && p.NPM == "" {
-		m.marketError = "Git-only источник пока доступен только для просмотра."
+		m.marketError = tr("Git-only источник пока доступен только для просмотра.")
 		m.rebuild()
 		return
 	}
@@ -421,33 +425,33 @@ func (m *model) marketView() string {
 	hit := func(kind string, index, x, width int) {
 		m.marketHits = append(m.marketHits, marketHit{kind, index, area{x, len(lines), min(width, max(0, w-x)), 1}})
 	}
-	tab := "Каталог"
+	tab := tr("Каталог")
 	if m.marketInstalledOnly {
-		tab = "Установленные"
+		tab = tr("Установленные")
 	}
-	headingText := "Маркет · " + tab
+	headingText := tr("Маркет · ") + tab
 	if m.market != nil {
 		headingText += " · " + m.market.Profile
 	}
 	hit("tab", 0, 0, w)
 	add(headingText)
-	lines[len(lines)-1] = heading.Render(lines[len(lines)-1])
+	lines[len(lines)-1] = heading().Render(lines[len(lines)-1])
 	hit("search", 0, 0, w)
 	if m.marketEditing {
 		lines = append(lines, ansi.Truncate(m.marketSearch.View(), w, "…"))
 	} else {
-		add("Поиск: " + m.marketSearch.Value())
+		add(tr("Поиск: ") + m.marketSearch.Value())
 	}
-	add("/ поиск · t список · r обновить · ↑/↓ выбор")
+	add(tr("/ поиск · t список · r обновить · ↑/↓ выбор"))
 	status := m.marketMessage
 	if m.marketBusy {
-		status = "Запрос маркета…"
+		status = tr("Запрос маркета…")
 		if m.marketOperating {
-			status = "Операция выполняется…"
+			status = tr("Операция выполняется…")
 		}
 	}
 	if m.market != nil && (m.market.Status.Busy || m.market.Status.Active) {
-		status = "Маркет занят · " + m.market.Status.Phase
+		status = tr("Маркет занят · ") + m.market.Status.Phase
 		if m.market.Status.Total > 0 {
 			status += fmt.Sprintf(" · %d/%d", m.market.Status.Done, m.market.Status.Total)
 		}
@@ -455,7 +459,7 @@ func (m *model) marketView() string {
 	if m.marketError != "" {
 		status = m.marketError
 	}
-	add(muted.Render(status))
+	add(muted().Render(status))
 	rows := m.marketRows()
 	m.marketIndex = max(0, min(m.marketIndex, max(0, len(rows)-1)))
 	listHeight := max(1, h-9)
@@ -464,7 +468,7 @@ func (m *model) marketView() string {
 		index := start + i
 		if index >= len(rows) {
 			if i == 0 {
-				add("Нет результатов.")
+				add(tr("Нет результатов."))
 			} else {
 				add("")
 			}
@@ -488,21 +492,21 @@ func (m *model) marketView() string {
 		}
 		add(text)
 		if index == m.marketIndex {
-			lines[len(lines)-1] = accent.Render(lines[len(lines)-1])
+			lines[len(lines)-1] = accent().Render(lines[len(lines)-1])
 		}
 	}
 	if len(rows) > 0 {
 		p := rows[m.marketIndex]
 		add(p.pkg())
-		lines[len(lines)-1] = heading.Render(lines[len(lines)-1])
-		spec := "не установлен"
+		lines[len(lines)-1] = heading().Render(lines[len(lines)-1])
+		spec := tr("не установлен")
 		if value, ok := m.market.Installed[p.pkg()]; ok {
-			spec = "в профиле: " + value
+			spec = tr("в профиле: ") + value
 			if m.market.Present != nil {
-				spec = "файлы не найдены: " + value
+				spec = tr("файлы не найдены: ") + value
 				for _, name := range m.market.Present {
 					if name == p.pkg() {
-						spec = "установлен: " + value
+						spec = tr("установлен: ") + value
 						break
 					}
 				}
@@ -516,13 +520,13 @@ func (m *model) marketView() string {
 		add("")
 	}
 	if m.marketConfirm != nil {
-		add(fmt.Sprintf("%s: %s · %s", map[string]string{"install": "Установить", "update": "Обновить", "uninstall": "Удалить"}[m.marketConfirm.Action], m.marketConfirm.Package, m.marketConfirm.Profile))
-		yes, no := "[y Подтвердить]", "[n Отмена]"
+		add(fmt.Sprintf("%s: %s · %s", map[string]string{"install": tr("Установить"), "update": tr("Обновить"), "uninstall": tr("Удалить")}[m.marketConfirm.Action], m.marketConfirm.Package, m.marketConfirm.Profile))
+		yes, no := tr("[y Подтвердить]"), tr("[n Отмена]")
 		hit("yes", 0, 0, len([]rune(yes)))
 		hit("no", 0, len([]rune(yes))+1, len([]rune(no)))
 		add(yes + " " + no)
 	} else {
-		actions := []struct{ key, label string }{{"install", "[i Уст.]"}, {"update", "[u Обн.]"}, {"uninstall", "[d Удал.]"}}
+		actions := []struct{ key, label string }{{"install", tr("[i Уст.]")}, {"update", tr("[u Обн.]")}, {"uninstall", tr("[d Удал.]")}}
 		text := ""
 		for _, action := range actions {
 			if text != "" {
@@ -532,7 +536,7 @@ func (m *model) marketView() string {
 			text += action.label
 		}
 		add(text)
-		add("Операции требуют подтверждения.")
+		add(tr("Операции требуют подтверждения."))
 	}
 
 	return strings.Join(lines, "\n")
@@ -540,7 +544,7 @@ func (m *model) marketView() string {
 
 func newMarketSearch() textinput.Model {
 	input := textinput.New()
-	input.Prompt = "Поиск: "
+	input.Prompt = tr("Поиск: ")
 	input.CharLimit = 200
 	return input
 }

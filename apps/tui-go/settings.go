@@ -38,15 +38,15 @@ type settingsResult struct {
 func settingsURL(value string) (*url.URL, error) {
 	u, err := url.Parse(value)
 	if err != nil || u == nil || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || (u.Path != "" && u.Path != "/") || u.Fragment != "" {
-		return nil, errors.New("ожидается корневой HTTP(S) URL входа dsh с ?token=")
+		return nil, errors.New(tr("ожидается корневой HTTP(S) URL входа dsh с ?token="))
 	}
 	switch u.Hostname() {
 	case "localhost", "127.0.0.1", "::1":
 	default:
-		return nil, errors.New("используйте localhost или SSH-туннель для доступа к dsh")
+		return nil, errors.New(tr("используйте localhost или SSH-туннель для доступа к dsh"))
 	}
 	if u.Query().Get("token") == "" {
-		return nil, errors.New("в URL входа dsh отсутствует ?token=")
+		return nil, errors.New(tr("в URL входа dsh отсутствует ?token="))
 	}
 	return u, nil
 }
@@ -63,7 +63,7 @@ func readSettings(ctx context.Context, login string) (*settingsSnapshot, error) 
 		return nil, err
 	}
 	if snapshot.Namespaces == nil {
-		return nil, errors.New("в ответе dsh отсутствуют разделы настроек")
+		return nil, errors.New(tr("в ответе dsh отсутствуют разделы настроек"))
 	}
 	sort.SliceStable(snapshot.Namespaces, func(i, j int) bool { return snapshot.Namespaces[i].NS < snapshot.Namespaces[j].NS })
 	return &snapshot, nil
@@ -84,30 +84,30 @@ func (m *model) loadSettings() tea.Cmd {
 
 func (m *model) settingsView() string {
 	if m.settingsLogin == "" {
-		return heading.Render("Настройки dsh") + "\n\n" + muted.Render("Для чтения настроек работающего dsh\nукажите --url или DSH_TUI_URL.\nНужен URL входа с ?token=.")
+		return heading().Render(tr("Настройки dsh")) + "\n\n" + muted().Render(tr("Для чтения настроек работающего dsh\nукажите --url или DSH_TUI_URL.\nНужен URL входа с ?token=."))
 	}
-	lines := []string{heading.Render("Настройки dsh"), muted.Render("←/→ раздел · Enter правка · F6 провайдеры · F12 модель")}
+	lines := []string{heading().Render(tr("Настройки dsh")), muted().Render(tr("←/→ раздел · Enter правка · F6 провайдеры · F12 модель"))}
 	if m.settingsLoading {
-		lines = append(lines, "", "Загрузка настроек…")
+		lines = append(lines, "", tr("Загрузка настроек…"))
 	}
 	if m.settingsError != "" {
-		lines = append(lines, "", "Ошибка: "+m.settingsError, "r — повторить чтение")
+		lines = append(lines, "", tr("Ошибка: ")+m.settingsError, tr("r — повторить чтение"))
 	}
 	if m.settings == nil {
 		return strings.Join(lines, "\n")
 	}
 	u, _ := settingsURL(m.settingsLogin)
-	lines = append(lines, muted.Render(u.Host+" · снимок "+m.settingsUpdated.Format("15:04:05")))
+	lines = append(lines, muted().Render(u.Host+tr(" · снимок ")+m.settingsUpdated.Format("15:04:05")))
 	if m.settingsError != "" || m.settingsLoading {
-		lines = append(lines, "Показан предыдущий снимок.")
+		lines = append(lines, tr("Показан предыдущий снимок."))
 	}
 	if len(m.settings.Namespaces) == 0 {
-		return strings.Join(append(lines, "", "dsh не вернул разделов настроек."), "\n")
+		return strings.Join(append(lines, "", tr("dsh не вернул разделов настроек.")), "\n")
 	}
 	ns := m.settings.Namespaces[m.settingsIndex]
-	lines = append(lines, "", accent.Bold(true).Render(fmt.Sprintf("‹ %s ›  [%d/%d]", clean(ns.NS), m.settingsIndex+1, len(m.settings.Namespaces))), muted.Render(fmt.Sprintf("Ревизия %d · действующие значения", ns.Revision)), "")
+	lines = append(lines, "", accent().Bold(true).Render(fmt.Sprintf("‹ %s ›  [%d/%d]", clean(ns.NS), m.settingsIndex+1, len(m.settings.Namespaces))), muted().Render(fmt.Sprintf(tr("Ревизия %d · действующие значения"), ns.Revision)), "")
 	lines = append(lines, settingsFields(ns)...)
-	lines = append(lines, "", muted.Render("Секреты скрыты. Enter — форма выбранного раздела."))
+	lines = append(lines, "", muted().Render(tr("Секреты скрыты. Enter — форма выбранного раздела.")))
 	return strings.Join(lines, "\n")
 }
 
@@ -128,10 +128,10 @@ func settingsFields(ns settingsNamespace) []string {
 		}
 		label := strings.Join(path, ".")
 		if label == "" {
-			label = "значение"
+			label = tr("значение")
 		}
 		if depth > 32 {
-			lines = append(lines, clean(label)+" = [слишком глубокая структура]")
+			lines = append(lines, clean(label)+tr(" = [слишком глубокая структура]"))
 			return
 		}
 		switch v := value.(type) {
@@ -160,17 +160,17 @@ func settingsFields(ns settingsNamespace) []string {
 	}
 	walk(ns.Value, nil, 0)
 	for _, secret := range ns.Secrets {
-		state := "не задан"
+		state := tr("не задан")
 		if secret.Set {
-			state = "задан"
+			state = tr("задан")
 		}
-		lines = append(lines, clean(strings.Join(secret.Path, "."))+" = [секрет: "+state+"]")
+		lines = append(lines, clean(strings.Join(secret.Path, "."))+tr(" = [секрет: ")+state+"]")
 	}
 	if len(lines) == 0 {
-		lines = append(lines, "Нет заданных значений.")
+		lines = append(lines, tr("Нет заданных значений."))
 	}
 	if len(lines) >= 1000 {
-		lines = append(lines, "… Вывод ограничен 1000 строками.")
+		lines = append(lines, tr("… Вывод ограничен 1000 строками."))
 	}
 	return lines
 }

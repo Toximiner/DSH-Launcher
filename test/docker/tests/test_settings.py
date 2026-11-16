@@ -85,3 +85,21 @@ def test_settings_validation(start, gui):
     assert not settings.restart_banner(), 'no restart banner'
     settings.close()
     launcher.term()
+
+
+def test_settings_shortcuts(start, gui):
+    """The reference is searchable, scoped to the launcher and retained across redraws."""
+    launcher = start(FAKE, NOUPD)
+    gui.wait()
+    settings = gui.open_settings()
+    settings.section('shortcuts')
+    rows = settings.shortcut_rows()
+    assert len(rows) >= 14, rows
+    matched = settings.shortcut_rows('Ctrl+,')
+    assert len(matched) == 1 and 'Launcher settings' in matched[0], matched
+    assert not settings.shortcut_rows('no-such-shortcut'), 'search must hide unrelated shortcuts'
+    settings.set('spellcheck', 'false')
+    settings.wait_note('Saved')
+    assert settings.active_section() == 'shortcuts', 'redraw lost the selected settings section'
+    assert len(settings.shortcut_rows()) == len(rows), 'redraw lost shortcuts'
+    launcher.term()

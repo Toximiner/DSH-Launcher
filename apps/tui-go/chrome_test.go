@@ -187,3 +187,48 @@ func TestMenuAndDialogMouseTargets(t *testing.T) {
 		}
 	}
 }
+
+func TestShortcutReferenceSearchAndSettingsEntry(t *testing.T) {
+	m := newModel()
+	m.input.SetValue("retained draft")
+	m.openDialog("settings")
+	m.chrome.selection = 3
+	key(m, tea.KeyEnter)
+	if m.chrome.dialog != "help" {
+		t.Fatal("settings did not open shortcuts")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("расписания"), Paste: true})
+	_, view := m.dialogBox()
+	if !strings.Contains(view, "Ctrl+G") || strings.Contains(view, "Ctrl+]") {
+		t.Fatal("shortcut search did not filter by context")
+	}
+	key(m, tea.KeyCtrlU)
+	key(m, tea.KeyEnd)
+	m.dialogBox()
+	if m.chrome.helpOffset == 0 {
+		t.Fatal("shortcut reference did not scroll")
+	}
+	key(m, tea.KeyEsc)
+	if m.input.Value() != "retained draft" || !m.input.Focused() {
+		t.Fatal("shortcut reference lost composer context")
+	}
+}
+
+func TestThemeAndSidebarPreferences(t *testing.T) {
+	m := newModel()
+	m.width, m.height = 100, 30
+	before, _ := m.contentSize()
+	m.togglePreference(5)
+	after, _ := m.contentSize()
+	if m.sidebarVisible() || after-before != sidebarWidth+sidebarGap {
+		t.Fatal("hidden sidebar did not release its width")
+	}
+	m.togglePreference(4)
+	if m.prefs.Theme != "light" || uiColor("#111820") != "#f5f7fa" {
+		t.Fatal("light theme did not apply")
+	}
+	m.togglePreference(4)
+	if m.prefs.Theme != "" || uiColor("#111820") != "#111820" {
+		t.Fatal("dark theme was not restored")
+	}
+}

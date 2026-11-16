@@ -64,7 +64,7 @@ func (m *model) reconcileQueuedPrompt() {
 	// leave the queue via another client while our recent-history window is cold.
 	if p.Status == "accepted" && !p.AcceptedAt.IsZero() && m.session.QueueFetchedAt.After(p.AcceptedAt) && m.chat.ready && m.chat.cursor >= m.session.StateCursor {
 		delete(m.prompts, m.session.ID)
-		m.chat.note = "Принятое сообщение больше не находится в очереди dsh."
+		m.chat.note = tr("Принятое сообщение больше не находится в очереди dsh.")
 	}
 }
 func (m *model) visibleQueue() []queuedMessage {
@@ -90,21 +90,21 @@ func (m *model) queueView() string {
 	if len(items) == 0 {
 		return ""
 	}
-	lines := []string{heading.Render("ОЧЕРЕДЬ DSH · " + strconv.Itoa(len(items))), muted.Render("F9: управление очередью · F8: остановить текущую задачу.")}
+	lines := []string{heading().Render(tr("ОЧЕРЕДЬ DSH · ") + strconv.Itoa(len(items))), muted().Render(tr("F9: управление очередью · F8: остановить текущую задачу."))}
 	if m.sessionStale || m.chat == nil || !m.chat.ready {
-		lines = append(lines, muted.Render("Последнее полученное состояние; связь восстанавливается."))
+		lines = append(lines, muted().Render(tr("Последнее полученное состояние; связь восстанавливается.")))
 	}
 	for i, item := range items {
-		label := "Ожидает выполнения"
+		label := tr("Ожидает выполнения")
 		if item.Placement == "steering" {
-			label = "Уточнение текущему заданию"
+			label = tr("Уточнение текущему заданию")
 		}
 		text := boundedToolText(contentText(item.Content), toolArgumentsLimit)
 		preview := strings.Split(ansi.Hardwrap(text, max(1, m.viewport.Width-2), true), "\n")
 		if len(preview) > 3 {
 			preview = append(preview[:3], "…")
 		}
-		lines = append(lines, accent.Render(strconv.Itoa(i+1)+". "+label)+"\n"+strings.Join(preview, "\n"))
+		lines = append(lines, accent().Render(strconv.Itoa(i+1)+". "+label)+"\n"+strings.Join(preview, "\n"))
 	}
 	return strings.Join(lines, "\n")
 }
