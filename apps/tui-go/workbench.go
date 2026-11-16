@@ -27,6 +27,16 @@ type benchAction struct {
 	Label  string
 }
 type workbench struct {
+	parent                                   *workbench
+	scheduleForm                             *scheduleForm
+	scheduleFilter                           int
+	pageView                                 bool
+	previousPage                             int
+	pluginOffset                             int
+	pluginTechnical                          bool
+	pluginMore                               bool
+	pluginSettings                           *settingsSnapshot
+	pluginManagement                         bool
 	lastResult                               string
 	pendingBuilds                            []string
 	pendingSpec                              string
@@ -53,18 +63,20 @@ type workbench struct {
 }
 type benchTerminalDone struct{ err error }
 type benchResult struct {
-	feedback      string
-	pluginPanel   *pluginPanel
-	pendingBuilds []string
-	pendingSpec   string
-	dialog        *workbench
-	serial        int
-	rows          []benchRow
-	document      string
-	fileEOF       bool
-	err           error
-	action        bool
-	connect       string
+	pluginSettings   *settingsSnapshot
+	pluginManagement bool
+	feedback         string
+	pluginPanel      *pluginPanel
+	pendingBuilds    []string
+	pendingSpec      string
+	dialog           *workbench
+	serial           int
+	rows             []benchRow
+	document         string
+	fileEOF          bool
+	err              error
+	action           bool
+	connect          string
 }
 
 func prettyValue(v any) string                      { b, _ := json.MarshalIndent(v, "", "  "); return string(b) }
@@ -87,11 +99,24 @@ func (m *model) openWorkbench(kind string) tea.Cmd {
 		m.append(tr("Подключите сессию dsh."))
 		return nil
 	}
+	if m.workbench != nil && m.workbench.kind == kind && m.workbench.pageView && m.page == m.workbench.pageNumber() && m.chrome.dialog == "" {
+		return m.loadWorkbench()
+	}
 	ctx, cancel := context.WithCancel(m.chat.ctx)
 	search := textinput.New()
 	search.Prompt = tr("Поиск: ")
 	search.CharLimit = 128
 	d := &workbench{ctx: ctx, cancel: cancel, id: m.session.ID, epoch: m.chat.epoch, kind: kind, editor: textarea.New(), focused: m.input.Focused(), search: search, view: viewport.New(1, 1), fileOffset: 1}
+	if m.workbench != nil && m.workbench.pageView && m.page == m.workbench.pageNumber() {
+		d.parent = m.workbench
+	}
+	if (kind == "plugins" || kind == "schedules") && m.chrome.dialog == "" {
+		d.pageView = true
+		d.previousPage = m.page
+		m.page = d.pageNumber()
+		m.navFocused = false
+		m.resize()
+	}
 	m.workbench = d
 	m.input.Blur()
 	return tea.Batch(d.search.Focus(), m.loadWorkbench())
@@ -103,7 +128,12 @@ func (m *model) closeWorkbench() tea.Cmd {
 	}
 	d.cancel()
 	d.editor.SetValue("")
-	m.workbench = nil
+	d.scheduleForm = nil
+	m.workbench = d.parent
+	if d.pageView && m.page == d.pageNumber() {
+		m.page = d.previousPage
+		m.resize()
+	}
 	if d.focused && m.page == chatPage && !m.navFocused {
 		return m.input.Focus()
 	}
@@ -113,7 +143,23 @@ func (d *workbench) visible() []benchRow {
 	q := strings.ToLower(strings.TrimSpace(d.search.Value()))
 	var out []benchRow
 	for _, r := range d.rows {
-		if q == "" || strings.Contains(strings.ToLower(r.ID+" "+r.Title), q) {
+		if d.kind == "plugins" {
+			component := stringValue(r.Data, "pluginGroup") == "components"
+			if component != d.pluginTechnical {
+				continue
+			}
+			if !d.pluginMore && q == "" && morePluginBundles[r.ID] && r.Data["enabled"] != true {
+				continue
+			}
+		}
+		if d.kind == "schedules" && d.scheduleFilter > 0 && stringValue(r.Data, "status") != scheduleStatuses[d.scheduleFilter] {
+			continue
+		}
+		search := r.ID + " " + r.Title
+		if d.kind == "plugins" || d.kind == "schedules" {
+			search += " " + r.Body
+		}
+		if q == "" || strings.Contains(strings.ToLower(search), q) {
 			out = append(out, r)
 		}
 	}
@@ -134,6 +180,8 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 		rows = append(rows, benchRow{id, clean(title), clean(body), data})
 	}
 	switch d.kind {
+	case "permissions":
+		rows, err = readPermissions(ctx, api, d.id)
 	case "account":
 		rows, err = readAccount(ctx, api)
 	case "operations":
@@ -213,14 +261,7 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 			}
 		}
 	case "plugins":
-		err = api.rpc(ctx, "pluginInventory/list", map[string]any{}, &value)
-		if err == nil {
-			for _, v := range arrayValue(objectValue(value)["entries"]) {
-				r := objectValue(v)
-				id := stringValue(r, "entryId")
-				add(id, stringValue(r, "moduleName")+" · "+fmt.Sprint(r["fiberPhase"]), fmt.Sprintf(tr("ID: %s\nВключён: %v\nСостояние: %v\n\nF4 — настройки dsh по схемам.\n/commands — доступные команды плагинов.\n/market — установка и обновление.\nВеб-экраны требуют отдельного адаптера."), id, r["enabled"], r["fiberPhase"]), r)
-			}
-		}
+		return readPlugins(ctx, api, d)
 	case "files":
 		if d.document != "" {
 			if documentPreviewKind(d.document) != "" {
@@ -288,17 +329,13 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 			if err != nil || stringValue(objectValue(value), "code") != "" || objectValue(value)["records"] == nil {
 				return nil, "", false, errors.New(tr("История расписания недоступна; F5 обновить."))
 			}
-			return nil, tr("История расписания · последние 100 записей\n") + clean(prettyValue(value)), true, nil
+			return nil, scheduleHistory(objectValue(value)), true, nil
 		}
-		err = api.rpc(ctx, "schedule/list", map[string]any{"request": map[string]any{"limit": 200, "offset": 0}}, &value)
+		err = api.rpc(ctx, "schedule/catalog", map[string]any{}, &value)
 		if err == nil {
-			r := objectValue(value)
-			if total, ok := r["total"].(float64); ok && total > 200 {
-				return nil, "", false, errors.New(tr("Более 200 расписаний; используйте фильтр на сервере."))
-			}
-			for _, v := range arrayValue(r["items"]) {
+			for _, v := range arrayValue(value) {
 				r := objectValue(v)
-				add(stringValue(r, "id"), stringValue(r, "title")+" · "+stringValue(r, "status"), prettyValue(map[string]any{"id": r["id"], "title": r["title"], "prompt": r["prompt"], "status": r["status"], "target": r["target"], "scheduledAt": r["scheduledAt"], "updatedAt": r["updatedAt"]}), r)
+				add(stringValue(r, "id"), stringValue(r, "title")+" · "+stringValue(r, "status"), scheduleDetails(r), r)
 			}
 		}
 	case "agents", "tasks":
@@ -365,6 +402,8 @@ func (m *model) loadWorkbench() tea.Cmd {
 		if err == nil {
 			defer api.close()
 			result.rows, result.document, result.fileEOF, result.err = readBench(ctx, api, &snapshot)
+			result.pluginSettings = snapshot.pluginSettings
+			result.pluginManagement = snapshot.pluginManagement
 		} else {
 			result.err = errors.New(tr("Раздел dsh недоступен."))
 		}
@@ -393,6 +432,7 @@ func (m *model) handleBench(result benchResult) tea.Cmd {
 		d.action = nil
 		d.confirm = false
 		d.editing = false
+		d.scheduleForm = nil
 		d.editor.SetValue("")
 		d.lastResult = result.feedback
 		d.pendingBuilds = result.pendingBuilds
@@ -416,11 +456,23 @@ func (m *model) handleBench(result benchResult) tea.Cmd {
 			d.view.GotoTop()
 			d.note = tr("Снимок dsh · F5 обновить · Esc назад")
 		}
+		if d.kind == "plugins" {
+			return m.loadWorkbench()
+		}
 		return nil
 	}
-	d.rows = result.rows
+	if d.kind != "schedules" || d.document == "" {
+		d.rows = result.rows
+	}
+	if d.kind == "plugins" {
+		d.pluginSettings = result.pluginSettings
+		d.pluginManagement = result.pluginManagement
+	}
 	d.fileEOF = result.fileEOF
 	d.note = tr("Снимок dsh · F5 обновить · Esc назад")
+	if d.kind == "plugins" && d.lastResult != "" {
+		d.note = d.lastResult + tr(" · F5 перечитать")
+	}
 	d.blocked = false
 	d.action = nil
 	d.confirm = false
@@ -442,6 +494,23 @@ func (m *model) benchExecute() tea.Cmd {
 		return nil
 	}
 	action := *d.action
+	var pluginBaseline *bool
+	if d.kind == "plugins" && action.Method == "pluginManager/setBundleEnabled" {
+		if row, ok := d.selected(); ok && row.ID == stringValue(action.Args, "name") {
+			if value, known := row.Data["enabled"].(bool); known {
+				pluginBaseline = &value
+			}
+		}
+		if pluginBaseline == nil {
+			return nil
+		}
+	}
+	permissionBaseline := ""
+	if d.kind == "permissions" {
+		if row, ok := d.selected(); ok {
+			permissionBaseline = stringValue(row.Data, "baseline")
+		}
+	}
 	d.packageRequestID = stringValue(objectValue(action.Args["options"]), "requestId")
 	d.cancelRequested = false
 	d.cancelStatus = ""
@@ -499,6 +568,12 @@ func (m *model) benchExecute() tea.Cmd {
 						err = errors.New("running account tasks")
 					}
 				}
+				if err == nil && d.kind == "permissions" {
+					err = permissionPreflight(ctx, api, d.id, permissionBaseline, stringValue(action.Args, "line"))
+				}
+				if err == nil && pluginBaseline != nil {
+					err = pluginTogglePreflight(ctx, api, stringValue(action.Args, "name"), *pluginBaseline)
+				}
 				if err == nil {
 					err = api.rpc(ctx, action.Method, action.Args, target)
 				}
@@ -544,6 +619,12 @@ func (m *model) benchExecute() tea.Cmd {
 						}
 					} else if stringValue(r, "id") == "" || stringValue(r, "updatedAt") == "" {
 						err = errors.New("schedule unconfirmed")
+					}
+				}
+				if d.kind == "permissions" && action.Method == "commands/execute" {
+					current, readErr := readPermissionSelection(ctx, api, d.id)
+					if readErr != nil || current != strings.TrimPrefix(stringValue(action.Args, "line"), "/permission ") {
+						err = errors.New("permission selection unconfirmed")
 					}
 				}
 				if action.Method == "agentPresets/select" && value != action.Args["agentPreset"] {
@@ -654,6 +735,17 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 	}
 	var action *benchAction
 	switch d.kind {
+	case "permissions":
+		if key == tea.KeyEnter {
+			if r.ID == stringValue(r.Data, "baseline") {
+				d.note = tr("Этот режим доступа уже выбран.")
+				return nil
+			}
+			if !permissionID.MatchString(r.ID) {
+				return nil
+			}
+			action = &benchAction{"commands/execute", map[string]any{"agentId": d.id, "line": "/permission " + r.ID, "submittedAttachments": []any{}}, tr("Изменить доступ для текущей сессии: ") + r.Title}
+		}
 	case "account":
 		args := map[string]any{"client": accountClient()}
 		switch key {
@@ -701,7 +793,34 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 			action = &benchAction{"pluginManager/updateBundle", map[string]any{"name": d.location, "version": r.ID, "options": map[string]any{"registry": r.Data["registry"], "requestId": requestID}}, tr("Обновить ") + d.location + tr(" до ") + r.ID}
 		}
 
-	case "packages":
+	case "packages", "plugins":
+		if d.kind == "plugins" && key == tea.KeyCtrlN && !d.pluginManagement {
+			d.note = tr("Управление пакетами недоступно в этом профиле.")
+			return nil
+		}
+		if d.kind == "plugins" && key != tea.KeyCtrlN {
+			group := stringValue(r.Data, "pluginGroup")
+			if group == "builtin" {
+				if key == tea.KeyEnter {
+					return m.openPluginSettings(r)
+				}
+				return nil
+			}
+			if group != "experimental" && group != "installed" {
+				if key == tea.KeyEnter {
+					d.document = "plugin-details"
+					d.view.GotoTop()
+					return nil
+				}
+				d.note = tr("Компоненты показаны только для чтения.")
+				return nil
+			}
+			if key == tea.KeyEnter {
+				d.document = "plugin-details"
+				d.view.GotoTop()
+				return nil
+			}
+		}
 		if key == tea.KeyCtrlN {
 			id, err := newRequestID()
 			if err != nil {
@@ -717,6 +836,11 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 			return nil
 		}
 		if key == tea.KeySpace {
+			if d.kind == "plugins" {
+				if _, known := r.Data["enabled"].(bool); !known {
+					return nil
+				}
+			}
 			action = &benchAction{"pluginManager/setBundleEnabled", map[string]any{"name": r.ID, "enabled": r.Data["enabled"] != true}, tr("Переключить пакет ") + r.ID + tr("; может потребоваться перезапуск")}
 		}
 		if key == tea.KeyCtrlX && r.Data["removable"] == true {
@@ -749,7 +873,7 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 		if key == tea.KeyCtrlN {
 			action = &benchAction{"schedule/create", map[string]any{}, tr("Создать расписание: будущие срабатывания могут запускать агента")}
 			d.startEditor(prettyValue(map[string]any{"title": tr("Новая задача"), "prompt": tr("Описание задачи"), "timing": map[string]any{"kind": "after", "after_seconds": 3600}}), action)
-			return d.editor.Focus()
+			return d.startScheduleForm(nil)
 		}
 		request := map[string]any{"id": r.ID, "action": "update", "expectedUpdatedAt": r.Data["updatedAt"]}
 		if r.Data["updatedAt"] == nil {
@@ -765,7 +889,7 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 		case tea.KeyF3:
 			action = &benchAction{"schedule/edit", map[string]any{"request": request}, tr("Изменить расписание ") + r.Title}
 			d.startEditor(prettyValue(map[string]any{"title": r.Data["title"], "prompt": r.Data["prompt"]}), action)
-			return d.editor.Focus()
+			return d.startScheduleForm(r.Data)
 		case tea.KeyCtrlX:
 			request["action"] = "delete"
 			action = &benchAction{"schedule/edit", map[string]any{"request": request}, tr("Удалить расписание и его историю: ") + r.Title}
@@ -866,6 +990,26 @@ func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if d.pluginPanel != nil {
 		return m.pluginPanelKey(msg), true
 	}
+	if d.pageView && !d.editing {
+		if m.page != d.pageNumber() {
+			m.closeWorkbench()
+			return nil, false
+		}
+		if m.chrome.dialog != "" || m.chrome.menuOpen || m.navFocused || msg.Alt || msg.Type == tea.KeyTab || msg.Type == tea.KeyF1 || msg.Type == tea.KeyF4 || msg.Type == tea.KeyF10 {
+			return nil, false
+		}
+	}
+	if d.kind == "plugins" && !d.editing {
+		return m.pluginsKey(msg), true
+	}
+	if d.kind == "schedules" && !d.editing && !msg.Paste && msg.Type == tea.KeyF2 && d.document == "" {
+		d.scheduleFilter = (d.scheduleFilter + 1) % len(scheduleStatuses)
+		d.index = 0
+		return nil, true
+	}
+	if d.editing && d.scheduleForm != nil {
+		return m.scheduleFormKey(msg), true
+	}
 	if d.editing {
 		if msg.Type == tea.KeyEsc && !msg.Paste {
 			d.editing = false
@@ -895,7 +1039,7 @@ func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 				d.action.Args["line"] = text
 			} else if d.kind == "agents" {
 				objectValue(d.action.Args["request"])["content"] = []any{map[string]any{"type": "text", "text": text}}
-			} else if d.kind == "packages" && d.action.Method == "pluginManager/installBundle" {
+			} else if (d.kind == "packages" || d.kind == "plugins") && d.action.Method == "pluginManager/installBundle" {
 				spec := strings.TrimSpace(text)
 				if strings.ContainsAny(spec, "\r\n\t") || len(spec) > 2048 {
 					d.note = tr("Введите один пакет или путь до 2048 байт.")
@@ -1061,10 +1205,24 @@ func (m *model) benchView(base string) string {
 	if d.pluginPanel != nil {
 		return m.pluginPanelView(base)
 	}
+	if d.scheduleForm != nil && d.editing {
+		return m.scheduleFormView(base)
+	}
+	if d.kind == "schedules" && d.pageView && !d.editing && !d.confirm {
+		return base
+	}
+	if d.kind == "plugins" && !d.editing && !d.confirm {
+		if d.pageView {
+			return base
+		}
+		box := m.benchBox()
+		content := m.pluginsContent(area{box.x + 2, box.y + 1, box.width - 4, box.height - 2})
+		return overlay(base, panel(box.width, box.height, content, "#58a6ff"), box.x, box.y, m.width-1)
+	}
 	box := m.benchBox()
 	w := box.width - 4
 	h := box.height - 10
-	title := map[string]string{"operations": tr("Журнал операций пакетов · этот TUI"), "account": tr("Аккаунт DeepSeek"), "workspaces": tr("Рабочие области"), "packages": tr("Управление пакетами dsh"), "package-versions": tr("Версии пакета"), "presets": tr("Пресеты агента"), "files": tr("Файлы рабочей области"), "commands": tr("Команды плагинов"), "plugins": tr("Плагины dsh"), "jobs": tr("Фоновые задания"), "schedules": tr("Расписания · весь Host"), "agents": tr("Подагенты сессии"), "tasks": tr("Задачи команды"), "terminals": tr("Терминалы сессии")}[d.kind]
+	title := map[string]string{"permissions": tr("Доступ к файлам и подтверждения"), "operations": tr("Журнал операций пакетов · этот TUI"), "account": tr("Аккаунт DeepSeek"), "workspaces": tr("Рабочие области"), "packages": tr("Управление пакетами dsh"), "package-versions": tr("Версии пакета"), "presets": tr("Пресеты агента"), "files": tr("Файлы рабочей области"), "commands": tr("Команды плагинов"), "plugins": tr("Плагины dsh"), "jobs": tr("Фоновые задания"), "schedules": tr("Расписания · весь Host"), "agents": tr("Подагенты сессии"), "tasks": tr("Задачи команды"), "terminals": tr("Терминалы сессии")}[d.kind]
 	trim := func(s string) string { return ansi.Truncate(clean(s), w, "…") }
 	d.search.Width = max(1, w-8)
 	lines := []string{heading().Render(title), trim(d.id + " / " + d.location), d.search.View()}
@@ -1128,6 +1286,8 @@ func (m *model) benchView(base string) string {
 	hint := tr("↑/↓ выбор · Enter открыть · F5 обновить · Esc назад")
 	hint2 := tr("Снимок · PgUp/PgDn детали · поиск по имени")
 	switch d.kind {
+	case "permissions":
+		hint2 = tr("Enter выбрать · подтверждение перед изменением · F5 перечитать")
 	case "account":
 		hint2 = tr("Ctrl+N вход · Ctrl+X выход · Ctrl+G отменить вход · F3 профиль")
 	case "workspaces":
@@ -1166,6 +1326,12 @@ func (m *model) benchMouse(msg tea.MouseMsg) tea.Cmd {
 	d := m.workbench
 	if d == nil || d.busy || d.confirm || d.editing {
 		return nil
+	}
+	if d.kind == "plugins" {
+		return m.pluginsMouse(msg)
+	}
+	if d.kind == "schedules" && d.pageView {
+		return m.schedulesMouse(msg)
 	}
 	if d.pluginPanel != nil {
 		if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {

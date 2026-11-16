@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -212,7 +213,8 @@ func TestMarketMouseTargetsAndProgress(t *testing.T) {
 		t.Helper()
 		for _, hit := range m.marketHits {
 			if hit.kind == kind && (kind != "row" || hit.index == index) {
-				mouse(m, 27+hit.box.x, 5+hit.box.y, tea.MouseButtonLeft, tea.MouseActionPress)
+				box := m.pluginsPageBox()
+				mouse(m, box.x+hit.box.x, box.y+hit.box.y, tea.MouseButtonLeft, tea.MouseActionPress)
 				return
 			}
 		}
@@ -241,5 +243,42 @@ func TestMarketMouseTargetsAndProgress(t *testing.T) {
 	m.Update(marketProgress{sequence: 7, status: marketStatus{Busy: true}})
 	if m.marketOperating || m.marketBusy {
 		t.Fatal("late progress revived completed operation")
+	}
+}
+
+func TestMarketCardsKeepSelectionActionsAndTabs(t *testing.T) {
+	defer activeEnglish.Store(false)
+	for _, language := range []string{"ru", "en"} {
+		for _, hidden := range []bool{false, true} {
+			m := newModel()
+			m.prefs.Language = language
+			m.prefs.HideSidebar = hidden
+			m.page = marketPage
+			m.market = &marketSnapshot{Profile: "fixture", Installed: map[string]string{}}
+			for i := 0; i < 40; i++ {
+				m.market.Plugins = append(m.market.Plugins, marketPlugin{Name: fmt.Sprintf("Plugin %d 世界", i), NPM: fmt.Sprintf("plugin-%d", i), Version: "1.2.3", Description: map[string]string{"en": strings.Repeat("Description ", 30)}})
+			}
+			for _, size := range []tea.WindowSizeMsg{{Width: 80, Height: 24}, {Width: 100, Height: 30}, {Width: 160, Height: 42}} {
+				m.Update(size)
+				m.marketIndex = 39
+				m.rebuild()
+				if !strings.Contains(clean(m.View()), "Plugin 39") || lipgloss.Height(m.View()) > m.height || lipgloss.Width(m.View()) > m.width-1 {
+					t.Fatal("last card or geometry lost")
+				}
+				m.confirmMarket("install")
+				foundYes, foundNo := false, false
+				for _, hit := range m.marketHits {
+					if hit.box.y >= m.viewport.Height {
+						t.Fatal("action outside page")
+					}
+					foundYes = foundYes || hit.kind == "yes"
+					foundNo = foundNo || hit.kind == "no"
+				}
+				if !foundYes || !foundNo {
+					t.Fatal("confirmation buttons not visible")
+				}
+				m.marketKey(tea.KeyMsg{Type: tea.KeyEsc})
+			}
+		}
 	}
 }

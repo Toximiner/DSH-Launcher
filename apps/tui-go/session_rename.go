@@ -131,6 +131,11 @@ func (m *model) handleSessionRename(result sessionRenameResult) tea.Cmd {
 			m.sessionItems[i].Projections.Values.Title = result.title
 		}
 	}
+	for i := range m.side.sessions {
+		if m.side.sessions[i].ID == d.id {
+			m.side.sessions[i].Projections.Values.Title = result.title
+		}
+	}
 	m.renameDialog = nil
 	m.rebuild()
 	if d.focused && m.page == chatPage && !m.navFocused {

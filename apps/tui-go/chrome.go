@@ -23,20 +23,29 @@ func defaultClientPreferences() clientPreferences {
 }
 
 type chromeState struct {
-	menuOpen                    bool
-	menu, item                  int
-	dialog                      string
-	selection                   int
-	helpOffset                  int
-	helpQuery                   string
-	inputFocused, searchFocused bool
+	settingsTab, settingsRow, settingsOffset int
+	settingsNav                              bool
+	helpFromSettings                         bool
+	menuOpen                                 bool
+	menu, item                               int
+	dialog                                   string
+	selection                                int
+	helpOffset                               int
+	helpGroup                                int
+	helpQuery                                string
+	inputFocused, searchFocused              bool
 }
 
 var menuNames = []string{"Файл", "Вид", "Справка"}
-var menuEntries = [][]string{
-	{"Настройки TUI…   F4", "Выйти        Ctrl+D", "Установка и dsh…", "Обновления и откат…"},
-	{"Настройки dsh", "Журнал клиента"},
-	{"Горячие клавиши", "О программе", "Диагностика…"},
+
+type menuEntry struct {
+	label, action string
+}
+
+var menuEntries = [][]menuEntry{
+	{{"Настройки TUI…   F4", "settings"}, {"Установка и dsh…", "runtime"}, {"Выйти        Ctrl+D", "quit"}},
+	{{"Настройки dsh", "dsh-settings"}},
+	{{"Горячие клавиши", "help"}, {"Обновления и откат…", "updates"}, {"Журнал клиента", "log"}, {"Диагностика…", "diagnostics"}, {"О программе", "about"}},
 }
 
 func (m *model) mouseEnabled() bool { return m.prefs.Mouse && !m.mouseForcedOff }
@@ -58,13 +67,27 @@ func (m *model) openDialog(kind string) tea.Cmd {
 	m.chrome.selection = 0
 	m.chrome.helpOffset = 0
 	m.chrome.helpQuery = ""
+	m.chrome.helpGroup = 0
+	if kind == "settings" {
+		m.chrome.settingsTab, m.chrome.settingsRow, m.chrome.settingsOffset = 0, 0, 0
+		m.chrome.settingsNav = true
+		if m.settings == nil {
+			return m.loadSettings()
+		}
+	}
 	return nil
 }
 
 func (m *model) closeChrome() tea.Cmd {
+	if m.chrome.dialog == "help" && m.chrome.helpFromSettings {
+		m.chrome.dialog = "settings"
+		m.chrome.helpFromSettings = false
+		return nil
+	}
 	input, search := m.chrome.inputFocused, m.chrome.searchFocused
 	m.chrome.menuOpen = false
 	m.chrome.dialog = ""
+	m.chrome.helpFromSettings = false
 	if search {
 		return m.marketSearch.Focus()
 	}
@@ -118,6 +141,14 @@ func (m *model) togglePreference(index int) tea.Cmd {
 		}
 	}
 	if index == 5 {
+		if next.HideSidebar {
+			m.navFocused = false
+			if m.chrome.dialog != "" {
+				m.chrome.inputFocused = m.page == chatPage
+			} else if m.page == chatPage {
+				m.input.Focus()
+			}
+		}
 		m.resize()
 	}
 	m.rebuild()
@@ -136,30 +167,23 @@ func (m *model) togglePreference(index int) tea.Cmd {
 }
 
 func (m *model) activateMenu() tea.Cmd {
-	menu, item := m.chrome.menu, m.chrome.item
-	if menu == 0 {
-		if item == 0 {
-			return m.openDialog("settings")
-		}
-
-		if item >= 2 {
-			m.closeChrome()
-			return m.openRuntime([]string{"runtime", "updates"}[item-2])
-		}
+	action := menuEntries[m.chrome.menu][m.chrome.item].action
+	switch action {
+	case "settings", "help", "about":
+		return m.openDialog(action)
+	case "runtime", "updates", "diagnostics":
+		m.closeChrome()
+		return m.openRuntime(action)
+	case "quit":
 		return tea.Quit
 	}
-	if menu == 2 {
-		if item == 0 {
-			return m.openDialog("help")
-		}
-		if item == 2 {
-			m.closeChrome()
-			return m.openRuntime("diagnostics")
-		}
-		return m.openDialog("about")
-	}
 	m.closeChrome()
-	m.page = []int{dshSettingsPage, logPage}[item]
+	switch action {
+	case "dsh-settings":
+		m.page = dshSettingsPage
+	case "log":
+		m.page = logPage
+	}
 	m.navFocused = false
 	m.input.Blur()
 	m.marketEditing = false
@@ -205,6 +229,9 @@ func (m *model) chromeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.openDialog("settings"), true
 	}
 	if key == "f1" {
+		if m.chrome.dialog == "settings" {
+			return m.settingsHelp(), true
+		}
 		return m.openDialog("help"), true
 	}
 	if key == "f10" || key == "alt+f" || key == "alt+v" || key == "alt+h" {
@@ -233,20 +260,35 @@ func (m *model) chromeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if m.chrome.dialog != "" {
 		if m.chrome.dialog == "help" {
 			switch key {
+			case "tab", "right":
+				m.changeHelpGroup(1)
+			case "shift+tab", "left":
+				m.changeHelpGroup(-1)
 			case "up":
 				m.chrome.helpOffset--
 			case "down":
 				m.chrome.helpOffset++
 			case "pgup":
-				m.chrome.helpOffset -= max(1, m.height-12)
+				m.chrome.helpOffset -= m.shortcutPageSize()
 			case "pgdown":
-				m.chrome.helpOffset += max(1, m.height-12)
+				m.chrome.helpOffset += m.shortcutPageSize()
 			case "home":
 				m.chrome.helpOffset = 0
 			case "end":
-				m.chrome.helpOffset = len(shortcutLines(m.chrome.helpQuery))
+				m.chrome.helpOffset = 1 << 30
 			case "enter":
 				return m.closeChrome(), true
+			}
+			return nil, true
+		}
+		if entries := sidebarDialogEntries(m.chrome.dialog); len(entries) > 0 {
+			switch key {
+			case "up", "shift+tab":
+				m.chrome.selection = (m.chrome.selection + len(entries) - 1) % len(entries)
+			case "down", "tab":
+				m.chrome.selection = (m.chrome.selection + 1) % len(entries)
+			case "enter", " ":
+				return m.activateSidebarDialog(), true
 			}
 			return nil, true
 		}
@@ -256,21 +298,7 @@ func (m *model) chromeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			}
 			return nil, true
 		}
-		switch key {
-		case "up", "shift+tab":
-			m.chrome.selection = (m.chrome.selection + 6) % 7
-		case "down", "tab":
-			m.chrome.selection = (m.chrome.selection + 1) % 7
-		case "enter", " ":
-			if m.chrome.selection == 2 {
-				return m.closeChrome(), true
-			}
-			if m.chrome.selection == 3 {
-				return m.openDialog("help"), true
-			}
-			return m.togglePreference(m.chrome.selection), true
-		}
-		return nil, true
+		return m.settingsHubKey(key), true
 	}
 	switch key {
 	case "left":
@@ -323,35 +351,29 @@ func selectedRow(text string, selected bool, width int) string {
 }
 
 func (m *model) dialogBox() (area, string) {
+	if m.chrome.dialog == "settings" {
+		return m.settingsHubView()
+	}
+	if m.chrome.dialog == "help" {
+		return m.shortcutHelpView()
+	}
 	width := min(64, m.width-3)
 	inner := width - 4
 	lines := []string{}
 	switch m.chrome.dialog {
-	case "settings":
-		lines = append(lines, heading().Render(tr("Настройки TUI")), muted().Render(tr("Применяются сразу · только этот клиент")), "")
-		for i, label := range []string{tr("Мышь в интерфейсе"), tr("История ввода")} {
-			on := m.mouseEnabled()
-			if i == 1 {
-				on = m.prefs.InputHistory
-			}
-			mark := "[ ]"
-			if on {
-				mark = "[✓]"
-			}
-			if i == 0 && m.mouseForcedOff {
-				label = tr("Мышь (--no-mouse)")
-			}
-			lines = append(lines, selectedRow(mark+" "+label, m.chrome.selection == i, inner))
+	case "navigation", "more", "conversation":
+		title := tr("Инструменты")
+		if m.chrome.dialog == "more" {
+			title = tr("Ещё")
 		}
-		lines = append(lines, "", muted().Render(tr("F4 / Alt+T — открыть · Esc — закрыть")), muted().Render(tr("↑/↓ — выбор · Enter/Пробел — изменить")), "", ansi.Truncate(m.preferencesNote, inner, "…"), "", selectedRow(tr("[ Закрыть ]"), m.chrome.selection == 2, inner), selectedRow(tr("[ Горячие клавиши ]"), m.chrome.selection == 3, inner), selectedRow(tr("Тема: ")+map[bool]string{true: tr("светлая"), false: tr("тёмная")}[m.prefs.Theme == "light"], m.chrome.selection == 4, inner), selectedRow(tr("Боковая панель: ")+map[bool]string{true: tr("скрыта"), false: tr("видна")}[m.prefs.HideSidebar], m.chrome.selection == 5, inner), selectedRow("Language / Язык: "+map[bool]string{true: "English", false: "Русский"}[m.prefs.Language == "en"], m.chrome.selection == 6, inner))
-	case "help":
-		all := shortcutLines(m.chrome.helpQuery)
-		count := max(1, min(24, m.height-11))
-		offset := max(0, min(m.chrome.helpOffset, max(0, len(all)-count)))
-		m.chrome.helpOffset = offset
-		lines = []string{heading().Render(tr("Горячие клавиши")), tr("Поиск: ") + m.chrome.helpQuery, ""}
-		lines = append(lines, all[offset:min(len(all), offset+count)]...)
-		lines = append(lines, "", fmt.Sprintf(tr("%d–%d / %d · ↑/↓ PgUp/PgDn · Ctrl+U сброс"), offset+1, min(len(all), offset+count), len(all)), tr("[ Закрыть · Enter / Esc ]"))
+		if m.chrome.dialog == "conversation" {
+			title = tr("Сессия")
+		}
+		lines = []string{heading().Render(title), ""}
+		for i, entry := range sidebarDialogEntries(m.chrome.dialog) {
+			lines = append(lines, selectedRow(tr(entry.label), m.chrome.selection == i, inner))
+		}
+		lines = append(lines, "", muted().Render(tr("↑/↓ выбор · Enter открыть · Esc назад")))
 	default:
 		lines = []string{heading().Render(tr("О программе")), "", "DSH Launcher TUI · " + version, "Go + Bubble Tea · Linux", tr("Интерфейс: русский · тема из настроек"), fmt.Sprintf(tr("Терминал: %d × %d"), m.width, m.height), "", tr("Рабочая папка:"), clean(m.workspace), "", tr("[ Закрыть · Enter / Esc ]")}
 	}
@@ -385,7 +407,7 @@ func (m *model) chromeView(base string) string {
 	if m.chrome.menuOpen {
 		lines := []string{}
 		for i, item := range menuEntries[m.chrome.menu] {
-			lines = append(lines, selectedRow(tr(item), m.chrome.item == i, 24))
+			lines = append(lines, selectedRow(tr(item.label), m.chrome.item == i, 24))
 		}
 		return overlay(base, panel(28, len(lines)+2, strings.Join(lines, "\n"), "#79c0ff"), min(menuStart(m.chrome.menu), m.width-29), 2, m.width-1)
 	}
@@ -394,34 +416,24 @@ func (m *model) chromeView(base string) string {
 
 func (m *model) chromeMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 	if m.chrome.dialog != "" {
-		if m.chrome.dialog == "help" && (msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown) {
-			if msg.Button == tea.MouseButtonWheelUp {
-				m.chrome.helpOffset -= 3
-			} else {
-				m.chrome.helpOffset += 3
-			}
-			return nil, true
+		if m.chrome.dialog == "settings" {
+			return m.settingsHubMouse(msg), true
+		}
+		if m.chrome.dialog == "help" {
+			return m.shortcutHelpMouse(msg), true
 		}
 		if msg.Button == tea.MouseButtonLeft {
 			box, _ := m.dialogBox()
 			if box.contains(msg.X, msg.Y) {
 				row := msg.Y - box.y - 1
-				if m.chrome.dialog == "settings" {
-					if row == 3 || row == 4 {
-						m.chrome.selection = row - 3
-						return m.togglePreference(row - 3), true
+				if entries := sidebarDialogEntries(m.chrome.dialog); len(entries) > 0 {
+					if row >= 2 && row < 2+len(entries) {
+						m.chrome.selection = row - 2
+						return m.activateSidebarDialog(), true
 					}
-					if row == 13 || row == 14 || row == 15 {
-						m.chrome.selection = row - 9
-						return m.togglePreference(m.chrome.selection), true
-					}
-					if row == 12 {
-						return m.openDialog("help"), true
-					}
-					if row == 11 {
-						return m.closeChrome(), true
-					}
-				} else if row == box.height-3 {
+					return nil, true
+				}
+				if row == box.height-3 {
 					return m.closeChrome(), true
 				}
 			}

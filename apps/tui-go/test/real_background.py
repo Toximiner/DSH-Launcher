@@ -281,7 +281,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-background-') as directory:
             'timing': {'kind': 'after', 'after_seconds': 86400}, 'target': {'kind': 'session', 'sessionId': session_id}}})
         assert created['ok'], created
         schedule_id = created['value']['id']
-        panel('/schedules', 'Расписания')
+        panel('/schedules', 'Автоматизация')
         app.send('\x07'); app.wait('Enter — подтвердить')
         assert not rpc('schedule/history', {'request': {'id': schedule_id, 'limit': 100}})['value']['records']
         app.send('\x1b'); app.wait('Подтверждение отменено')
@@ -290,12 +290,12 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-background-') as directory:
         wait_for(lambda: not state(session_id)['running'], timeout=20)
         refresh()
         app.send('\r'); app.wait('История расписания')
-        app.wait('targetSessionId')
+        app.wait('Сессия:')
         capture('schedule-history','История расписания')
         back('История расписания')
-        back('Расписания')
+        back('Автоматизация')
         reconnect()
-        panel('/schedules', 'Расписания'); app.send('\r'); app.wait('История расписания')
+        panel('/schedules', 'Автоматизация'); app.send('\r'); app.wait('История расписания')
         app.wait(session_id)
         history = rpc('schedule/history', {'request': {'id': schedule_id, 'limit': 100}})
         assert history['ok'] and len(history['value']['records']) == 1, history

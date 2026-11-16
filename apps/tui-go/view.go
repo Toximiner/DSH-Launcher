@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -40,51 +39,6 @@ func panel(width, height int, content, color string) string {
 func bar(left, right string, width int) string {
 	left = ansi.Truncate(left, max(1, width-lipgloss.Width(right)-1), "…")
 	return left + strings.Repeat(" ", max(1, width-lipgloss.Width(left)-lipgloss.Width(right))) + right
-}
-
-func (m *model) sidebar(height int) string {
-	const width = sidebarWidth
-	const inner = 20
-	focus := tr("РАЗДЕЛЫ")
-	if m.navFocused {
-		focus += tr(" · ФОКУС")
-	}
-	lines := []string{muted().Bold(true).Render(tr("РАБОЧАЯ ОБЛАСТЬ")), heading().Render(ansi.Truncate(filepath.Base(m.workspace), inner, "…")), "", muted().Bold(true).Render(focus)}
-	for _, page := range navigationPages {
-		text := "   " + tr(pages[page])
-		if page == m.page {
-			text = lipgloss.NewStyle().Width(inner).Bold(true).Foreground(uiColor("#79c0ff")).Background(uiColor("#233044")).Render(" › " + tr(pages[page]))
-		}
-		lines = append(lines, text)
-	}
-	chatLink := tr(" ○ Локальный черновик")
-	if m.session != nil {
-		chatLink = tr(" ● Текущая сессия")
-	}
-	lines = append(lines, "", muted().Bold(true).Render(tr("СЕССИИ")), chatLink)
-	target := height - 2
-	if len(lines) > target-2 {
-		lines = lines[:max(0, target-2)]
-	}
-	for len(lines) < target-2 {
-		lines = append(lines, "")
-	}
-	connection := tr("○ dsh не подключён")
-	if m.settings != nil {
-		connection = tr("✓ Снимок настроек dsh")
-	}
-	if m.session != nil {
-		connection = "✓ dsh · " + m.modeLabel()
-	}
-	lines = append(lines, muted().Render(connection), muted().Render("v"+version))
-	for i, line := range lines {
-		lines[i] = ansi.Truncate(line, inner, "…")
-	}
-	border := "#303d4d"
-	if m.navFocused {
-		border = "#58a6ff"
-	}
-	return panel(width, height, strings.Join(lines, "\n"), border)
 }
 
 func (m *model) View() string {
@@ -132,6 +86,17 @@ func (m *model) View() string {
 	}
 	view := heading().Render(title) + "\n" + muted().Render(strings.Repeat("─", m.viewport.Width)) + "\n" + m.viewport.View()
 	right := panel(w, bodyHeight, view, "#303d4d")
+	if m.page == pluginsPage && m.workbench != nil && m.workbench.kind == "plugins" {
+		box := m.pluginsPageBox()
+		right = lipgloss.PlaceHorizontal(w, lipgloss.Center, m.pluginsContent(box))
+	}
+	if m.page == marketPage {
+		right = lipgloss.PlaceHorizontal(w, lipgloss.Center, m.viewport.View())
+	}
+	if m.page == schedulesPage && m.workbench != nil && m.workbench.kind == "schedules" {
+		box := m.pluginsPageBox()
+		right = lipgloss.PlaceHorizontal(w, lipgloss.Center, m.schedulesContent(box))
+	}
 	if m.page == 0 {
 		chat := panel(w, bodyHeight-composerHeight-1, view, "#303d4d")
 		border := "#303d4d"
@@ -141,6 +106,13 @@ func (m *model) View() string {
 		label, hint := m.composerText()
 		composer := heading().Render(tr("Сообщение")) + muted().Render(label) + "\n" + m.modeControls() + "\n" + m.input.View() + "\n" + muted().Render(hint)
 		right = chat + "\n" + panel(w, composerHeight, composer, border)
+		if m.conversationVisible() {
+			right = m.conversationView(title, w, bodyHeight)
+		}
+		if m.landingVisible() {
+			column := m.chatColumn()
+			right = lipgloss.PlaceHorizontal(w, lipgloss.Center, m.landingView(title, column.width, bodyHeight))
+		}
 	}
 	body := right
 	if m.sidebarVisible() {

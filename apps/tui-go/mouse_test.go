@@ -16,26 +16,24 @@ func TestMouseNavigationAndComposer(t *testing.T) {
 		m := newModel()
 		m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 		m.input.SetValue("draft 世界")
-		for index, page := range navigationPages {
-			label := pages[page]
-			y := 7 + index
-			if !strings.Contains(clean(strings.Split(m.View(), "\n")[y]), label) {
-				t.Fatalf("navigation target is not aligned with %s", label)
-			}
-			mouse(m, 5, y, tea.MouseButtonLeft, tea.MouseActionPress)
-			if m.page != page || m.navFocused != (page != marketPage) || m.input.Focused() {
-				t.Fatalf("click did not select page %d", page)
-			}
+		// The lower More menu opens settings without exposing them in the tree.
+		_, height := m.contentSize()
+		moreY := bodyTop + 1 + height - 3
+		mouse(m, 5, moreY, tea.MouseButtonLeft, tea.MouseActionPress)
+		if m.chrome.dialog != "more" {
+			t.Fatal("bottom More did not open")
 		}
-		if !strings.Contains(clean(strings.Split(m.View(), "\n")[14]), "Локальный") {
-			t.Fatal("draft target is not aligned with the sidebar")
+		box, _ := m.dialogBox()
+		mouse(m, box.x+3, box.y+4, tea.MouseButtonLeft, tea.MouseActionPress)
+		if m.page != dshSettingsPage || m.chrome.dialog != "" {
+			t.Fatal("More did not open dsh settings")
 		}
-		mouse(m, 5, 14, tea.MouseButtonLeft, tea.MouseActionPress)
-		if m.page != 0 || !m.input.Focused() || m.input.Value() != "draft 世界" {
+		mouse(m, 5, 13, tea.MouseButtonLeft, tea.MouseActionPress)
+		if m.page != chatPage || !m.input.Focused() || m.input.Value() != "draft 世界" {
 			t.Fatal("clicking the local draft lost input or failed to focus chat")
 		}
-		mouse(m, 5, 7, tea.MouseButtonLeft, tea.MouseActionPress)
-		mouse(m, 30, 25, tea.MouseButtonLeft, tea.MouseActionPress)
+		key(m, tea.KeyTab)
+		mouse(m, m.composerBox().x+3, m.composerBox().y+1, tea.MouseButtonLeft, tea.MouseActionPress)
 		if m.navFocused || !m.input.Focused() || m.input.Value() != "draft 世界" {
 			t.Fatal("composer click did not restore input focus")
 		}
@@ -79,7 +77,7 @@ func TestMouseScrollAndIgnoredEvents(t *testing.T) {
 			}
 		}
 		m.input.Blur()
-		mouse(m, mainX+3, 25, tea.MouseButtonLeft, tea.MouseActionPress)
+		mouse(m, m.composerBox().x+3, m.composerBox().y+1, tea.MouseButtonLeft, tea.MouseActionPress)
 		if !m.input.Focused() {
 			t.Fatal("composer did not focus after resize")
 		}

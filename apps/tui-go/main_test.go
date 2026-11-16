@@ -105,16 +105,18 @@ func TestNavigationPreservesDraft(t *testing.T) {
 	m.input.SetValue("Мой черновик")
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if m.page != 1 || !strings.Contains(clean(m.View()), "Сессии dsh недоступны") {
-		t.Fatal("sessions view did not open")
+	if m.page != chatPage || m.side.selected != "plugins" {
+		t.Fatal("sidebar selection activated before Enter")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEnd})
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.chrome.dialog != "more" {
+		t.Fatal("sidebar did not open lower More menu")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if m.page != dshSettingsPage || !strings.Contains(clean(m.View()), "Для чтения настроек работающего dsh") {
-		t.Fatal("dsh settings view did not open")
-	}
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if m.page != logPage {
-		t.Fatal("sidebar did not skip TUI settings")
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.page != dshSettingsPage {
+		t.Fatal("More did not open backend settings")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if m.page != 0 || m.navFocused || m.input.Value() != "Мой черновик" {

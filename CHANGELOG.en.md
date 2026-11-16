@@ -7,6 +7,22 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- TUI preview.40: Plugin Market now has a centered page with cards, descriptions, versions, and catalog/installed tabs. Automation tasks has a dedicated page with status filters and counts, creation/editing forms, run times, and readable delivery history. Tasks are read through schedule/catalog without the 200-row limit. Advanced rules remain available in the F2 JSON editor; confirmation and revision checks are preserved.
+
+- TUI preview.40: Plugins follows the GUI with a dedicated page, built-in settings cards, experimental and installed packages, dsh display metadata, More, Market and Add controls. Internal modules have a separate component view. Toggles require confirmation and a baseline check; results refresh without repeating the write. Schema-based settings, operation receipts and nested-panel return remain available.
+
+- TUI preview.40: the keyboard reference now has seven topic groups, separate key/action columns and muted contexts. Tab/Left/Right and buttons switch groups; search includes section names, and the current heading stays visible while scrolling. Long descriptions wrap; the modal fits 80×24.
+
+- TUI preview.40: settings follow the GUI structure with General, Models, Built-in plugins, Agent presets and Plugin Market on the left, and values with descriptions on the right. Settings scroll independently; nested panels return to the hub. Default permissions for new sessions use the shared dsh setting and revision-checked editor. Font size is controlled by the terminal.
+
+- TUI preview.40: active conversations follow the GUI layout with a centered column up to 100 cells, right-aligned user messages, left-aligned assistant replies, a preset header and a Trajectory tab. The composer, editor, permissions and model stay at the bottom; message times, step duration and statistics come from dsh. Copy controls and Ctrl+Y copy the source text; the keyboard reference includes the new shortcut.
+
+- TUI preview.40: empty sessions use a GUI-like landing screen with a centered composer, workspace/preset controls above and editor, permissions and current model below. Labels come from dsh. Permission selection uses the advertised catalog and command with confirmation, a competing-change check and result reconciliation. Background session polling keeps the layout stable, and stale polls cannot undo an acknowledged model choice.
+
+- TUI preview.40: the sidebar follows the GUI structure with New Session, plugins, market, automation and More; actual dsh workspaces with expandable sessions; and a fixed lower settings/account menu. Added independent tree scrolling, keyboard selection without executing actions, and new sessions in the selected workspace.
+
+- Aligned GUI and TUI menu grouping: Quit ends File; TUI updates and logs move to Help, with About last. Added a direct GUI menu entry for keyboard shortcuts.
+
 - TUI preview.39: `--start` connects to an existing local dsh instead of starting a second process on an occupied port. Authentication is verified through the API without claiming an external process. Unavailable login discovery produces actionable guidance. Fixed startup diagnostic flushing, ownership preservation after failed startup, and continued logging after a `/runtime` start operation.
 
 - GUI and TUI share local dsh client leases: closing one preserves the backend for the other, and the last client stops the managed process. Signals, backend restarts, PID reuse and inherited output are handled. Both clients must be updated. Added package installation cancellation and isolated account checks.

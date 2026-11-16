@@ -15,6 +15,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -420,29 +421,32 @@ func (m *model) marketView() string {
 	lines := []string{}
 	m.marketHits = nil
 	add := func(text string) {
-		lines = append(lines, ansi.Truncate(strings.ReplaceAll(clean(text), "\n", " "), w, "…"))
+		lines = append(lines, ansi.Truncate(strings.ReplaceAll(text, "\n", " "), w, "…"))
 	}
 	hit := func(kind string, index, x, width int) {
 		m.marketHits = append(m.marketHits, marketHit{kind, index, area{x, len(lines), min(width, max(0, w-x)), 1}})
 	}
-	tab := tr("Каталог")
-	if m.marketInstalledOnly {
-		tab = tr("Установленные")
-	}
-	headingText := tr("Маркет · ") + tab
+	headingText := tr("Маркет плагинов")
 	if m.market != nil {
-		headingText += " · " + m.market.Profile
+		headingText += " · " + singleLine(m.market.Profile)
 	}
-	hit("tab", 0, 0, w)
-	add(headingText)
-	lines[len(lines)-1] = heading().Render(lines[len(lines)-1])
+	hit("refresh", 0, max(0, w-lipgloss.Width("[r "+tr("Обновить")+"]")), lipgloss.Width("[r "+tr("Обновить")+"]"))
+	add(bar(heading().Render(headingText), accent().Render("[r "+tr("Обновить")+"]"), w))
+	// The two tabs share the same toggle action, with a measured hit region.
+	catalog, installed := "["+tr("Каталог")+"]", "["+tr("Установленные")+"]"
+	hit("catalog", 0, 0, lipgloss.Width(catalog))
+	hit("installed", 0, lipgloss.Width(catalog)+1, lipgloss.Width(installed))
+	if m.marketInstalledOnly {
+		lines = append(lines, muted().Render(catalog)+" "+accent().Bold(true).Render(installed))
+	} else {
+		lines = append(lines, accent().Bold(true).Render(catalog)+" "+muted().Render(installed))
+	}
 	hit("search", 0, 0, w)
 	if m.marketEditing {
 		lines = append(lines, ansi.Truncate(m.marketSearch.View(), w, "…"))
 	} else {
 		add(tr("Поиск: ") + m.marketSearch.Value())
 	}
-	add(tr("/ поиск · t список · r обновить · ↑/↓ выбор"))
 	status := m.marketMessage
 	if m.marketBusy {
 		status = tr("Запрос маркета…")
@@ -459,10 +463,10 @@ func (m *model) marketView() string {
 	if m.marketError != "" {
 		status = m.marketError
 	}
-	add(muted().Render(status))
+	add(muted().Render(singleLine(status)))
 	rows := m.marketRows()
 	m.marketIndex = max(0, min(m.marketIndex, max(0, len(rows)-1)))
-	listHeight := max(1, h-9)
+	listHeight := max(1, (h-10)/4)
 	start := max(0, min(m.marketIndex-listHeight+1, max(0, len(rows)-listHeight)))
 	for i := 0; i < listHeight; i++ {
 		index := start + i
@@ -472,6 +476,9 @@ func (m *model) marketView() string {
 			} else {
 				add("")
 			}
+			add("")
+			add("")
+			add("")
 			continue
 		}
 		p := rows[index]
@@ -479,25 +486,33 @@ func (m *model) marketView() string {
 		if index == m.marketIndex {
 			prefix = "› "
 		}
-		badge := "[ ] "
-		if m.market != nil {
-			if _, ok := m.market.Installed[p.pkg()]; ok {
-				badge = "[✓] "
-			}
+		badge := "[" + tr("Доступен") + "]"
+		if _, ok := m.market.Installed[p.pkg()]; ok {
+			badge = "[" + tr("Установлен") + "]"
 		}
 		hit("row", index, 0, w)
-		text := prefix + badge + p.Name
-		if p.pkg() != p.Name {
-			text += " · " + p.pkg()
-		}
-		add(text)
+		m.marketHits[len(m.marketHits)-1].box.height = 4
+		title := prefix + singleLine(p.Name)
 		if index == m.marketIndex {
-			lines[len(lines)-1] = accent().Render(lines[len(lines)-1])
+			title = accent().Bold(true).Render(title)
 		}
+		add(bar(title, muted().Render(badge), w))
+		description := strings.Split(ansi.Hardwrap(singleLine(p.description()), max(1, w-2), true), "\n")
+		for j := 0; j < 2; j++ {
+			line := ""
+			if j < len(description) {
+				line = description[j]
+			}
+			if j == 1 && len(description) > 2 {
+				line = ansi.Truncate(line, max(1, w-3), "…") + "…"
+			}
+			add(muted().Render("  " + line))
+		}
+		add("")
 	}
 	if len(rows) > 0 {
 		p := rows[m.marketIndex]
-		add(p.pkg())
+		add(singleLine(p.pkg()))
 		lines[len(lines)-1] = heading().Render(lines[len(lines)-1])
 		spec := tr("не установлен")
 		if value, ok := m.market.Installed[p.pkg()]; ok {
@@ -512,15 +527,22 @@ func (m *model) marketView() string {
 				}
 			}
 		}
-		add(spec + fmt.Sprintf(" · %d/%d", m.marketIndex+1, len(rows)))
-		add(p.description())
+		add(singleLine(spec) + fmt.Sprintf(" · %d/%d", m.marketIndex+1, len(rows)))
+		source := singleLine(p.URL)
+		if p.Version != "" {
+			source = tr("Версия каталога: ") + singleLine(p.Version) + " · " + source
+		}
+		add(source)
 	} else {
 		add("")
 		add("")
 		add("")
 	}
+	for len(lines) < h-2 {
+		add("")
+	}
 	if m.marketConfirm != nil {
-		add(fmt.Sprintf("%s: %s · %s", map[string]string{"install": tr("Установить"), "update": tr("Обновить"), "uninstall": tr("Удалить")}[m.marketConfirm.Action], m.marketConfirm.Package, m.marketConfirm.Profile))
+		add(fmt.Sprintf("%s: %s · %s", map[string]string{"install": tr("Установить"), "update": tr("Обновить"), "uninstall": tr("Удалить")}[m.marketConfirm.Action], singleLine(m.marketConfirm.Package), singleLine(m.marketConfirm.Profile)))
 		yes, no := tr("[y Подтвердить]"), tr("[n Отмена]")
 		hit("yes", 0, 0, len([]rune(yes)))
 		hit("no", 0, len([]rune(yes))+1, len([]rune(no)))
@@ -539,7 +561,7 @@ func (m *model) marketView() string {
 		add(tr("Операции требуют подтверждения."))
 	}
 
-	return strings.Join(lines, "\n")
+	return strings.Join(lines[:min(len(lines), h)], "\n")
 }
 
 func newMarketSearch() textinput.Model {

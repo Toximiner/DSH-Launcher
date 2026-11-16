@@ -45,6 +45,7 @@ func TestWorkbenchGeometryDraftCancellationAndStaleResults(t *testing.T) {
 	}
 	m := benchTestModel(t, "schedules")
 	m.Update(tea.KeyMsg{Type: tea.KeyF3})
+	m.Update(tea.KeyMsg{Type: tea.KeyF2})
 	d := m.workbench
 	original := d.editor.Value()
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter, Paste: true})

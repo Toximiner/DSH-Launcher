@@ -1,12 +1,26 @@
 # TUI development roadmap
 
+
+Plugin Market and Automation tasks now follow the GUI structure: dedicated pages, cards and status indicators; tasks have status filters and creation/editing forms. Delivery history is readable, with explicit time zones. F2 in a form opens advanced JSON for complex rules. Revision checks and confirmation remain in place.
+Preview.40 Plugins is a GUI-shaped page with built-in settings, experimental and installed packages, dsh metadata, More, Market and Add. Components remain a separate read-only view. Confirmed toggles recheck the observed baseline and reread their result; existing operation/editor safeguards remain in use. Actual-dsh tests cover cancellation, enablement and fixture restoration without model calls.
+
+The preview.40 keyboard reference has seven topic groups, key/action columns, muted contexts, section filtering, search and a sticky section heading. Checks cover complete inventory, the last scrollable line, RU/EN, mouse input and 80×24 or larger terminals.
+
+The preview.40 settings modal follows the GUI: five sections on the left, described parameters on the right, configuration and close controls above. It supports two focus panes, scrolling, mouse input and return from nested panels. Default permissions for future sessions use the revision-checked dsh editor; language, theme and input settings remain local to TUI. Actual-dsh checks verify inheritance by a new session without changing the current one.
+
+Active conversations in preview.40 use a centered column up to 100 cells, user messages on the right, assistant replies on the left, a preset header and a Trajectory link to history. The composer, editor, permissions and model stay at the bottom. Times and statistics come from dsh; Copy and Ctrl+Y preserve the source text. Checks cover 80×24 and larger sizes, mouse targets and actual dsh with a fixture model.
+
+Preview.40: the sidebar follows the GUI grouping: primary actions above a workspace/session tree, with settings and account in the fixed lower More menu. Snapshots come from dsh without model calls; the tree scrolls independently. New sessions honor the selected workspace.
+
+Empty sessions now use a landing screen with workspace/preset context, actual model selection and permissions. Controls open actual panels; permission changes require confirmation and state reconciliation.
+
 Preview.39: `--start` and `/runtime` startup reuse a running local dsh after API authentication. Unavailable login discovery gives guidance instead of spawning another process. Failed startup preserves diagnostics and the existing backend ownership record.
 
 GUI/TUI now share local dsh client leases: closing either client preserves the backend for the other, and the last client stops a managed backend; external dsh remains external. Actual-dsh checks cover both close orders, with additional GUI Docker scenarios on CI. Ctrl+X cancels the current package request by requestId; account profile/balance opens in a scrollable view.
 
 [Русский](README.md) | **English**
 
-Baseline: November 16, 2026, Go client `0.2.0-preview.39`.
+Baseline: November 16, 2026, Go client `0.2.0-preview.40`.
 Terminal minimum: 80×24; recommended: 100×30.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.

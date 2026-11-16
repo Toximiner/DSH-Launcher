@@ -29,7 +29,7 @@ type markdownCache struct {
 }
 
 func (m *model) messageText(message chatMessage, width int, raw bool) string {
-	if raw || message.role != tr("АГЕНТ") || message.tool != nil || message.approvalID != "" {
+	if raw || !message.assistant && message.role != tr("АГЕНТ") || message.tool != nil || message.approvalID != "" {
 		return message.text
 	}
 	if m.markdown == nil {

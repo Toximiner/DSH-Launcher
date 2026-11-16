@@ -80,7 +80,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
     project = root / 'project'
     project.mkdir()
     env = {key: value for key, value in os.environ.items() if key not in
-           ('DSH_TUI_URL', 'GH_TOKEN', 'GITHUB_TOKEN', 'CODESPACES_GITHUB_TOKEN', 'NO_COLOR')}
+           ('DSH_TUI_URL', 'GH_TOKEN', 'GITHUB_TOKEN', 'CODESPACES_GITHUB_TOKEN', 'NO_COLOR', 'DISPLAY', 'WAYLAND_DISPLAY', 'TMUX', 'SSH_CONNECTION', 'SSH_TTY')}
     env.update(DSH_HOME=str(root / 'dsh'), SETTINGS_TEST_KEY='isolated-original-key',
                TERM='xterm-256color', COLORTERM='truecolor', XDG_CONFIG_HOME=str(root / 'config'), XDG_DATA_HOME=str(root / 'data'))
     with socket.socket() as sock:
@@ -109,9 +109,15 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
                 headers={'Content-Type': 'application/json', 'Origin': origin})))
             assert response['rpcId'] == rpc_id
             return response['result']
-        created = rpc('session/create', {'request': {}})
+        workspace = rpc('workspace/create', {'request': {'path': str(project)}})
+        assert workspace['ok'], workspace
+        workspace_id = workspace['value']['workspace']['workspaceId']
+        renamed = rpc('workspace/rename', {'request': {'workspaceId': workspace_id, 'title': 'Sidebar Fixture'}})
+        assert renamed['ok'], renamed
+        created = rpc('session/create', {'request': {'workspaceId': workspace_id}})
         assert created['ok']
         session_id = created['value']['sessionId']
+        assert rpc('session/rename', {'request': {'sessionId': session_id, 'title': 'Sidebar chat'}})['ok']
         (project / 'sample.txt').write_text('\n'.join(f'line-{i:03d} привет' for i in range(1, 451)))
         (project / 'nested').mkdir()
         pdf_objects = [b'<< /Type /Catalog /Pages 2 0 R >>', b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
@@ -136,10 +142,41 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         (project / 'pixel.png').write_bytes(b'\x89PNG\r\n\x1a\n' + png_chunk(b'IHDR', struct.pack('!IIBBBBB', 1, 1, 8, 2, 0, 0, 0)) + png_chunk(b'IDAT', zlib.compress(b'\x00\xff\x00\x00')) + png_chunk(b'IEND', b''))
         app = Terminal(str(Path(args.binary).resolve()), ['--session', session_id], {**env, 'DSH_TUI_URL': login[0]}, columns=100, rows=30)
         app.wait('Введите сообщение.', timeout=20)
-        def capture(kind):
+        app.wait('Sidebar Fixture', timeout=20)
+        # Collapsing and expanding the authoritative workspace tree must be read-only.
+        before_sessions = rpc('session/list', {'_request': {}})['value']['items']
+        app.send('sidebar preserved draft')
+        app.send('\t')
+        app.send('\x1b[B' * 5 + '\r')
+        app.wait('Рабочие области')
+        # The workspace heading opens the existing searchable inventory.
+        app.wait('Снимок dsh')
+        app.send('\x1b')
+        app.send('\x1b')
+        app.wait('> sidebar preserved draft')
+        app.send('\x15')
+        # Exercise the actual folder hit area at both supported terminal sizes.
+        for columns, rows in [(100, 30), (80, 24)]:
+            app.resize(columns, rows)
+            app.wait('Sidebar Fixture')
+            for _ in range(2):
+                app.pump()
+                y = next(y for y, line in enumerate(app.screen.display) if 'Sidebar Fixture' in line[:24])
+                expanded = '▾' in app.screen.display[y][:24]
+                app.send(f'\x1b[<0;4;{y + 1}M\x1b[<0;4;{y + 1}m')
+                def toggled():
+                    app.pump()
+                    return ('▾' in app.screen.display[y][:24]) != expanded
+                wait_for(toggled)
+        assert rpc('session/list', {'_request': {}})['value']['items'] == before_sessions, 'Sidebar navigation created or changed sessions'
+        assert not requests, 'Sidebar metadata browsing invoked a model'
+        app.send('\x1b')
+        app.resize(100, 30)
+        app.wait('Введите сообщение.')
+        def capture(kind, sizes=((100, 30), (80, 24))):
             if not args.capture:
                 return
-            for columns, rows in [(100, 30), (80, 24)]:
+            for columns, rows in sizes:
                 app.resize(columns, rows)
                 app.wait(kind)
                 # Drain the resize repaint before recording actual terminal cells.
@@ -159,14 +196,120 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
             app.command(command)
             app.wait(title)
             app.wait('Снимок dsh')
-            capture(title)
+            capture(title, sizes=((160, 40), (100, 30), (80, 24)) if command in ('/plugins', '/schedules') else ((100, 30), (80, 24)))
         def back():
             app.send('\x1b')
             app.wait('Введите сообщение.')
+        capture('Введите сообщение.')
+        app.send('\x1ba')
+        app.wait('Пресеты агента')
+        app.wait('Текущий пресет:')
+        back()
+        app.send('\x1b[24~')
+        app.wait('Модель сессии')
+        app.wait('fixture')
+        app.send('\x1b')
+        app.wait('Введите сообщение.')
+        initial_permission = rpc('session/projections', {'request': {'sessionId': session_id}})['value']['values']['permissions']['currentValue']
+        assert initial_permission == 'workspace-write', initial_permission
+        def permission_panel():
+            app.send('\x1bp')
+            app.wait('Доступ к файлам и подтверждения')
+            app.wait('Снимок dsh')
+        permission_panel()
+        app.send('Только чтение\r')
+        app.wait('Enter — подтвердить')
+        assert rpc('session/projections', {'request': {'sessionId': session_id}})['value']['values']['permissions']['currentValue'] == initial_permission
+        app.send('\x1b')
+        app.wait('Подтверждение отменено.')
+        app.send('\r\r')
+        app.wait('preset read-only')
+        assert rpc('session/projections', {'request': {'sessionId': session_id}})['value']['values']['permissions']['currentValue'] == 'read-only'
+        back()
+        permission_panel()
+        app.send('Запись в рабочую область\r')
+        app.wait('Enter — подтвердить')
+        app.send('\r')
+        app.wait('preset workspace-write')
+        assert rpc('session/projections', {'request': {'sessionId': session_id}})['value']['values']['permissions']['currentValue'] == initial_permission
+        back()
+        assert not requests, 'Agent controls invoked a model'
+        # The GUI-shaped settings hub keeps its modal context across actual panels.
+        app.send('\x1bOS')
+        app.wait('Конфигурация dsh')
+        def settings_ready():
+            app.pump()
+            return 'Загрузка настроек…' not in app.text
+        wait_for(settings_ready)
+        capture('Настройки TUI', sizes=((160, 40), (100, 30), (80, 24)))
+        app.send('\x1b[B\r\r')
+        app.wait('Модель сессии')
+        app.wait('Поиск:')
+        app.send('\x1b')
+        app.wait('Конфигурация dsh')
+        app.send('\x1b[D\x1b[B\r\r')
+        app.wait('Плагины dsh')
+        app.wait('Снимок dsh')
+        app.send('\x1b')
+        app.wait('Конфигурация dsh')
+        app.send('\x1b[D\x1b[B\r\r')
+        app.wait('Пресеты агента')
+        app.wait('Текущий пресет:')
+        app.send('\x1b')
+        app.wait('Конфигурация dsh')
+        app.send('\x1b[D\x1b[H\x1b[C\r')
+        app.wait('Настройки · permission')
+        app.wait('Значение:')
+        app.send('\x15read-only\r\x1b[15~')
+        app.wait('Настройки сохранены.')
+        assert rpc('session/projections', {'request': {'sessionId': session_id}})['value']['values']['permissions']['currentValue'] == initial_permission, 'Default permission changed the existing session'
+        future = rpc('session/create', {'request': {'workspaceId': workspace_id}})
+        assert future['ok'], future
+        assert rpc('session/projections', {'request': {'sessionId': future['value']['sessionId']}})['value']['values']['permissions']['currentValue'] == 'read-only', 'New session did not inherit the saved permission default'
+        app.send('\x1b')
+        app.wait('Конфигурация dsh')
+        app.send('\r')
+        app.wait('Настройки · permission')
+        app.wait('Значение:')
+        app.send('\x15workspace-write\r\x1b[15~')
+        app.wait('Настройки сохранены.')
+        app.send('\x1b')
+        app.wait('Конфигурация dsh')
+        app.send('\x1b')
+        app.wait('Введите сообщение.')
+        assert not requests, 'Settings navigation unexpectedly invoked a model'
         for command, title in [('/workspaces', 'Рабочие области'), ('/packages', 'Управление пакетами'),
                 ('/plugins', 'Плагины dsh'), ('/account', 'Аккаунт DeepSeek'), ('/commands', 'Команды плагинов'),
                 ('/jobs', 'Фоновые задания'), ('/agents', 'Подагенты сессии'), ('/tasks', 'Задачи команды')]:
             panel(command, title)
+            if command == '/plugins':
+                app.wait('Настройки встроенных плагинов')
+                app.send('\r')
+                app.wait('Настройки · subagent')
+                app.send('\x1b')
+                app.wait('Плагины dsh')
+                app.send('\x1bOQ')  # F2 opens the separate technical view.
+                app.wait('Компоненты dsh · только чтение')
+                app.send('\x1bOQ')
+                app.wait('Настройки встроенных плагинов')
+                badge = '@deepseek-ai/dsh-experimental-badge-skill-bundle'
+                def badge_enabled():
+                    return next(row['enabled'] for row in rpc('pluginManager/listBundles', {})['value'] if row['name'] == badge)
+                assert badge_enabled() is False
+                app.send(badge)
+                app.wait('[Выкл]')
+                app.send(' ')
+                app.wait('Enter — подтвердить действие')
+                app.send('\x1b')
+                assert badge_enabled() is False, 'Cancelling the switch changed the profile'
+                app.send(' \r')
+                app.wait('[Вкл]', timeout=30)
+                assert badge_enabled() is True, 'The switch did not persist its exact target'
+                app.send(' \r')
+                app.wait('[Выкл]', timeout=30)
+                assert badge_enabled() is False, 'The fixture switch was not restored'
+                app.send('\x15')
+                app.wait('Настройки встроенных плагинов')
             back()
         for command, title, expected in [('tui-greeting', 'Greeting example', 'Hello, Alice'), ('tui-counter', 'Counter example', 'Total │ 2')]:
             panel('/commands', 'Команды плагинов')
@@ -228,12 +371,10 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.send('\x1b')
         app.wait('Тип:')
         back()
-        panel('/schedules', 'Расписания')
+        panel('/schedules', 'Автоматизация')
         app.send('\x0e')
         app.wait('F5 — проверить')
-        app.send('\x1b<' + '\x0b' * 30)
-        schedule = {'title': 'Workbench fixture', 'prompt': 'Never run during this test', 'timing': {'kind': 'after', 'after_seconds': 86400}}
-        app.send('\x1b[200~' + json.dumps(schedule) + '\x1b[201~')
+        app.send('Workbench fixture\tNever run during this test\t\t\x01\x0b1440')
         app.send('\x1b[15~')
         app.wait('Enter — подтвердить')
         assert rpc('schedule/list', {'request': {}})['value']['total'] == 0
@@ -241,6 +382,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.wait('Ответ dsh получен')
         app.send('\x1b[15~')
         app.wait('Workbench fixture')
+        capture('Workbench fixture', sizes=((160, 40), (100, 30), (80, 24)))
         saved = rpc('schedule/list', {'request': {}})['value']['items'][0]
         app.send(' ')
         app.wait('Enter — подтвердить')
@@ -308,6 +450,35 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         assert not requests, 'Metadata adapters unexpectedly invoked a model'
         app.send('\x1b[15~')
         app.wait('WORKBENCH_REPLY_1', timeout=20)
+        def committed_reply():
+            app.pump()
+            return 'WORKBENCH_REPLY_1' in app.text and 'АГЕНТ · ПОТОКОВЫЙ ОТВЕТ' not in app.text
+        wait_for(committed_reply)
+        app.wait('Траектория · F11')
+        app.wait('1 ход · 1 шаг', timeout=20)
+        capture('WORKBENCH_REPLY_1', sizes=((160, 40), (100, 30), (80, 24)))
+        model_row, model_line = next((y, line) for y, line in enumerate(app.screen.display) if '[fixture ·' in line)
+        model_column = model_line.index('[fixture ·')
+        app.send(f'\x1b[<0;{model_column + 2};{model_row + 1}M\x1b[<0;{model_column + 2};{model_row + 1}m')
+        app.wait('Модель сессии')
+        app.send('\x1b')
+        app.wait('Траектория · F11')
+        # Ctrl+Y copies the committed source through PTY-only OSC 52.
+        import base64
+        import re
+        app.send('conversation draft')
+        copy_start = len(app.raw)
+        app.send('\x19')
+        app.wait('запрос OSC 52 отправлен')
+        copied = re.findall(rb'\x1b\]52;c;([^\x07\x1b]*)', app.raw[copy_start:])
+        assert copied and base64.b64decode(copied[-1]).decode() == 'WORKBENCH_REPLY_1', 'Conversation copy changed the source'
+        assert '> conversation draft' in app.text, 'Conversation copy lost the composer draft'
+        app.send('\x15')
+        app.send('\x1b[23~')
+        app.wait('История сессии')
+        app.wait('WORKBENCH_REPLY_1')
+        app.send('\x1b')
+        app.wait('Траектория · F11')
         user = [message for message in requests[0]['messages'] if message.get('role') == 'user']
         assert 'first line\nsecond line привет' in json.dumps(user, ensure_ascii=False).replace('\\n', '\n'), user
         assert 'sample.txt' in json.dumps(requests[0]['messages'], ensure_ascii=False), 'Uploaded file reference did not reach the model'
@@ -325,7 +496,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         assert any('approved' in str(message) for message in requests[4]['messages'] if message.get('role') == 'tool')
         app.send('\x04')
         app.exited()
-        print('Actual dsh workbench: inventories, workspace files/pages, explicit schedule create/pause/delete, terminal bridge/detach/close, multiline draft/upload/send, schedule CAS conflict and both plan-review choices OK')
+        print('Actual dsh workbench: agent landing, conversation layout/stats/source copy/trajectory, model/preset controls, permission confirmation/cancellation/restore, GUI-shaped plugins page/settings/components/toggle cancellation/enable/restore, inventories, workspace files/pages, explicit schedule create/pause/delete, terminal bridge/detach/close, multiline draft/upload/send, schedule CAS conflict and both plan-review choices OK')
     except Exception:
         if app:
             print(app.text, flush=True)

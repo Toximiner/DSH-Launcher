@@ -310,11 +310,11 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Ответ 1: проверка транспорта настоящего dsh.', timeout=20)
         assert model_calls[0]['model'] == 'fixture-alt', 'Confirmed TUI selection did not reach actual model input'
         print('Actual dsh models: shared provider catalog, three sizes, cancelled selection, retained draft, confirmed change, reopen and selected model in the next request OK')
-        app.wait('Агент: не выполняется', timeout=20)
+        app.wait('Enter — отправить', timeout=20)
         app.command('A second turn without tools.')
         app.wait('Ответ 2: проверка транспорта настоящего dsh.', timeout=20)
         app.send('\x1b[5~')
-        app.wait('Агент: не выполняется', timeout=20)
+        app.wait('Enter — отправить', timeout=20)
         app.command('Another brief answer, no tools.')
         app.wait('Ответ 3: ', timeout=20)
         if args.capture_cells:
@@ -325,7 +325,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.command('Read notes.txt and missing-file.txt using tools.')
         app.wait('Ответ 5: проверка транспорта настоящего dsh.', timeout=25)
         app.send('\x1b[5~' * 10)
-        app.wait('Агент: не выполняется', timeout=20)
+        app.wait('Enter — отправить', timeout=20)
         assert len(model_calls) == 5, 'Unexpected tool-turn model request retry'
         results = [message for message in model_calls[4]['messages'] if message.get('role') == 'tool']
         assert len(results) == 2, 'Actual dsh did not feed both tool results back to the model'
@@ -440,7 +440,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         assert (project / 'grant.marker').read_text() == 'approved\n', 'Approved action did not run'
         app.wait('Разрешено один раз', timeout=10)
         app.send('\x1b[5~' * 20)
-        app.wait('Агент: не выполняется', timeout=20)
+        app.wait('Enter — отправить', timeout=20)
         app.command('Request permission to create the reject marker.')
         app.wait('Create reject.marker', timeout=20)
         app.send('\t\r')
@@ -448,7 +448,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         assert not (project / 'reject.marker').exists(), 'Rejected tool wrote its marker'
         app.wait('Отказано', timeout=10)
         app.send('\x1b[5~' * 20)
-        app.wait('Агент: не выполняется', timeout=20)
+        app.wait('Enter — отправить', timeout=20)
         app.command('Request permission to create the cancel marker.')
         app.wait('Create cancel.marker', timeout=20)
         app.send('\x1b[19~')
@@ -493,7 +493,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         assert batch[1]['selected'] == ['Unit tests', 'PTY checks'], batch
         assert batch[2]['custom'] == 'Terminal questions work.\nKeep the chat draft.', batch
         app.send('\x1b[5~' * 20)
-        app.wait('Агент: не выполняется', timeout=20)
+        app.wait('Enter — отправить', timeout=20)
         app.send('\x15')
         app.command('Ask a timed question, then continue after disconnect.')
         app.wait('Can we continue after reconnect?', timeout=20)
@@ -511,7 +511,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Ответ 15: проверка транспорта настоящего dsh.', timeout=20)
         assert any('answer_to_pending_question' in json.dumps(message) for message in model_calls[14]['messages']), 'Continued reply was not tagged by dsh'
         app.send('\x1b[5~' * 20)
-        app.wait('Агент: не выполняется', timeout=20)
+        app.wait('Enter — отправить', timeout=20)
         app.command('Ask one more question for cancellation.')
         app.wait('Cancel this unanswered question?', timeout=20)
         app.send('\x1b[19~')
@@ -549,7 +549,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
             return 'ОЧЕРЕДЬ DSH ·' not in app.text
         wait_for(queue_drained)
         app.send('\x1b[5~' * 20)
-        app.wait('Агент: не выполняется', timeout=20)
+        app.wait('Enter — отправить', timeout=20)
         assert len(model_calls) == 19, 'Queue execution retried or lost a model turn'
         markers = ['QUEUE FIRST', 'QUEUE SECOND', 'QUEUE THIRD']
         for number, expected in zip([17, 18, 19], markers):
@@ -596,7 +596,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Ответ 21: проверка транспорта настоящего dsh.', timeout=20)
         wait_for(queue_drained)
         app.send('\x1b[5~' * 20)
-        app.wait('Агент: не выполняется', timeout=20)
+        app.wait('Enter — отправить', timeout=20)
         assert len(model_calls) == 21, 'Removed task executed or a retained task was lost'
         assert not any('REMOVE THIS PENDING TASK' in json.dumps(message) for message in model_calls[20]['messages']), 'Removed prompt leaked into model history'
         assert any('KEEP THIS PENDING TASK' in json.dumps(message) for message in model_calls[20]['messages']), 'Remaining queued task was not executed'
@@ -651,7 +651,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Ответ 24: проверка транспорта настоящего dsh.', timeout=25)
         wait_for(queue_drained)
         app.send('\x1b[5~' * 20)
-        app.wait('Агент: не выполняется', timeout=20)
+        app.wait('Enter — отправить', timeout=20)
         assert len(model_calls) == 24, 'Editing duplicated or lost a queued turn'
         changed = [message for message in model_calls[22]['messages'] if message.get('role') == 'user'][-1]
         retained = [message for message in model_calls[23]['messages'] if message.get('role') == 'user'][-1]
@@ -698,7 +698,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Ответ 27: проверка транспорта настоящего dsh.', timeout=25)
         wait_for(queue_drained)
         app.send('\x1b[5~' * 20)
-        app.wait('Агент: не выполняется', timeout=20)
+        app.wait('Enter — отправить', timeout=20)
         assert len(model_calls) == 27, 'Steering duplicated or lost model work'
         hint = [message for message in model_calls[25]['messages'] if message.get('role') == 'user'][-1]
         retained = [message for message in model_calls[26]['messages'] if message.get('role') == 'user'][-1]
@@ -766,7 +766,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         (project / 'nested-release.marker').write_text('release\n')
         app.wait('Ответ 29: проверка транспорта настоящего dsh.', timeout=25)
         app.send('\x1b[5~' * 20)
-        app.wait('Агент: не выполняется', timeout=20)
+        app.wait('Enter — отправить', timeout=20)
         app.send('NESTED HISTORY DRAFT')
         app.send('\x1b[23~')
         app.wait('PgUp/PgDn')
@@ -825,7 +825,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         (project / 'stdout-release.marker').write_text('release\n')
         app.wait('Ответ 32: проверка транспорта настоящего dsh.', timeout=25)
         app.send('\x1b[5~' * 20)
-        app.wait('Агент: не выполняется', timeout=20)
+        app.wait('Enter — отправить', timeout=20)
         results = [message for message in model_calls[31]['messages'] if message.get('role') == 'tool']
         assert any('LIVE FINAL OUTPUT' in json.dumps(message.get('content')) for message in results), 'Observation consumed the model output cursor'
         app.command('Run an incremental command and cancel it.')

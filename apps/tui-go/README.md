@@ -1,7 +1,115 @@
-# Go TUI preview — 0.2.0-preview.39
+# Go TUI preview — 0.2.0-preview.40
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
+
+## Plugins page (preview.40)
+
+Sidebar Plugins and `/plugins` open a page with built-in settings, experimental
+bundles and installed third-party packages. Names/descriptions come from dsh's
+localized package metadata, with package names as fallback. Built-in cards open
+the exact served settings namespace using the existing revision-checked form.
+The GUI's pinned optional-bundle order and More grouping are preserved; Ctrl+O
+expands the secondary list, and search also finds those secondary packages.
+
+Up/Down, Home/End and PgUp/PgDn select cards; Enter opens settings/details.
+Space or the displayed On/Off control prepares an explicit confirmation. Before
+writing, TUI rereads the bundle's observed enablement; changed/removed/read-only
+targets require refresh. This check is not atomic compare-and-swap. After an
+acknowledged action, a read-only refresh reconciles the displayed state. Writes
+never retry automatically; application/restart outcomes remain visible.
+Ctrl+N adds, F3 updates and Ctrl+X removes supported packages through the existing
+confirmation, install cancellation and receipt workflows. F6/Right opens Market.
+
+F2 opens the separate read-only Loader-component view. Internal modules are not
+misrepresented as user-manageable packages. A host without profile management
+still exposes its served settings and component inventory; Add is refused.
+Global menus and sidebar navigation remain available from the page. Opening
+Plugins through settings retains a modal return path. Checks cover 80×24 and
+larger sizes, exact switch hit areas, cancellation, actual profile toggle/restore,
+settings forms and unchanged model-call counts in an isolated dsh profile.
+
+## Settings hub (preview.40)
+
+F4 / Alt+T opens a GUI-shaped modal with General, Models, Built-in plugins,
+Agent presets and Plugin Market sections on the left. Values and descriptions
+appear on the right. Tab or Left/Right changes panes; Up/Down and Home/End select;
+Enter/Space activates. The mouse selects sections, activates rows and scrolls
+the parameter list. The selection stays visible when resizing down to 80×24.
+
+General contains TUI language, theme, keyboard reference, mouse, input history
+and sidebar preferences. These retain their private, atomic persistence. Font
+size belongs to the terminal settings. The default-permission row opens the
+shared dsh `permission.defaultPreset` field in the existing revision-checked form;
+Enter stages a change and F5 saves it. This changes defaults for future sessions,
+not the current session's permission. Models, plugins and presets open actual
+panels over the hub; Escape returns to settings. Shortcuts also return to settings.
+The configuration button opens the redacted dsh settings browser, and Market
+opens the existing catalog page. F5 refreshes the settings snapshot explicitly.
+
+F1 groups the keyboard reference into navigation, chat/input, sessions/history,
+settings/editors, questions/approvals, files/plugins/account and background work.
+Keys and actions have separate columns; contexts are muted. Tab/Left/Right or
+the arrow buttons switch between All sections and individual groups. Typing
+searches the selected group, including its name and each action's context;
+Ctrl+U clears the query. Up/Down, PgUp/PgDn, Home/End and the wheel scroll while
+keeping the current section heading visible. Descriptions wrap without losing
+the original combinations. Escape returns to settings when opened from there.
+
+## Active conversation (preview.40)
+
+Started conversations use a centered column capped at 100 terminal cells. User
+messages sit on the right; assistant Markdown stays on the left. The header shows
+the session and agent preset, Chat/Trajectory tabs and a session action menu.
+Trajectory opens the existing durable history (F11). The bottom composer keeps
+the editor (+), permissions and actual model/reasoning controls available.
+
+Committed messages show their event time when available; assistant reply duration
+uses the matching step start. The status line uses dsh projections for turns,
+steps, decoding speed, cumulative tokens, cache reads and approximate context
+pressure. Missing figures are omitted; a fresh projection can lag a live reply.
+Click Copy below a message, or press Ctrl+Y to copy the latest committed assistant
+reply, preserving the source Markdown and composer draft. The existing clipboard
+transport and 64 KiB limit apply; streaming text and tool cards are excluded.
+Layouts and mouse targets are checked at 80×24, 100×30 and larger sizes.
+
+## Empty-session landing screen (preview.40)
+
+An empty ordinary session uses a centered composer rather than an empty history
+panel. Workspace and agent-preset controls sit above it; the editor, permission
+preset and actual model/reasoning selection sit below the input. After messages,
+queued work or a live reply appear, the conversation uses the normal history and
+bottom composer. Archived sessions, subagent viewers and active goals retain
+those existing views. Background refreshes keep the landing layout stable.
+
+Click the controls or use Alt+W (workspaces), Alt+A (agent presets), Alt+P
+(permissions), Alt+E (multiline editor) and F12 (models). Opening controls preserves
+the draft. The model catalog and preset labels come from read-only dsh APIs,
+refreshed without model calls. Permission controls are shown only when the session
+advertises a selection. The picker reads permissionPresets/catalog, confirms an
+explicit /permission command, checks the observed selection again, and rereads
+its result. A conflict or unconfirmed write requires manual refresh; writes never
+retry automatically. The API has no atomic compare-and-swap for this command,
+so a later concurrent change remains authoritative. Agent presets retain dsh's
+before-first-turn restriction. No unsupported @mention behavior is advertised.
+
+## Sidebar (preview.40)
+
+The sidebar follows the GUI structure: New Session, Plugins, Plugin Market,
+Automation tasks and More at the top, followed by actual dsh workspaces with
+collapsible session lists. Tools under the upper More menu include sessions,
+files, terminals, presets, commands, packages, agents, team tasks and jobs.
+The lower More menu stays fixed and opens TUI/dsh settings, the DeepSeek account,
+shortcuts, diagnostics and About. Existing Alt+C/S/D/L/M shortcuts still work.
+
+Tab focuses the sidebar; Up/Down select without running actions, Enter opens,
+Left/Right collapse/expand a workspace, and Home/End select the first/last entry.
+F5 refreshes the workspace snapshot; Ctrl+F opens the searchable workspace panel.
+Mouse clicks activate entries and the wheel scrolls the workspace tree separately.
+New Session uses the selected workspace, otherwise the current session's workspace.
+Snapshots refresh every ten seconds without model calls; failures keep the last
+snapshot, and switching backends discards the old tree. Archive membership remains
+managed by the existing live subscription. All layouts fit 80×24 and larger.
 
 ## Starting when dsh is already running (preview.39)
 
@@ -158,8 +266,8 @@ The terminal client is implemented in Go/Bubble Tea, with schema-driven dsh sett
 and a panel layout: a workspace sidebar, conversation panel, separate
 message composer, connection status, and keyboard hints. The sidebar remains
 visible throughout the supported size range. Input history restores drafts; scrolling, resizing, and clean shutdown
-remain available. Mouse clicks select sidebar pages and the local draft, and
-focus the composer. The wheel scrolls only the content under the pointer.
+remain available. Mouse clicks select sidebar actions and sessions, and focus the composer.
+The wheel scrolls the workspace tree or conversation under the pointer.
 Mouse capture is enabled by default; `--no-mouse` disables it for native terminal
 text selection. Many terminals also allow selection with Shift held down.
 Dragging and positioning the text cursor by click are not implemented.
@@ -878,3 +986,20 @@ The [declarative SDK](../../packages/tui-plugin-sdk/README.en.md) supports share
 forms/actions/status/tables over existing human commands. Arbitrary plugin HTML
 still requires a terminal adapter. CI covers two SDK examples, actual package
 install/update/failure preservation and fresh installs on three distributions.
+
+### Marketplace and automation pages
+
+Plugin Market uses a centered catalog with description cards, installed/catalog tabs,
+package versions, and explicit confirmations for installation, update, and removal.
+The adapter continues to use authenticated dshmarket API v1.
+
+Automation tasks uses the Host-wide `schedule/catalog` and status filters with counts.
+F2 cycles All/Enabled/Paused/Ended; typing searches names, instructions, and IDs.
+Ctrl+N opens a form for the title, instruction, and a one-shot delay or repeating
+interval in minutes. F3 edits title and instruction while keeping the timing rule.
+Tab/Shift+Tab selects a field; F5 reviews the request; Enter confirms it. F2 inside
+a form opens the advanced JSON editor for other native timing/target options.
+Space pauses/resumes, Ctrl+G runs now, Ctrl+X deletes; writes retain confirmation
+and revision checks. Enter opens the timing rule and the latest 100 saved delivery
+records, including retention/pruning notices. Times show the terminal's local zone.
+F5 refreshes; Esc returns to the list and then to the previous page.

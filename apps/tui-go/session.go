@@ -47,7 +47,13 @@ func (a sessionReadAddress) wire(id string) sessionReadAddress {
 }
 
 type sessionView struct {
-	Address sessionReadAddress
+	Stats       *conversationStats
+	Usage       *conversationUsage
+	Pressure    *conversationPressure
+	AgentPreset string
+	Model       *modelSelection
+	Permission  string
+	Address     sessionReadAddress
 
 	Title          string
 	Queue          []queuedMessage
@@ -74,6 +80,7 @@ type sessionItem struct {
 type sessionAction struct{ action, value string }
 
 type sessionResult struct {
+	modelRevision int
 	titleRevision int
 	sequence      int
 	view          *sessionView
@@ -98,6 +105,8 @@ func readSession(ctx context.Context, api *dshAPI, id string) (*sessionView, err
 		return nil, errors.New(tr("сессии нужна миграция; откройте её в dsh"))
 	}
 	view := &sessionView{ID: id, Address: sessionReadAddress{Kind: "session", SessionID: id}}
+	readAgentProjection(projection.Values, view)
+	readConversationProjection(projection.Values, view)
 	if raw := projection.Values["subagent"]; len(raw) > 0 && string(raw) != "null" {
 		var identity struct {
 			Mode string `json:"mode"`
@@ -297,6 +306,7 @@ func (m *model) sessionOperation(action, value string) tea.Cmd {
 	m.sessionSequence++
 	sequence := m.sessionSequence
 	titleRevision := m.titleRevision
+	modelRevision := m.modelRevision
 	login, ctx := m.settingsLogin, m.settingsContext
 	id := ""
 	if m.session != nil {
@@ -307,7 +317,7 @@ func (m *model) sessionOperation(action, value string) tea.Cmd {
 	}
 	m.rebuild()
 	return func() tea.Msg {
-		result := sessionResult{sequence: sequence, titleRevision: titleRevision}
+		result := sessionResult{sequence: sequence, titleRevision: titleRevision, modelRevision: modelRevision}
 		api, err := openAPI(ctx, login)
 		if err != nil {
 			result.err = err
@@ -327,7 +337,11 @@ func (m *model) sessionOperation(action, value string) tea.Cmd {
 			var created struct {
 				ID string `json:"sessionId"`
 			}
-			if result.err = api.rpc(ctx, "session/create", map[string]any{"request": map[string]any{}}, &created); result.err != nil {
+			request := map[string]any{}
+			if value != "" {
+				request["workspaceId"] = value
+			}
+			if result.err = api.rpc(ctx, "session/create", map[string]any{"request": request}, &created); result.err != nil {
 				return result
 			}
 			id = created.ID

@@ -13,6 +13,7 @@ import (
 )
 
 type sessionFixture struct {
+	createdWorkspace           string
 	mu                         sync.Mutex
 	plan, pending, delay, fail bool
 	goalPhase, objective       string
@@ -44,6 +45,11 @@ func fakeSessions(t *testing.T) (*sessionFixture, *httptest.Server) {
 		ok := true
 		switch request.Method {
 		case "session/create":
+			var creation struct {
+				Workspace string `json:"workspaceId"`
+			}
+			json.Unmarshal(request.Payload.Args["request"], &creation)
+			state.createdWorkspace = creation.Workspace
 			value = map[string]any{"sessionId": "session-test"}
 		case "session/list":
 			value = map[string]any{"items": []any{map[string]any{"sessionId": "session-test"}}}

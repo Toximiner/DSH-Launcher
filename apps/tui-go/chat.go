@@ -17,6 +17,7 @@ import (
 const chatTextLimit = 1 << 20
 
 type chatEvent struct {
+	Time      int64           `json:"time"`
 	Type      string          `json:"type"`
 	Seq       int             `json:"seq"`
 	Data      json.RawMessage `json:"data"`
@@ -92,11 +93,14 @@ type chatUpdate struct {
 	notice chatNotice
 }
 type chatMessage struct {
-	seq          int
-	role, text   string
-	tool         *chatTool
-	approvalID   string
-	approvalTool string
+	assistant       bool
+	time, elapsedMs int64
+	human           bool
+	seq             int
+	role, text      string
+	tool            *chatTool
+	approvalID      string
+	approvalTool    string
 }
 type pendingPrompt struct {
 	ID, Text, Status string
@@ -104,25 +108,30 @@ type pendingPrompt struct {
 	AcceptedAt       time.Time
 }
 type chatState struct {
-	id             string
-	epoch          int
-	ctx            context.Context
-	cancel         context.CancelFunc
-	inbox          chan chatNotice
-	ready          bool
-	cursor         int
-	hasMore        bool
-	messages       []chatMessage
-	surface        []int
-	live           *chatAttempt
-	note           string
-	streamError    string
-	clearedThrough int
-	expandedTools  map[string]bool
-	admitted       map[string]int
-	selectedTool   string
-	jobs           map[string]toolJob
-	observers      map[string]*toolOutputObserver
+	copyBusy             bool
+	copyOperation        int
+	copyNote             string
+	stepStarted          int64
+	stepTurn, stepNumber int
+	id                   string
+	epoch                int
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	inbox                chan chatNotice
+	ready                bool
+	cursor               int
+	hasMore              bool
+	messages             []chatMessage
+	surface              []int
+	live                 *chatAttempt
+	note                 string
+	streamError          string
+	clearedThrough       int
+	expandedTools        map[string]bool
+	admitted             map[string]int
+	selectedTool         string
+	jobs                 map[string]toolJob
+	observers            map[string]*toolOutputObserver
 }
 type promptResult struct {
 	sessionID, requestID string
@@ -162,12 +171,14 @@ func (m *model) startChat(id string) tea.Cmd {
 	if m.session != nil {
 		address = m.session.Address.wire(id)
 	}
-	return tea.Batch(func() tea.Msg { go followChat(ctx, login, id, s.inbox, address); return waitChat(s)() }, m.startApprovals(ctx, id, s.epoch), m.ensureArchive())
+	return tea.Batch(func() tea.Msg { go followChat(ctx, login, id, s.inbox, address); return waitChat(s)() }, m.startApprovals(ctx, id, s.epoch), m.ensureArchive(), m.loadAgentContext())
 }
 
 func (m *model) stopChat() {
 	m.composer = nil
-	m.closeWorkbench()
+	for m.workbench != nil {
+		m.closeWorkbench()
+	}
 	m.closeGoal()
 	m.closeModels()
 	m.closeHistory()
@@ -471,7 +482,7 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 		Reason json.RawMessage     `json:"reason"`
 	}
 	switch event.Type {
-	case "user/message", "assistant/message", "assistant/attempt", "turn/start", "turn/end", "tool/call", "tool/result", "approval/asked", "approval/decided":
+	case "user/message", "assistant/message", "assistant/attempt", "turn/start", "turn/end", "step/start", "tool/call", "tool/result", "approval/asked", "approval/decided":
 		if err := json.Unmarshal(event.Data, &data); err != nil {
 			return errors.New(tr("неподдерживаемые данные истории"))
 		}
@@ -491,6 +502,8 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	approvalID, approvalTool := "", ""
 	var tool *chatTool
 	switch event.Type {
+	case "step/start":
+		s.stepStarted, s.stepTurn, s.stepNumber = event.Time, data.Turn, data.Step
 	case "user/message":
 		s.recordAdmission(data.Source.RPCID, event.Seq)
 		if data.Source.Kind == "user-question-reply" {
@@ -682,7 +695,11 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	}
 	s.messages = kept
 	if text != "" || tool != nil {
-		message := chatMessage{seq: event.Seq, role: role, text: text, tool: tool, approvalID: approvalID, approvalTool: approvalTool}
+		elapsed := int64(0)
+		if event.Type == "assistant/message" && s.stepStarted > 0 && s.stepTurn == data.Turn && s.stepNumber == data.Step && event.Time >= s.stepStarted {
+			elapsed = event.Time - s.stepStarted
+		}
+		message := chatMessage{assistant: event.Type == "assistant/message", time: event.Time, elapsedMs: elapsed, human: event.Type == "user/message" && (data.Source.Kind == "user" || data.Source.Kind == "user-question-reply"), seq: event.Seq, role: role, text: text, tool: tool, approvalID: approvalID, approvalTool: approvalTool}
 		s.messages = append(s.messages, message)
 	}
 	positions := make(map[int]int, len(s.surface))
@@ -728,6 +745,7 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 		}
 		next := *s
 		next.messages = nil
+		next.stepStarted = 0
 		next.admitted = nil
 		next.surface = nil
 		next.live = nil
@@ -841,6 +859,7 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 
 func (m *model) chatView() string {
 	m.chatToolHits = nil
+	m.chatCopyHits = nil
 	s := m.chat
 	if s == nil {
 		return tr("Ожидание подключения чата…")
@@ -864,7 +883,7 @@ func (m *model) chatView() string {
 			m.chatToolHits = append(m.chatToolHits, chatToolHit{id: message.tool.ID, row: row, end: row + strings.Count(ansi.Hardwrap(card, max(1, m.viewport.Width), true), "\n") + 1})
 			part = card + "\n"
 		} else {
-			part = accent().Bold(true).Render(message.role) + "\n" + m.messageText(message, m.viewport.Width, false) + "\n"
+			part = m.conversationMessage(message, m.viewport.Width, row)
 		}
 		lines = append(lines, part)
 		row += strings.Count(ansi.Hardwrap(part, max(1, m.viewport.Width), true), "\n")

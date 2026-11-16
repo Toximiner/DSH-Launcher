@@ -128,9 +128,10 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
 {
   const calls = [];
   const viewActions = new Proxy({}, { get: (_t, k) => () => calls.push('view.' + String(k)) });
+  let menuState;
   const mk = (tr, spellcheckOn = true, availableUpdates = {}) => extract('appMenuTemplate', {
     tr,
-    state: { availableUpdates, spellcheckOn },
+    state: (menuState = { availableUpdates, spellcheckOn }),
     // modules the menu calls into (stubs)
     updatesLive: { showUpdateNowDialog: (kind) => calls.push('update:' + kind) },
     view: { viewActions, setSpellcheck: (on) => calls.push('spell:' + on) },
@@ -160,25 +161,30 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
   assert.strictEqual(item(ru[0], 'Выйти').role, 'quit', '«Выйти» — the standard quit role');
 
   // "Help": updates, logs, "About" — as the last item
-  assert.deepStrictEqual(labels(ru[3]), ['Проверить обновления…', 'Вернуть предыдущую версию…', 'Журнал dsh…', 'Открыть папку логов', 'Сохранить отчёт…', '|', 'О программе'], '«Справка»');
-  assert.deepStrictEqual(labels(en[3]), ['Check for updates…', 'Roll back to a previous version…', 'dsh log…', 'Open logs folder', 'Save report…', '|', 'About'], '«Help»');
+  assert.deepStrictEqual(labels(ru[3]), ['Горячие клавиши', '|', 'Проверить обновления…', 'Вернуть предыдущую версию…', 'Журнал dsh…', 'Открыть папку логов', 'Сохранить отчёт…', '|', 'О программе'], '«Справка»');
+  assert.deepStrictEqual(labels(en[3]), ['Keyboard shortcuts', '|', 'Check for updates…', 'Roll back to a previous version…', 'dsh log…', 'Open logs folder', 'Save report…', '|', 'About'], '«Help»');
   for (const [label, call] of [['Проверить обновления…', 'check'], ['Вернуть предыдущую версию…', 'rollback'], ['Журнал dsh…', 'log'], ['Открыть папку логов', 'logs'], ['Сохранить отчёт…', 'report'], ['О программе', 'about']]) {
     calls.length = 0;
     item(ru[3], label).click();
     assert.deepStrictEqual(calls, [call], `«${label}» → ${call}`);
   }
 
-  // updates found — first items of "Help"
+  calls.length = 0;
+  item(en[3], 'Keyboard shortcuts').click();
+  assert.strictEqual(menuState.settingsSection, 'shortcuts', 'shortcut menu selects the reference section');
+  assert.deepStrictEqual(calls, ['settings'], 'shortcut menu opens settings');
+
+  // Updates follow the shortcut reference in "Help".
   {
     const upd = mk((r) => r, true, { launcher: { version: '1.8.0' }, dsh: { version: '0.3.0' } });
-    assert.deepStrictEqual(labels(upd[3]).slice(0, 4),
+    assert.deepStrictEqual(labels(upd[3]).slice(2, 6),
       ['Обновить DeepSeek Harness Launcher до 1.8.0…', 'Обновить dsh до 0.3.0…', '|', 'Проверить обновления…'], '«Справка» with the updates');
     calls.length = 0;
     item(upd[3], 'Обновить DeepSeek Harness Launcher до 1.8.0…').click();
     item(upd[3], 'Обновить dsh до 0.3.0…').click();
     assert.deepStrictEqual(calls, ['update:launcher', 'update:dsh'], 'the item → the «Обновить сейчас» dialog');
     const onlyDsh = mk((r, e) => e, true, { dsh: { version: '0.3.0' } });
-    assert.deepStrictEqual(labels(onlyDsh[3]).slice(0, 3), ['Update dsh to 0.3.0…', '|', 'Check for updates…'], '«Help» — dsh only');
+    assert.deepStrictEqual(labels(onlyDsh[3]).slice(2, 5), ['Update dsh to 0.3.0…', '|', 'Check for updates…'], '«Help» — dsh only');
   }
 
   // "Edit" — the same actions as in the context menu, via standard roles

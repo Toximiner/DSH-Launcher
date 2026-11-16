@@ -42,23 +42,25 @@ class TerminalPreview(unittest.TestCase):
 
         def closed():
             self.app.pump()
-            return 'Мышь в интерфейсе' not in self.app.text
+            return 'Настройки TUI' not in self.app.text
 
         wait_for(closed)
 
     def test_language_theme_and_shortcut_reference(self):
         self.app.send('preserved draft')
         self.app.send('\x1bOS')  # F4
-        self.app.wait('Мышь в интерфейсе')
-        self.app.send('\x1b[B' * 4 + '\r')
-        self.app.wait('Тема: светлая')
-        self.app.send('\x1b[B' * 2 + '\r')
+        self.app.wait('Настройки TUI')
+        self.app.send('\x1b[C' + '\x1b[B' * 2 + '\r')
+        self.app.wait('[светлая]')
+        self.app.send('\x1b[A\r')
         self.app.wait('TUI Settings')
         self.app.send('\x1bOP')  # F1
         self.app.wait('Hotkeys')
         self.app.send('Schedules')
         self.app.wait('Ctrl+G')
         self.assertNotIn('Ctrl+]', self.app.text)
+        self.app.send('\x1b')
+        self.app.wait('TUI Settings')
         self.app.send('\x1b')
         self.app.wait('preserved draft')
         self.app.send('\x04')
@@ -67,25 +69,28 @@ class TerminalPreview(unittest.TestCase):
         self.app.wait('New conversation')
         self.app.send('\x1bOS')
         self.app.wait('TUI Settings')
-        self.app.wait('Theme: light')
+        self.app.wait('[light]')
 
     def test_mouse_navigation_and_scroll(self):
         self.assertIn(b'\x1b[?1002h', self.app.raw)
         self.assertIn(b'\x1b[?1006h', self.app.raw)
         self.app.send('Черновик мыши')
-        self.mouse(0, 5, 8)
-        self.mouse(0, 5, 8, release=True)
-        self.app.wait('Сессии dsh недоступны')
         self.mouse(0, 5, 9)
+        self.app.wait('Инструменты')
+        self.app.send('\r')
+        self.app.wait('Сессии dsh недоступны')
+        self.app.send('\x1bd')
         self.app.wait('Для чтения настроек работающего dsh')
         self.mouse(0, 2, 1)
         self.mouse(0, 3, 3)
-        self.app.wait('Мышь в интерфейсе')
+        self.app.wait('Настройки TUI')
         self.close_preferences()
-        self.mouse(0, 5, 14)
+        self.mouse(0, 5, 13)
         self.app.wait('> Черновик мыши')
-        self.mouse(0, 5, 7)
-        self.mouse(0, 30, 25)
+        self.app.send('\t')
+        self.app.pump()
+        composer_y = next(y for y, line in enumerate(self.app.screen.display) if '> Черновик мыши' in line)
+        self.mouse(0, 30, composer_y)
         self.app.command(' — продолжение')
         self.app.wait('Черновик мыши — продолжение')
         for i in range(20):
@@ -123,8 +128,8 @@ class TerminalPreview(unittest.TestCase):
         self.app.send('unsent draft')
         self.app.send('\x1b[21~')
         self.app.send('\r')
-        self.app.wait('Мышь в интерфейсе')
-        self.app.send('\x1b[B\r\x1b[A\r')
+        self.app.wait('Настройки TUI')
+        self.app.send('\x1b[C\x1b[F\x1b[A\r\x1b[A\r')
         path = Path(self.env['XDG_CONFIG_HOME']) / 'dsh-launcher-tui/preferences.json'
 
         def saved(mouse, history):
@@ -144,8 +149,9 @@ class TerminalPreview(unittest.TestCase):
         self.app = Terminal(BINARY, [], self.env)
         self.app.wait('Новый разговор')
         self.assertNotIn(b'\x1b[?1002h', self.app.raw)
-        self.app.send('\x1bOS\r')
-        self.app.wait('Мышь в интерфейсе')
+        self.app.send('\x1bOS')
+        self.app.wait('Настройки TUI')
+        self.app.send('\x1b[C\x1b[F\x1b[A\x1b[A\r')
         wait_for(lambda: saved(True, False))
         # Persisting the preference and emitting the terminal command are
         # separate events; the file write alone does not acknowledge mouse mode.
@@ -173,7 +179,7 @@ class TerminalPreview(unittest.TestCase):
             self.app.wait('Потоковый ')
             self.assertNotIn('из тестового dsh', self.app.text)
             self.app.wait('Потоковый ответ из тестового dsh')
-            self.app.wait('Агент: не выполняется')
+            self.app.wait('Enter — отправить')
             self.app.command('cancel test')
             self.app.wait('Частичный ответ до отмены')
             self.mouse(0, 48, 26)
@@ -210,6 +216,13 @@ class TerminalPreview(unittest.TestCase):
             def do_POST(self):
                 state['paths'].append(self.path)
                 request = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                if request['method'] != 'settings/describe':
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'type': 'server-response', 'rpcId': request['rpcId'],
+                        'result': {'ok': True, 'value': {'items': []}}}).encode())
+                    return
                 state['reads'] += 1
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
@@ -233,13 +246,13 @@ class TerminalPreview(unittest.TestCase):
                    'DSH_TUI_URL': f'http://127.0.0.1:{server.server_port}/?token=not-for-display'}
             self.app = Terminal(BINARY, [], env)
             self.app.wait('Новый разговор')
-            self.mouse(0, 5, 9)
+            self.app.send('\x1bd')
             self.app.wait('loaded-model-1')
             self.app.send('\x1bOS')
-            self.app.wait('Мышь в интерфейсе')
+            self.app.wait('Настройки TUI')
             self.app.send('r')
             self.close_preferences()
-            self.mouse(0, 5, 9)
+            self.app.send('\x1bd')
             self.app.wait('loaded-model-1')
             self.app.send('\x1b[C')
             self.app.wait('limit = 42')
@@ -256,7 +269,7 @@ class TerminalPreview(unittest.TestCase):
             self.assertIn('loaded-model-2', self.app.text)
             self.assertNotIn('not-for-display', self.app.text)
             self.assertEqual(state['reads'], 3)
-            self.assertEqual(set(state['paths']), {'/connect', '/api/settings/describe'})
+            self.assertEqual(set(state['paths']), {'/connect', '/api/settings/describe', '/api/session/list', '/api/remote.mux'})
         finally:
             server.shutdown()
             server.server_close()
@@ -289,9 +302,9 @@ class TerminalPreview(unittest.TestCase):
         self.assertIn('dshmarket', manifest.read_text())
         self.app.command('/mode plan')
         self.app.wait('Режим: планирование')
-        self.mouse(0, 36, 24)
+        self.app.send('\x1b1')
         self.app.wait('Режим: обычный')
-        self.mouse(0, 54, 24)
+        self.app.send('\x1b3')
         self.app.wait('> /goal ')
         self.app.command('Test objective')
         self.app.wait('Режим: цель')
@@ -371,7 +384,7 @@ class TerminalPreview(unittest.TestCase):
     def test_minimum_size_warning_preserves_dialog_and_draft(self):
         self.app.send('MINIMUM SIZE DRAFT')
         self.app.send('\x1bOS')
-        self.app.wait('Мышь в интерфейсе')
+        self.app.wait('Настройки TUI')
         self.app.resize(79, 24)
         self.app.wait('Увеличьте терминал: минимум 80×24.')
         self.app.wait('Сейчас: 79×24.')
@@ -379,7 +392,7 @@ class TerminalPreview(unittest.TestCase):
         self.app.resize(80, 23)
         self.app.wait('Сейчас: 80×23.')
         self.app.resize(80, 24)
-        self.app.wait('Мышь в интерфейсе')
+        self.app.wait('Настройки TUI')
         self.close_preferences()
         self.app.wait('MINIMUM SIZE DRAFT')
         self.assertNotIn('ignored text', self.app.text)
@@ -396,12 +409,12 @@ class TerminalPreview(unittest.TestCase):
 
     def test_navigation_preserves_draft(self):
         self.app.send('Несохранённый черновик')
-        self.app.send('\t\x1b[B')
-        self.app.wait('Сессии dsh недоступны')
-        self.app.send('\x1b[B')
+        self.app.send('\t\x1b[F\r')
+        self.app.wait('Ещё')
+        self.app.send('\x1b[B\r')
         self.app.wait('Для чтения настроек работающего dsh')
         self.app.send('\x1bOS')
-        self.app.wait('Мышь в интерфейсе')
+        self.app.wait('Настройки TUI')
         self.close_preferences()
         self.app.wait('Для чтения настроек работающего dsh')
         self.app.send('\x1b')

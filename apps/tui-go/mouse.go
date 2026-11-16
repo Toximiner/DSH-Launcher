@@ -41,7 +41,38 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 		return nil
 	}
 	if m.workbench != nil {
-		return m.benchMouse(msg)
+		d := m.workbench
+		if d.pageView && !d.confirm && !d.editing {
+			if m.page != d.pageNumber() {
+				m.closeWorkbench()
+			} else {
+				if m.chrome.dialog != "" || m.chrome.menuOpen {
+					cmd, _ := m.chromeMouse(msg)
+					return cmd
+				}
+				if msg.Y == 1 {
+					cmd, handled := m.chromeMouse(msg)
+					if handled {
+						return cmd
+					}
+				}
+				if m.sidebarVisible() && msg.X < sidebarWidth {
+					cmd, handled := m.sidebarMouse(msg)
+					if handled {
+						if m.workbench != d && (m.workbench == nil || m.workbench.parent != d) {
+							d.cancel()
+						} else if m.page != d.pageNumber() {
+							m.closeWorkbench()
+						}
+						return cmd
+					}
+				}
+				return m.benchMouse(msg)
+			}
+		}
+		if m.workbench != nil {
+			return m.benchMouse(msg)
+		}
 	}
 	if m.goalDialog != nil {
 		return m.goalMouse(msg)
@@ -63,14 +94,16 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if cmd, handled := m.historyMouse(msg); handled {
 		return cmd
 	}
-	width, bodyHeight := m.contentSize()
+	if cmd, handled := m.sidebarMouse(msg); handled {
+		return cmd
+	}
 	mainX := 0
 	if m.sidebarVisible() {
 		mainX = sidebarWidth + sidebarGap
 	}
-	conversation := area{mainX + 2, bodyTop + 3, m.viewport.Width, m.viewport.Height}
+	conversation := m.conversationArea()
 	if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-		if conversation.contains(msg.X, msg.Y) && m.page == marketPage && m.marketConfirm == nil && !m.marketEditing {
+		if m.pluginsPageBox().contains(msg.X, msg.Y) && m.page == marketPage && m.marketConfirm == nil && !m.marketEditing {
 			delta := 1
 			if msg.Button == tea.MouseButtonWheelUp {
 				delta = -1
@@ -89,27 +122,9 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if msg.Button != tea.MouseButtonLeft {
 		return nil
 	}
-	if mainX != 0 {
-		// Sidebar content starts below its border; four rows precede navigation.
-		navigation := area{1, bodyTop + 1 + 4, sidebarWidth - 2, len(navigationPages)}
-		if navigation.contains(msg.X, msg.Y) {
-			m.page = navigationPages[msg.Y-navigation.y]
-			m.toolFocused = false
-			m.navFocused = true
-			m.input.Blur()
-			m.resize()
-			m.viewport.GotoTop()
-			if m.page == marketPage {
-				m.navFocused = false
-				return m.loadMarket()
-			}
-			return nil
-		}
-		// A blank row and session heading follow navigation.
-		draft := area{1, navigation.y + len(navigationPages) + 2, sidebarWidth - 2, 1}
-		if draft.y < bodyTop+bodyHeight-3 && draft.contains(msg.X, msg.Y) {
-			return m.showChat()
-		}
+
+	if cmd, handled := m.conversationMouse(msg); handled {
+		return cmd
 	}
 	if m.page == chatPage && m.chat != nil && conversation.contains(msg.X, msg.Y) {
 		viewLines := strings.Split(clean(m.viewport.View()), "\n")
@@ -141,8 +156,9 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 			}
 		}
 	}
-	if m.page == marketPage && conversation.contains(msg.X, msg.Y) {
-		x, y := msg.X-conversation.x, msg.Y-conversation.y
+	marketBox := m.pluginsPageBox()
+	if m.page == marketPage && marketBox.contains(msg.X, msg.Y) {
+		x, y := msg.X-marketBox.x, msg.Y-marketBox.y
 		for _, hit := range m.marketHits {
 			if !hit.box.contains(x, y) {
 				continue
@@ -156,6 +172,15 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 			case "row":
 				if m.marketConfirm == nil {
 					m.marketIndex = hit.index
+				}
+			case "refresh":
+				if m.marketConfirm == nil {
+					return m.loadMarket()
+				}
+			case "catalog", "installed":
+				if m.marketConfirm == nil {
+					m.marketInstalledOnly = hit.kind == "installed"
+					m.marketIndex = 0
 				}
 			case "tab":
 				if m.marketConfirm == nil {
@@ -176,19 +201,22 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 			return nil
 		}
 	}
-	composer := area{mainX, bodyTop + bodyHeight - composerHeight - 1, width, composerHeight}
-	if m.page == chatPage && m.session != nil && msg.Y == composer.y+4 {
+	if cmd, handled := m.landingMouse(msg); handled {
+		return cmd
+	}
+	composer := m.composerBox()
+	if !m.landingVisible() && m.page == chatPage && m.session != nil && msg.Y == composer.y+4 {
 		_, hint := m.composerText()
 		index := strings.Index(hint, tr("[F8 Стоп]"))
 		if index < 0 {
 			return nil
 		}
-		x := mainX + 2 + len([]rune(hint[:index]))
+		x := composer.x + 2 + len([]rune(hint[:index]))
 		if (area{x, msg.Y, len([]rune(tr("[F8 Стоп]"))), 1}).contains(msg.X, msg.Y) {
 			return m.cancelChat()
 		}
 	}
-	if m.page == chatPage && msg.Y == composer.y+2 && (m.session == nil || m.session.Address.Kind != "subagent") {
+	if !m.conversationVisible() && !m.landingVisible() && m.page == chatPage && msg.Y == composer.y+2 && (m.session == nil || m.session.Address.Kind != "subagent") {
 		x := mainX + 2 + len([]rune(tr("Режим: ")))
 		for i, name := range []string{tr("Обычный"), tr("План"), tr("Цель")} {
 			width := len([]rune(name)) + 2

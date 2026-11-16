@@ -277,11 +277,19 @@ func (m *model) handleModelPicker(result modelPickerResult) {
 	}
 	d.uncertain = false
 	if result.selected != nil {
+		m.modelRevision++
 		d.current = *result.selected
+		if m.session != nil {
+			selected := *result.selected
+			m.session.Model = &selected
+		}
 		d.note = tr("Сессия: выбор подтверждён. Сохранение общего значения выполняет dsh.")
 		return
 	}
 	d.catalog, d.current = result.catalog, result.current
+	if m.agentInfo != nil {
+		m.agentInfo.catalog, m.agentInfo.selection = result.catalog, result.current
+	}
 	d.choose(0)
 	for i, option := range d.options() {
 		if option.provider == d.current.Provider && option.model.ID == d.current.Model {

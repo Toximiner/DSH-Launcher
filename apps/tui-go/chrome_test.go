@@ -13,6 +13,19 @@ import (
 
 func key(m *model, kind tea.KeyType) { m.Update(tea.KeyMsg{Type: kind}) }
 
+func selectHubSetting(t *testing.T, m *model, action string) {
+	t.Helper()
+	m.chrome.settingsNav = false
+	for i, row := range m.settingsHubRows() {
+		if row.action == action {
+			m.chrome.settingsRow = i
+			m.settingsHubLayout()
+			return
+		}
+	}
+	t.Fatalf("settings action %s is absent", action)
+}
+
 func TestSettingsDialogPreservesContext(t *testing.T) {
 	for _, text := range []string{"f4", "f1", "alt+t"} {
 		m := newModel()
@@ -82,7 +95,7 @@ func TestPreferencesApplyAndPersist(t *testing.T) {
 	enter(m, "remembered")
 	m.input.SetValue("unsent")
 	key(m, tea.KeyF4)
-	key(m, tea.KeyDown)
+	selectHubSetting(t, m, "input-history")
 	key(m, tea.KeyEnter)
 	if m.prefs.InputHistory || len(m.history) != 0 || m.input.Value() != "unsent" {
 		t.Fatal("disabling history did not clear recall while retaining the draft")
@@ -95,6 +108,7 @@ func TestPreferencesApplyAndPersist(t *testing.T) {
 		t.Fatal("disabled history still records or recalls input")
 	}
 	key(m, tea.KeyF4)
+	selectHubSetting(t, m, "mouse")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if m.mouseEnabled() || cmd == nil {
 		t.Fatal("mouse reporting was not disabled")
@@ -134,6 +148,7 @@ func TestPreferencesDefaultsAndMouseOverride(t *testing.T) {
 	m := newModel()
 	m.mouseForcedOff = true
 	key(m, tea.KeyF4)
+	selectHubSetting(t, m, "mouse")
 	key(m, tea.KeyEnter)
 	if m.mouseEnabled() || !m.prefs.Mouse || !strings.Contains(m.preferencesNote, "--no-mouse") {
 		t.Fatal("CLI mouse override was ignored")
@@ -155,15 +170,25 @@ func TestMenuAndDialogMouseTargets(t *testing.T) {
 		if m.chrome.dialog != "settings" {
 			t.Fatal("mouse did not open settings")
 		}
-		box, _ := m.dialogBox()
-		if !strings.Contains(clean(strings.Split(m.View(), "\n")[box.y+5]), "История ввода") {
+		selectHubSetting(t, m, "input-history")
+		_, _, hits := m.settingsHubLayout()
+		var target, close area
+		for _, hit := range hits {
+			if hit.action == "row" && hit.index == m.chrome.settingsRow {
+				target = hit.area
+			}
+			if hit.action == "close" {
+				close = hit.area
+			}
+		}
+		if !strings.Contains(clean(strings.Split(m.View(), "\n")[target.y]), "История ввода") {
 			t.Fatal("history hit area is misaligned")
 		}
-		mouse(m, box.x+3, box.y+5, tea.MouseButtonLeft, tea.MouseActionPress)
+		mouse(m, target.x, target.y, tea.MouseButtonLeft, tea.MouseActionPress)
 		if m.prefs.InputHistory {
 			t.Fatal("history checkbox click failed")
 		}
-		mouse(m, box.x+3, box.y+12, tea.MouseButtonLeft, tea.MouseActionPress)
+		mouse(m, close.x, close.y, tea.MouseButtonLeft, tea.MouseActionPress)
 		if m.chrome.dialog != "" || !m.input.Focused() || m.input.Value() != "draft" {
 			t.Fatal("close button failed to restore draft focus")
 		}
@@ -176,7 +201,7 @@ func TestMenuAndDialogMouseTargets(t *testing.T) {
 		key(m, tea.KeyF10)
 		key(m, tea.KeyRight)
 		key(m, tea.KeyRight)
-		key(m, tea.KeyDown)
+		key(m, tea.KeyUp)
 		key(m, tea.KeyEnter)
 		if m.chrome.dialog != "about" || !strings.Contains(clean(m.View()), version) {
 			t.Fatal("Help menu failed to open About")
@@ -192,7 +217,7 @@ func TestShortcutReferenceSearchAndSettingsEntry(t *testing.T) {
 	m := newModel()
 	m.input.SetValue("retained draft")
 	m.openDialog("settings")
-	m.chrome.selection = 3
+	selectHubSetting(t, m, "shortcuts")
 	key(m, tea.KeyEnter)
 	if m.chrome.dialog != "help" {
 		t.Fatal("settings did not open shortcuts")
@@ -207,6 +232,10 @@ func TestShortcutReferenceSearchAndSettingsEntry(t *testing.T) {
 	m.dialogBox()
 	if m.chrome.helpOffset == 0 {
 		t.Fatal("shortcut reference did not scroll")
+	}
+	key(m, tea.KeyEsc)
+	if m.chrome.dialog != "settings" {
+		t.Fatal("shortcuts did not return to settings")
 	}
 	key(m, tea.KeyEsc)
 	if m.input.Value() != "retained draft" || !m.input.Focused() {
@@ -230,5 +259,71 @@ func TestThemeAndSidebarPreferences(t *testing.T) {
 	m.togglePreference(4)
 	if m.prefs.Theme != "" || uiColor("#111820") != "#111820" {
 		t.Fatal("dark theme was not restored")
+	}
+}
+
+func TestMenuNavigationAfterRegrouping(t *testing.T) {
+	defer activeEnglish.Store(false)
+	for _, english := range []bool{false, true} {
+		for _, width := range []int{80, 100} {
+			for _, useMouse := range []bool{false, true} {
+				for _, target := range []struct {
+					menu, row       int
+					dialog, runtime string
+					page            int
+				}{
+					{0, 0, "settings", "", chatPage},
+					{0, 1, "", "runtime", chatPage},
+					{1, 0, "", "", dshSettingsPage},
+					{2, 0, "help", "", chatPage},
+					{2, 1, "", "updates", chatPage},
+					{2, 2, "", "", logPage},
+					{2, 3, "", "diagnostics", chatPage},
+					{2, 4, "about", "", chatPage},
+				} {
+					m := newModel()
+					activeEnglish.Store(english)
+					m.Update(tea.WindowSizeMsg{Width: width, Height: 24})
+					m.runtime = &runtimeMock{}
+					m.input.SetValue("retained draft")
+					if useMouse {
+						mouse(m, menuStart(target.menu), 1, tea.MouseButtonLeft, tea.MouseActionPress)
+					} else {
+						key(m, tea.KeyF10)
+						for i := 0; i < target.menu; i++ {
+							key(m, tea.KeyRight)
+						}
+						for i := 0; i < target.row; i++ {
+							key(m, tea.KeyDown)
+						}
+					}
+					view := m.View()
+					if lipgloss.Width(view) > width || lipgloss.Height(view) > 24 {
+						t.Fatal("menu overflowed the terminal")
+					}
+					if useMouse {
+						mouse(m, min(menuStart(target.menu), width-29)+2, 3+target.row, tea.MouseButtonLeft, tea.MouseActionPress)
+					} else {
+						key(m, tea.KeyEnter)
+					}
+					if m.chrome.menuOpen || m.chrome.dialog != target.dialog || m.page != target.page || m.input.Value() != "retained draft" {
+						t.Fatalf("menu %d row %d opened the wrong destination (mouse=%v, English=%v)", target.menu, target.row, useMouse, english)
+					}
+					if target.runtime != "" && (m.runtimeDialog == nil || m.runtimeDialog.kind != target.runtime) {
+						t.Fatal("menu opened the wrong runtime panel")
+					}
+				}
+			}
+		}
+	}
+	m := newModel()
+	key(m, tea.KeyF10)
+	key(m, tea.KeyUp)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("last File item did not quit")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatal("last File item ran a different action")
 	}
 }

@@ -15,7 +15,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const version = "0.2.0-preview.39"
+const version = "0.2.0-preview.40"
 const help = "/runtime — установка и процесс dsh\n/updates — обновления и откат dsh/TUI\n/diagnostics — журнал, отчёт, уведомления\n" + "/compose — многострочное сообщение\n/attach <путь> — прикрепить файл до 2 МиБ\n/workspaces · /files · /terminals — рабочая область\n/presets — пресеты · Ctrl+N новая сессия\n/plugins · /commands · /packages — плагины\n/agents · /tasks · /jobs · /schedules — выполнение\n/parent — вернуться от подагента к родителю\nВ списках: F5 обновить · Esc назад\n" + "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/rename — название текущей · F3 в списке\n/archive · /restore — архив и возврат\nВ списке: a — архив · Ctrl+X — перенести\n/fork — новая ветка · Ctrl+B в списке\n/models · F12 — выбор модели сессии\n/providers — настройки провайдеров\nВ настройках: Enter — форма · F6 — провайдеры\n/mode default|plan|goal — режим\n/goal — состояние цели · F3 правка\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/history — история сессии · F11\nCtrl+F в истории — поиск · F3 — ещё\nCtrl+T в поиске — всё / сообщения / инструменты\nTab в истории — выбор · Ctrl+B — ветка\nCtrl+R в истории — Markdown/исходник\nВ истории: Ctrl+Y — копия · Ctrl+K — код\nF6/Shift+F6 — инструмент истории · Enter — детали\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
@@ -25,14 +25,19 @@ const (
 	tuiSettingsPage
 	logPage
 	marketPage
+	pluginsPage
+	schedulesPage
 )
 
-var pages = []string{"Чат", "Сессии", "Настройки dsh", "Настройки TUI", "Журнал", "Маркет"}
-var navigationPages = []int{chatPage, sessionsPage, dshSettingsPage, logPage, marketPage}
+var pages = []string{"Чат", "Сессии", "Настройки dsh", "Настройки TUI", "Журнал", "Маркет", "Плагины", "Автоматизация"}
 
 type quitMsg struct{}
 
 type model struct {
+	chatCopyHits        []conversationCopyHit
+	modelRevision       int
+	agentInfo           *agentContext
+	side                sidebarState
 	runtime             runtimeControl
 	runtimeState        runtimeSnapshot
 	runtimeDialog       *runtimeDialog
@@ -168,10 +173,16 @@ func (m *model) rebuild() {
 			}
 		}
 		prefix := accent().Render(m.modeDescription()) + "\n\n"
+		if m.session != nil && m.session.Address.Kind != "subagent" && len(m.session.PendingInput) == 0 && (m.session.Plan == nil || !m.session.Plan.Pending) && m.session.Goal == nil && m.sessionError == "" && !m.isSessionArchived(m.session.ID) {
+			prefix = ""
+		}
 		for i := range m.chatToolHits {
 			offset := strings.Count(ansi.Hardwrap(prefix, max(1, m.viewport.Width), true), "\n")
 			m.chatToolHits[i].row += offset
 			m.chatToolHits[i].end += offset
+		}
+		for i := range m.chatCopyHits {
+			m.chatCopyHits[i].row += strings.Count(ansi.Hardwrap(prefix, max(1, m.viewport.Width), true), "\n")
 		}
 		content = prefix + content
 	}
@@ -206,10 +217,15 @@ func (m *model) resize() {
 	}
 	w, h := m.contentSize()
 	if m.page == 0 {
+		w = min(w, conversationMaxWidth)
 		h -= composerHeight + 1
 	}
 	m.viewport.Width = max(1, w-4)
 	m.viewport.Height = max(1, h-4)
+	if m.page == marketPage {
+		m.viewport.Width = min(w, 110)
+		m.viewport.Height = max(1, h)
+	}
 	m.input.Width = max(1, w-6)
 	m.marketSearch.Width = max(1, m.viewport.Width-8)
 	m.rebuild()
@@ -242,11 +258,22 @@ func (m *model) Init() tea.Cmd {
 	if m.runtime != nil {
 		poll = runtimePoll()
 	}
-	return tea.Batch(textinput.Blink, m.loadSettings(), session, poll)
+	return tea.Batch(textinput.Blink, m.loadSettings(), m.loadSidebar(), sidebarPoll(), session, poll)
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case conversationCopyResult:
+		m.handleConversationCopy(msg)
+		return m, nil
+	case agentContextResult:
+		m.handleAgentContext(msg)
+		return m, nil
+	case sidebarTick:
+		return m, tea.Batch(m.loadSidebar(), m.loadAgentContext(), sidebarPoll())
+	case sidebarResult:
+		m.handleSidebarResult(msg)
+		return m, m.ensureArchive()
 	case runtimeTick:
 		return m, m.handleRuntimeTick()
 	case runtimeDone:
@@ -407,6 +434,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.session == nil || m.session.ID != msg.view.ID {
 				m.lines = nil
 			}
+			if msg.modelRevision != m.modelRevision && m.session != nil && m.session.ID == msg.view.ID {
+				msg.view.Model = m.session.Model
+			}
 			if msg.titleRevision != m.titleRevision && m.session != nil && m.session.ID == msg.view.ID {
 				msg.view.Title = m.session.Title
 			}
@@ -541,6 +571,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Type == tea.KeyF8 {
 			return m, m.cancelChat()
 		}
+		if cmd, handled := m.conversationKey(msg); handled {
+			return m, cmd
+		}
+		if cmd, handled := m.agentKey(msg); handled {
+			return m, cmd
+		}
+		if cmd, handled := m.sidebarKey(msg); handled {
+			return m, cmd
+		}
 		if cmd, handled := m.toolKey(msg); handled {
 			return m, cmd
 		}
@@ -623,7 +662,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "ctrl+d":
 			return m, tea.Quit
 		case "tab":
+			if !m.sidebarVisible() {
+				return m, nil
+			}
 			m.navFocused = !m.navFocused
+			if m.navFocused && m.side.selected == "" {
+				m.side.selected = "new"
+			}
 			if m.navFocused || m.page != 0 {
 				m.input.Blur()
 				return m, nil
@@ -755,22 +800,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "up", "down":
-			if m.navFocused {
-				delta := 1
-				if msg.String() == "up" {
-					delta = -1
-				}
-				index := 0
-				for i, page := range navigationPages {
-					if page == m.page {
-						index = i
-						break
-					}
-				}
-				m.page = navigationPages[(index+delta+len(navigationPages))%len(navigationPages)]
-				m.resize()
-				return m, nil
-			}
+
 			if m.page == sessionsPage && len(m.visibleSessions()) > 0 {
 				delta := 1
 				if msg.String() == "up" {
