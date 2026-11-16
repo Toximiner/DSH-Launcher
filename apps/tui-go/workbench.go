@@ -875,15 +875,16 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 			d.startEditor(prettyValue(map[string]any{"title": tr("Новая задача"), "prompt": tr("Описание задачи"), "timing": map[string]any{"kind": "after", "after_seconds": 3600}}), action)
 			return d.startScheduleForm(nil)
 		}
+		if key == tea.KeyEnter {
+			d.document = r.ID
+			return m.loadWorkbench()
+		}
 		request := map[string]any{"id": r.ID, "action": "update", "expectedUpdatedAt": r.Data["updatedAt"]}
 		if r.Data["updatedAt"] == nil {
 			d.note = tr("У расписания нет ревизии updatedAt; изменение недоступно.")
 			return nil
 		}
 		switch key {
-		case tea.KeyEnter:
-			d.document = r.ID
-			return m.loadWorkbench()
 		case tea.KeyCtrlG:
 			action = &benchAction{"schedule/run", map[string]any{"request": map[string]any{"id": r.ID}}, tr("Запустить расписание сейчас: агент получит задание ") + r.Title}
 		case tea.KeyF3:

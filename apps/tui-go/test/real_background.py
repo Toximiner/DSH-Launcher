@@ -163,7 +163,9 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-background-') as directory:
             app.command(command); app.wait(title); app.wait('Снимок dsh')
         def back(title):
             app.send('\x1b')
-            wait_for(lambda: (app.pump(), title not in app.text)[1])
+            # Page names remain visible in the sidebar after closing a page.
+            visible_title = '/ Автоматизация' if title == 'Автоматизация' else title
+            wait_for(lambda: (app.pump(), visible_title not in app.text)[1])
         def confirm():
             app.wait('Enter — подтвердить'); app.send('\r'); app.wait('Ответ dsh получен')
         def refresh(text='Снимок dsh'):
@@ -182,6 +184,8 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-background-') as directory:
             global app
             app.send('\x04'); app.exited(); app.close(root / 'before-reconnect.ansi')
             app = launch(); app.wait('Enter —', timeout=20)
+            # Restored message controls appear only after the stream snapshot.
+            app.wait('Копировать', timeout=20)
         def edit_message(text):
             app.send('\x1bOR'); app.wait('F5 — проверить')
             app.send('\x1b[200~' + text + '\x1b[201~')

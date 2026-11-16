@@ -1,7 +1,7 @@
 # TUI development roadmap
 
-
 Plugin Market and Automation tasks now follow the GUI structure: dedicated pages, cards and status indicators; tasks have status filters and creation/editing forms. Delivery history is readable, with explicit time zones. F2 in a form opens advanced JSON for complex rules. Revision checks and confirmation remain in place.
+
 Preview.40 Plugins is a GUI-shaped page with built-in settings, experimental and installed packages, dsh metadata, More, Market and Add. Components remain a separate read-only view. Confirmed toggles recheck the observed baseline and reread their result; existing operation/editor safeguards remain in use. Actual-dsh tests cover cancellation, enablement and fixture restoration without model calls.
 
 The preview.40 keyboard reference has seven topic groups, key/action columns, muted contexts, section filtering, search and a sticky section heading. Checks cover complete inventory, the last scrollable line, RU/EN, mouse input and 80×24 or larger terminals.

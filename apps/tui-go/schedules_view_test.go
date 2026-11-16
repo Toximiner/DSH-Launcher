@@ -123,3 +123,11 @@ func TestScheduleHistoryAndMouseAreReadOnlyUntilConfirmed(t *testing.T) {
 		t.Fatal("history is not human-readable")
 	}
 }
+
+func TestScheduleHistoryDoesNotRequireWritableRevision(t *testing.T) {
+	m := benchTestModel(t, "schedules")
+	delete(m.workbench.rows[0].Data, "updatedAt")
+	if m.benchPrepare(tea.KeyEnter) == nil || m.workbench.document != "r" || m.workbench.confirm {
+		t.Fatal("read-only history was blocked by missing revision")
+	}
+}

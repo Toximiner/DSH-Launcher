@@ -142,7 +142,7 @@ func (m *model) schedulesLayout(box area) ([]string, []pluginHit) {
 		}
 		row := rows[index]
 		marker := "  "
-		title := stringValue(row.Data, "title")
+		title := singleLine(stringValue(row.Data, "title"))
 		if title == "" {
 			title = row.Title
 		}
