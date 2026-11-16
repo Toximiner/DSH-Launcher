@@ -15,8 +15,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-const version = "0.2.0-preview.34"
-const help = "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/rename — название текущей · F3 в списке\n/archive · /restore — архив и возврат\nВ списке: a — архив · Ctrl+X — перенести\n/fork — новая ветка · Ctrl+B в списке\n/models · F12 — выбор модели сессии\n/providers — настройки провайдеров\nВ настройках: Enter — форма · F6 — провайдеры\n/mode default|plan|goal — режим\n/goal — состояние цели · F3 правка\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/history — история сессии · F11\nCtrl+F в истории — поиск · F3 — ещё\nCtrl+T в поиске — всё / сообщения / инструменты\nTab в истории — выбор · Ctrl+B — ветка\nCtrl+R в истории — Markdown/исходник\nВ истории: Ctrl+Y — копия · Ctrl+K — код\nF6/Shift+F6 — инструмент истории · Enter — детали\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
+const version = "0.2.0-preview.35"
+const help = "/compose — многострочное сообщение\n/attach <путь> — прикрепить файл до 2 МиБ\n/workspaces · /files · /terminals — рабочая область\n/presets — пресеты · Ctrl+N новая сессия\n/plugins · /commands · /packages — плагины\n/agents · /tasks · /jobs · /schedules — выполнение\nВ списках: F5 обновить · Esc назад\n" + "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/rename — название текущей · F3 в списке\n/archive · /restore — архив и возврат\nВ списке: a — архив · Ctrl+X — перенести\n/fork — новая ветка · Ctrl+B в списке\n/models · F12 — выбор модели сессии\n/providers — настройки провайдеров\nВ настройках: Enter — форма · F6 — провайдеры\n/mode default|plan|goal — режим\n/goal — состояние цели · F3 правка\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/history — история сессии · F11\nCtrl+F в истории — поиск · F3 — ещё\nCtrl+T в поиске — всё / сообщения / инструменты\nTab в истории — выбор · Ctrl+B — ветка\nCtrl+R в истории — Markdown/исходник\nВ истории: Ctrl+Y — копия · Ctrl+K — код\nF6/Shift+F6 — инструмент истории · Enter — детали\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
 	chatPage = iota
@@ -33,6 +33,8 @@ var navigationPages = []int{chatPage, sessionsPage, dshSettingsPage, logPage, ma
 type quitMsg struct{}
 
 type model struct {
+	composer            *composeDialog
+	workbench           *workbench
 	goalDialog          *goalDialog
 	settingsForm        *settingsForm
 	modelPicker         *modelPicker
@@ -246,6 +248,19 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case modelPickerResult:
 		m.handleModelPicker(msg)
 		return m, nil
+	case composeUpload:
+		m.handleComposeUpload(msg)
+		return m, nil
+	case benchTerminalDone:
+		if m.workbench != nil {
+			m.workbench.note = "Терминал отключён. Ввод не повторяется; F5 — перечитать."
+			if msg.err != nil {
+				m.workbench.note = "Поток терминала прерван. Ввод не повторяется; F5 — перечитать."
+			}
+		}
+		return m, nil
+	case benchResult:
+		return m, m.handleBench(msg)
 	case goalDialogResult:
 		m.handleGoalDialog(msg)
 		return m, nil
@@ -461,6 +476,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd, handled := m.settingsFormKey(msg); handled {
 			return m, cmd
 		}
+		if cmd, handled := m.composeKey(msg); handled {
+			return m, cmd
+		}
+		if cmd, handled := m.benchKey(msg); handled {
+			return m, cmd
+		}
 		if cmd, handled := m.goalKey(msg); handled {
 			return m, cmd
 		}
@@ -648,6 +669,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.openSettingsForm(true)
 			case "/models":
 				return m, m.openModels()
+			case "/compose":
+				return m, m.openCompose()
+			case "/workspaces", "/packages", "/presets", "/files", "/commands", "/plugins", "/jobs", "/schedules", "/agents", "/tasks", "/terminals":
+				return m, m.openWorkbench(strings.TrimPrefix(line, "/"))
 			case "/goal":
 				return m, m.openGoal()
 			case "/history":
@@ -669,6 +694,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return m, nil
 					}
 					return m, m.chooseMode(mode)
+				}
+				if strings.HasPrefix(line, "/attach ") {
+					return m, m.uploadCompose(strings.TrimSpace(strings.TrimPrefix(line, "/attach ")))
 				}
 				if strings.HasPrefix(line, "/goal ") {
 					value := strings.TrimSpace(strings.TrimPrefix(line, "/goal "))

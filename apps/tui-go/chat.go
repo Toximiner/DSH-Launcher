@@ -100,6 +100,7 @@ type chatMessage struct {
 }
 type pendingPrompt struct {
 	ID, Text, Status string
+	Attachments      []promptAttachment
 	AcceptedAt       time.Time
 }
 type chatState struct {
@@ -161,6 +162,8 @@ func (m *model) startChat(id string) tea.Cmd {
 }
 
 func (m *model) stopChat() {
+	m.composer = nil
+	m.closeWorkbench()
 	m.closeGoal()
 	m.closeModels()
 	m.closeHistory()
@@ -181,7 +184,8 @@ func waitChat(s *chatState) tea.Cmd {
 	}
 }
 
-func (m *model) submitText(text string) tea.Cmd {
+func (m *model) submitText(text string) tea.Cmd { return m.submitContent(text, nil) }
+func (m *model) submitContent(text string, attachments []promptAttachment) tea.Cmd {
 	if m.session != nil && m.isSessionArchived(m.session.ID) {
 		m.input.SetValue(text)
 		m.input.CursorEnd()
@@ -217,7 +221,7 @@ func (m *model) submitText(text string) tea.Cmd {
 		m.append("Не удалось подготовить сообщение.")
 		return nil
 	}
-	p := &pendingPrompt{ID: id, Text: text, Status: "sending"}
+	p := &pendingPrompt{ID: id, Text: text, Status: "sending", Attachments: attachments}
 	m.prompts[m.session.ID] = p
 	return m.sendPrompt(m.session.ID, p)
 }
@@ -228,6 +232,10 @@ func (m *model) sendPrompt(id string, p *pendingPrompt) tea.Cmd {
 		m.chat.note = ""
 	}
 	text, requestID, login, ctx := p.Text, p.ID, m.settingsLogin, m.settingsContext
+	content := []any{map[string]any{"type": "text", "text": text}}
+	for _, a := range p.Attachments {
+		content = append(content, map[string]any{"type": "file", "receiptId": a.Receipt})
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -246,7 +254,7 @@ func (m *model) sendPrompt(id string, p *pendingPrompt) tea.Cmd {
 			Accepted bool `json:"accepted"`
 		}
 		result.err = api.rpc(ctx, "session/prompt", map[string]any{"request": map[string]any{
-			"sessionId": id, "requestId": requestID, "mode": "queue", "content": []any{map[string]any{"type": "text", "text": text}},
+			"sessionId": id, "requestId": requestID, "mode": "queue", "content": content,
 		}}, &receipt)
 		var rejected *rpcRejected
 		result.rejected = errors.As(result.err, &rejected)
@@ -921,7 +929,9 @@ func (m *model) handlePromptResult(msg promptResult) {
 	if m.chat != nil && m.chat.id == msg.sessionID {
 		if msg.err != nil {
 			m.chat.note = msg.err.Error()
-			if msg.rejected && m.input.Value() == "" {
+			if msg.rejected && (len(p.Attachments) > 0 || strings.Contains(p.Text, "\n")) {
+				m.chat.note += " · /compose — вернуть исходный текст и вложения."
+			} else if msg.rejected && m.input.Value() == "" {
 				m.input.SetValue(p.Text)
 				m.input.CursorEnd()
 			}

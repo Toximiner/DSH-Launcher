@@ -167,7 +167,7 @@ func (m *model) View() string {
 		hints = "F9 очередь · F8 остановить задачу"
 	}
 	footer := bar(muted.Render(hints), muted.Render("Ctrl+D выход"), width)
-	return m.approvalView(m.queueDialogView(m.settingsFormView(m.goalView(m.modelsView(m.historyCodeView(m.archiveView(m.forkView(m.renameView(m.chromeView(m.historyView(header + "\n" + body + "\n" + footer)))))))))))
+	return m.approvalView(m.queueDialogView(m.settingsFormView(m.goalView(m.composeView(m.benchView(m.modelsView(m.historyCodeView(m.archiveView(m.forkView(m.renameView(m.chromeView(m.historyView(header + "\n" + body + "\n" + footer)))))))))))))
 }
 
 func (m *model) modeControls() string {

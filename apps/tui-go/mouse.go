@@ -34,6 +34,12 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if m.settingsForm != nil {
 		return m.settingsFormMouse(msg)
 	}
+	if m.composer != nil && m.composer.visible {
+		return nil
+	}
+	if m.workbench != nil {
+		return m.benchMouse(msg)
+	}
 	if m.goalDialog != nil {
 		return m.goalMouse(msg)
 	}

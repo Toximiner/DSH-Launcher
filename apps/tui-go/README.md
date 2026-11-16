@@ -1,7 +1,49 @@
-# Go TUI preview — 0.2.0-preview.34
+# Go TUI preview — 0.2.0-preview.35
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
+
+
+Preview.35 adds shared workbench dialogs for roadmap stages 6–10. All lists are
+point-in-time snapshots; F5 rereads them. Search filters names, ↑/↓ selects,
+PgUp/PgDn scrolls details, and Esc returns. Mutation dialogs require a separate
+Enter confirmation; uncertain writes never retry automatically. Schedule edits
+use `expectedUpdatedAt`; preset selection is locked by dsh after the first turn.
+
+| Command | Available operations |
+| --- | --- |
+| `/presets` | Read presets, select for an unused session, Ctrl+N create a session with a preset |
+| `/workspaces` | Read workspaces, Enter create a session there, F3 create one in another folder |
+| `/files` | Browse workspace directories and read text in 200-line pages, including version/EOF |
+| `/compose` | Multiline message; Enter inserts a newline, F5 sends/queues, Esc hides and retains the draft |
+| `/attach <local path>` | Upload a regular local file up to 2 MiB; up to four receipts per draft; Ctrl+X removes the last |
+| `/terminals` | Ctrl+N create a shell, Enter attach a native interactive TTY, Ctrl+] detach, Ctrl+X close |
+| `/plugins` | Inventory/status, F4 shared schema settings; custom web screens need adapters |
+| `/commands` | Discover backend plugin commands, edit arguments, confirm execution and read its text result |
+| `/packages` | Read bundle capabilities, Space enable/disable, F3 update to an exact version, Ctrl+X remove when allowed |
+| `/agents` | Read subagents, Enter connect their session, F3 queue a message, Ctrl+X request interruption for continuable agents |
+| `/tasks` | Read team task projections; no generic mutation API is assumed |
+| `/jobs` | Read background jobs, Enter bounded output snapshot with gap indicators, Ctrl+X request stop |
+| `/schedules` | Read host-wide schedules, Ctrl+N create, F3 edit JSON, Space pause/resume, Enter recent history, Ctrl+G run now, Ctrl+X delete |
+
+The existing questions dialog displays the actual `exit_plan_mode` plan and its
+Approve/Keep planning choices. No mode change is inferred from displayed text.
+Native terminal attachment passes the server's VT stream to the user's terminal,
+including full-screen programs; it is Linux-only, preserves the server process
+when detached, restores TTY state, serializes acknowledged input, and never
+replays input after a disconnect. File browsing is read-only text; PDF/image/web
+rendering and file editing are not implemented. Uploads use opaque, session-bound
+receipts and the existing send reconciliation; they are not sent by merely
+opening or closing a dialog. Drafts live in memory and end with the session/client.
+
+Package actions use dsh's permission/capability checks and display restart/rollback
+outcomes. They do not automatically restart dsh or approve dependency builds.
+The shared components cover existing schemas/commands; an upstream declarative
+plugin protocol/SDK and custom account/OAuth/web adapters remain separate work.
+`test/real_workbench.py` verifies the actual pinned dsh with isolated profiles,
+a controlled local model and PTYs: inventories, file pages, schedule lifecycle,
+interactive shell/detach/close, multiline draft/upload/send and both plan decisions.
+It does not establish compatibility with every external plugin or cloud model.
 
 The terminal client is implemented in Go/Bubble Tea, with schema-driven dsh settings
 and a panel layout: a workspace sidebar, conversation panel, separate

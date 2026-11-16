@@ -59,6 +59,11 @@ staging before backend persistence, cancellation, portable schema constraints an
 secret-container refusal.
 An isolated dummy key is stored through credentials/set and checked in the next
 request to the local model; no user profile or paid provider is touched.
+`test/real_workbench.py` checks actual inventories, file pagination, explicit schedule
+creation/pause/deletion, native shell execution/detach/close, multiline drafts,
+upload receipts and exact message text, and both plan-review decisions. It uses
+an isolated profile and a controlled local model; metadata browsing must not
+trigger model calls. Advanced adapters require their own actual-backend scenarios.
 `test/real_goals.py` checks actual goal snapshots, phase versus activation,
 multiline objective/round-cap editing, cancellation, stale-revision refusal,
 explicit conflict review, preservation of untouched foreign fields, empty goals,

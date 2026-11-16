@@ -2,10 +2,39 @@
 
 [Русский](README.md) | **English**
 
-Baseline: November 16, 2026, Go client `0.2.0-preview.34`.
+Baseline: November 16, 2026, Go client `0.2.0-preview.35`.
 Terminal minimum: 80×24; recommended: 100×30.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.
+
+## Preview.35 progress across stages 6–10
+
+- **6:** `/presets` lists/selects presets before the first turn and creates a
+  session with one. Actual plan review verifies Keep planning and Approve.
+  Goal editing/revision protection remains available from preview.34.
+- **7:** `/workspaces`, `/files`, `/compose`, `/attach`, `/terminals` supply folder
+  selection for new sessions, paged text reads, multiline drafts, four uploads up
+  to 2 MiB through receipts, and a native interactive TTY with Ctrl+] detach.
+  File writes and PDF/image/web document rendering remain unimplemented.
+- **8:** `/plugins` and `/commands` provide inventories, existing schema forms,
+  command discovery/confirmed execution and text results. A declarative protocol
+  and SDK are not implemented; arbitrary web screens still require a server
+  contract or an adapter.
+- **9:** `/packages` complements `/market`: capabilities, enable/disable, allowed
+  removal/exact-version updates, application/restart/rollback outcomes. No automatic
+  host restart or dependency-build approval. Actual external-package updates,
+  restart recovery and dedicated OAuth/account adapters remain to be verified.
+- **10:** `/agents`, `/tasks`, `/jobs`, `/schedules` provide subagent/team-task
+  snapshots, child-session navigation, queued messages/interrupt for continuable
+  agents, bounded job output/stop, schedule create/edit/pause/delete with CAS,
+  history and explicit run-now. Team-task mutation needs a backend API.
+
+Actual isolated dsh checks cover inventories, file pages, schedule lifecycle,
+shell attach/detach/close, upload/multiline send and both plan decisions. Full chat
+regressions and Go race tests pass. New panels are F5 snapshots, not live feeds.
+Advanced agent operations, job output, schedule history/run and package update
+still need dedicated actual-backend scenarios. Stages 7–10 have a working
+baseline; their full completion criteria have not yet been satisfied.
 
 ## Goal and workflow
 
@@ -137,14 +166,15 @@ The check used an isolated temporary profile; credentials are not bundled.
    account screens remain a dedicated adapter task. The full stage stays partial
    until those sign-in methods are implemented and verified. Secrets stay out of
    transcripts/logs.
-6. **Plans, goals, presets — first increment in preview.34.** `/goal` opens a
+6. **Plans, goals, presets — preview.34–35.** `/goal` opens a
    card with objective, phase/revision, rounds/cap, block reason and separate
    continuation activation. F3 edits the multiline objective/cap; F5 saves through
    goals/edit with atomic identity/revision checks. Conflicts retain the draft;
    Ctrl+R shows the fresh snapshot, and Ctrl+B explicitly accepts its revision,
    preserving untouched foreign fields. Actual dsh verifies cancellation, absent
-   goals, three terminal sizes and reconnect. Next: plan inspection/review and
-   preset selection.
+   goals, three terminal sizes and reconnect. Preview.35 adds plan inspection/review through questions,
+   preset selection and separate session creation with a preset; both plan choices
+   are verified against actual dsh.
    Done: reattachment restores state matching dsh.
 7. **Workspace and input.** Add multiline input, files/attachments, file tree,
    document previews, and terminal pane in separate increments. Specify terminal
