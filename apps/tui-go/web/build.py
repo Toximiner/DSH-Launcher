@@ -47,6 +47,10 @@ for name in ('index.html', 'preview.js', 'snapshot.json', 'market-demo.json'):
     shutil.copy2(source / name, output / name)
 goldmark_dir = Path(run(args.go, 'list', '-m', '-f', '{{.Dir}}', 'github.com/yuin/goldmark'))
 licenses = [tea_dir.joinpath('LICENSE').read_text(), goldmark_dir.joinpath('LICENSE').read_text()]
+for module, license_file in (('github.com/alecthomas/chroma/v2', 'COPYING'),
+                             ('github.com/dlclark/regexp2', 'LICENSE')):
+    module_dir = Path(run(args.go, 'list', '-m', '-f', '{{.Dir}}', module))
+    licenses.append(module + '\n' + module_dir.joinpath(license_file).read_text())
 for package, version, files in [
     ('@xterm/xterm', '5.5.0', {'package/lib/xterm.js': 'xterm.js', 'package/css/xterm.css': 'xterm.css'}),
     ('@xterm/addon-fit', '0.10.0', {'package/lib/addon-fit.js': 'addon-fit.js'}),

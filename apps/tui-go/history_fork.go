@@ -29,8 +29,9 @@ func (m *model) selectHistoryMessage(seq int, reveal bool) {
 	if !found {
 		return
 	}
+	h.toolFocused = false
 	h.selectedSeq = seq
-	h.note = fmt.Sprintf("Событие #%d · Ctrl+B — ветка. Tab/Shift+Tab — выбор.", seq)
+	h.note = fmt.Sprintf("Событие #%d · Ctrl+Y — копия · Ctrl+K — код · Ctrl+B — ветка.", seq)
 	m.resizeHistory()
 	if reveal {
 		for _, row := range h.messageRows {

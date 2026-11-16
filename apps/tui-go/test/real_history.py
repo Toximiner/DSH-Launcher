@@ -1,5 +1,7 @@
 """Read multiple history pages from actual dsh using an isolated, local model."""
 import argparse
+import base64
+import re
 import http.cookiejar
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -19,6 +21,8 @@ from terminal import Terminal, wait_for
 parser = argparse.ArgumentParser()
 parser.add_argument('--binary', required=True)
 parser.add_argument('--dsh', required=True)
+parser.add_argument('--capture-syntax', help='Prefix for syntax-colored history terminal-cell captures')
+parser.add_argument('--capture-copy', help='Prefix for code-copy dialog terminal-cell captures')
 parser.add_argument('--capture-markdown', help='Prefix for actual formatted Markdown history captures')
 parser.add_argument('--capture-archive', help='Prefix for archive confirmation captures')
 parser.add_argument('--capture-history', help='Prefix for actual terminal-cell JSON captures')
@@ -29,7 +33,7 @@ parser.add_argument('--capture-search', help='Prefix for actual history search t
 args = parser.parse_args()
 calls = []
 release = threading.Event()
-markdown_reply = '# MARKDOWN CHECK\n\n**Bold text**, *italic text*, and `inline_code`.\n\n- first item\n- second item\n\n> quoted text\n\n```go\nfmt.Println("世界")\n```\n\n| Name | Result |\n| --- | ---: |\n| Кириллица | TABLE_32 |\n\n[Docs](https://example.test/docs)\n\nARCHIVE ANSWER 032'
+markdown_reply = '# MARKDOWN CHECK\n\n**Bold text**, *italic text*, and `inline_code`.\n\n- first item\n- second item\n\n> quoted text\n\n```go\nfmt.Println("世界")\n```\n\n```python\n\tprint("Код 🙂")\n\n```\n\n| Name | Result |\n| --- | ---: |\n| Кириллица | TABLE_32 |\n\n[Docs](https://example.test/docs)\n\nARCHIVE ANSWER 032'
 
 
 
@@ -77,6 +81,10 @@ def capture(app, path):
         wait_for(painted)
     except AssertionError:
         raise AssertionError(f'History capture did not finish painting:\n{app.text}') from None
+    capture_cells(app, path)
+
+
+def capture_cells(app, path):
     cells = []
     for y in range(app.screen.lines):
         for x in range(app.screen.columns):
@@ -99,8 +107,10 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-history-') as directory:
     (profile / 'package.json').write_text(json.dumps({
         'name': 'tui-history-isolated-test', 'private': True, 'dependencies': {},
         'dsh': {'profile': {'bundles': ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app']}}}))
+    (profile / 'history-probe.mjs').write_text(Path(__file__).with_name('history_probe.mjs').read_text())
     (profile / 'cordis.yml').write_text('[]\n')
     (profile / 'cordis.patch.yml').write_text(json.dumps([
+        {'insert': [{'id': 'tui-history-probe', 'name': str(profile / 'history-probe.mjs'), 'config': {'directory': str(root)}}]},
         {'id': 'llm-pi-ai', 'config': {'providers': {'history-fixture': {
             'apiKeyEnv': 'TUI_TEST_API_KEY', 'api': 'openai-completions',
             'baseURL': f'http://127.0.0.1:{model.server_port}/v1',
@@ -116,7 +126,8 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-history-') as directory:
     project = root / 'project'
     project.mkdir()
     env = {key: value for key, value in os.environ.items()
-           if key not in ('GH_TOKEN', 'GITHUB_TOKEN', 'CODESPACES_GITHUB_TOKEN', 'DSH_TUI_URL', 'NO_COLOR')}
+           if key not in ('GH_TOKEN', 'GITHUB_TOKEN', 'CODESPACES_GITHUB_TOKEN', 'DSH_TUI_URL', 'NO_COLOR',
+                          'DISPLAY', 'WAYLAND_DISPLAY', 'TMUX', 'SSH_CONNECTION', 'SSH_TTY')}
     env.update(DSH_HOME=str(root / 'dsh'), TUI_TEST_API_KEY='test-only-not-a-real-key',
                TERM='xterm-256color', COLORTERM='truecolor', XDG_CONFIG_HOME=str(root / 'config'))
     with socket.socket() as sock:
@@ -544,6 +555,40 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-history-') as directory:
             fork_app.send('**Bold text**\r')
             fork_app.wait('▶ Совпадение')
             assert '**Bold text**' not in '\n'.join(fork_app.screen.display[7:14]), 'Formatted history showed raw emphasis'
+            fork_app.send('\x1b[H')
+            def code_colors():
+                fork_app.pump()
+                for y, line in enumerate(fork_app.screen.display):
+                    if 'fmt.Println' in line:
+                        return {fork_app.screen.buffer[y][x].fg for x in range(fork_app.screen.columns)
+                                if fork_app.screen.buffer[y][x].data in ('世', '界')}
+                fork_app.send('\x1b[B')
+                return set()
+            wait_for(lambda: 'a5d6ff' in code_colors())
+            if args.capture_syntax:
+                capture_cells(fork_app, args.capture_syntax + f'-{columns}x{rows}.json')
+
+            def copied(key, expected):
+                offset = len(fork_app.raw)
+                fork_app.send(key)
+                def received():
+                    fork_app.pump()
+                    return re.search(rb'\x1b\]52;c;([A-Za-z0-9+/=]+)\x07', fork_app.raw[offset:])
+                payload = wait_for(received)
+                assert base64.b64decode(payload.group(1)).decode() == expected, 'Clipboard altered source bytes'
+                fork_app.wait('запрос OSC 52 отправлен')
+            copied('\x19', markdown_reply)
+            fork_app.send('\x0b')
+            fork_app.wait('Копирование блока кода')
+            fork_app.wait('блок 1/2')
+            copied('\r', 'fmt.Println("世界")\n')
+            fork_app.send('\x1b[B')
+            fork_app.wait('блок 2/2')
+            copied('\r', '\tprint("Код 🙂")\n\n')
+            if args.capture_copy:
+                capture_cells(fork_app, args.capture_copy + f'-{columns}x{rows}.json')
+            fork_app.send('\x1b')
+            wait_for(lambda: (fork_app.pump() or True) and 'Копирование блока кода' not in fork_app.text)
             fork_app.send('\x12')
             fork_app.wait('История сессии · исходник')
             fork_app.wait('**Bold text**')
@@ -560,7 +605,8 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-history-') as directory:
             fork_app.close(root / f'markdown-{columns}.ansi')
             fork_app = None
         assert markdown_source() == markdown_reply and len(calls) == 32, 'Formatting/search/toggling rewrote source or ran the model'
-        print('Actual dsh Markdown: code, Unicode table, visible link, source search, raw/formatted toggle, preserved draft, unchanged committed source and three sizes OK')
+        print('Actual dsh clipboard: exact message source and two code blocks, tabs, blank lines, Unicode, honest OSC 52 receipt, retained selection/draft and no host clipboard changes OK')
+        print('Actual dsh Markdown: syntax-colored code, Unicode table, visible link, source search, raw/formatted toggle, preserved draft, unchanged committed source and three sizes OK')
         empty = rpc('session/create', {'cwd': str(project), 'sessionId': 'session-' + uuid.uuid4().hex})['sessionId']
         before_empty_fork = session_ids()
         fork_app = Terminal(binary, ['--session', empty], {**env, 'DSH_TUI_URL': login[0]}, columns=80, rows=24)
@@ -577,6 +623,55 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-history-') as directory:
         fork_app = None
         print('Actual dsh fork: cancelled current/list actions, active source continues, completed-turn prefix, one child, isolated continuation, inherited model input and empty-source refusal OK')
         print('Actual dsh rename: normalized Unicode title, durable projection, session list, cancelled edit and reconnect OK')
+        all_records = rpc('session/events', {'address': {'kind': 'session', 'sessionId': session}, 'maxMessages': 1000})['records']
+        prompts = [record['event'] for record in all_records if record['event']['type'] == 'user/message'
+                   and record['event']['data'].get('source', {}).get('kind') == 'user']
+        # Both references are in the live 50-message window, outside the history 20-message tail.
+        old_start, old_end = prompts[12], prompts[14]
+        old_text = old_start['data']['content'][0]['text']
+        def rewrite(start, end, text):
+            result_path = root / 'history-rewrite-result.json'
+            result_path.unlink(missing_ok=True)
+            (root / 'history-rewrite.json').write_text(json.dumps({'sessionId': session,
+                'startSeq': start, 'endSeq': end, 'text': text}))
+            wait_for(result_path.exists)
+            result = json.loads(result_path.read_text())
+            assert 'error' not in result, result
+            return result['seq']
+        first_replacement = rewrite(old_start['seq'], old_start['seq'], 'REPLACEMENT FIRST UNIQUE')
+        # The start seq is numerically newer than the end, but precedes it on the surface.
+        second_replacement = rewrite(first_replacement, old_end['seq'], 'REPLACEMENT FINAL UNIQUE')
+        assert second_replacement > first_replacement > old_end['seq']
+        for columns, rows in [(120, 42), (100, 30), (80, 24)]:
+            fork_app = Terminal(binary, ['--session', session], {**env, 'DSH_TUI_URL': login[0]}, columns=columns, rows=rows)
+            fork_app.wait('ARCHIVE ANSWER 027', timeout=20)
+            fork_app.send('REPLACEMENT DRAFT')
+            fork_app.send('\x1b[23~')
+            fork_app.wait('PgUp/PgDn')
+            fork_app.send('\x06')
+            fork_app.wait('Поиск:')
+            fork_app.send(old_text + '\r')
+            fork_app.wait('Более ранних совпадений нет', timeout=20)
+            fork_app.send('\x06')
+            fork_app.wait('Поиск:')
+            fork_app.send('\x01\x0bREPLACEMENT FIRST UNIQUE\r')
+            fork_app.wait('Более ранних совпадений нет', timeout=20)
+            fork_app.send('\x06')
+            fork_app.wait('Поиск:')
+            fork_app.send('\x01\x0bREPLACEMENT FINAL UNIQUE\r')
+            fork_app.wait('▶ Совпадение')
+            fork_app.wait('REPLACEMENT FINAL UNIQUE')
+            fork_app.send('\x1b[D')
+            fork_app.wait('Страница 3')
+            assert old_text not in fork_app.text, 'Older page resurrected replaced source'
+            fork_app.send('\x1b[C')
+            fork_app.wait('REPLACEMENT FINAL UNIQUE')
+            fork_app.send('\x1b')
+            fork_app.wait('REPLACEMENT DRAFT')
+            fork_app.close(root / f'replacements-{columns}.ansi')
+            fork_app = None
+        assert len(calls) == 32, 'Snapshot replacement checks ran model work'
+        print('Actual dsh replacements: cross-page targets, replacement of a replacement, reversed numeric endpoints, no removed-text search hits, older/newer navigation and three sizes OK')
         app.send('\x04')
         app.exited()
         print('Actual dsh history: 27 turns, three pinned pages, older/newer navigation, preserved scroll/draft, live isolation, refresh and reconnect OK')

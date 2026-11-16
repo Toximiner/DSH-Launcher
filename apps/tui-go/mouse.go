@@ -31,6 +31,9 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if cmd, handled := m.queueMouse(msg); handled {
 		return cmd
 	}
+	if m.historyReader != nil && m.historyReader.codeDialog != nil {
+		return m.historyCodeMouse(msg)
+	}
 	if m.archiveDialog != nil || m.renameDialog != nil || m.forkDialog != nil {
 		return nil
 	}

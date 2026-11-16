@@ -1,4 +1,4 @@
-# Go TUI preview — 0.2.0-preview.26
+# Go TUI preview — 0.2.0-preview.30
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
@@ -303,9 +303,21 @@ prompt, changes the live agent mode, or starts a tool/output subscription.
 The client retains one rendered page and the last 128 return locations. Search
 also retains its most recent matching API page (bounded to 8 MiB). A page
 is limited to 100 displayed records, 4 MiB of displayed content, and 4096 events;
-the API response limit is 8 MiB. Oversized pages and unsupported surface replacements
-across a page boundary are reported explicitly while retaining the previous page.
-Missing tool calls are labeled; unfinished calls at the cut have an unknown result.
+the API response limit is 8 MiB. Oversized pages are reported explicitly while
+retaining the previous page.
+
+Preview.30 builds an immutable metadata index by reading the complete fixed log
+prefix when history opens or F5 refreshes. It retains surface positions and tool
+call context, rather than all message/result bodies. Limits are 100,000 events,
+64 MiB of cumulative event data, and the existing 20-second request deadline.
+Failure preserves the previous page/index; closing cancels the read. Page reads
+and searches reuse this index until refresh. Replacement endpoints are resolved
+in surface order, including numerically reversed sequence numbers and repeated
+replacements. Older raw-log pages filter out replaced messages and obsolete tool
+versions/descendants. Remaining surface messages within each page use surface
+order; page boundaries still follow raw log ranges, so a page can become empty.
+Arguments/names are restored for result cards whose call is outside the page.
+Unfinished calls at the cut have an unknown result.
 History does not yet persist navigation across client restarts.
 
 Preview.21 adds **`/rename`** for the connected session and **F3** on the Sessions
@@ -383,7 +395,11 @@ confirmation in TUI. Archiving remains reversible and retains saved history.
 Preview.26 formats **committed assistant messages** in live chat and history:
 headings, emphasis/strikethrough, nested lists, quotes, visible link destinations,
 fenced/indented code, inline code, and tables. Code keeps indentation and blank
-lines; tabs use four spaces. Code syntax highlighting is not implemented. Tables
+lines; tabs use four spaces. Preview.28 adds syntax coloring for declared fence
+languages through Chroma v2.23.1 (compatible with this module’s Go minimum).
+Language names and aliases are case-insensitive; unknown/unlabeled blocks remain
+plain, with no content or filename guessing. Colors follow terminal capabilities,
+including monochrome output. No code is executed. Tables
 use terminal cell widths for Unicode alignment; a table wider than its container
 becomes labeled records with all cell content retained. Images show their alt text
 and destination; HTML remains literal text. Rendering opens no links or files.
@@ -401,25 +417,73 @@ input over 256 KiB, nesting over 64 nodes deep, more than 20,000 AST nodes, over
 tables (over 32 columns or 2,048 cells), or output over 2 MiB falls
 back to plain text. Cached renders retain at most 128 entries / 8 MiB, including
 source bytes. ANSI/control sequences are removed from source and decoded entities;
-only renderer-generated text styling reaches the terminal. Clipboard copying,
-syntax highlighting, and collapsible history tool details remain planned.
+only renderer-generated text styling reaches the terminal. Syntax coloring accepts
+at most 16 KiB per block, 64 KiB per rendered message, and 8,192 tokens per block.
+A 150 ms message budget is checked between tokens, rather than interrupting an
+individual library match. Errors, panics, budget exhaustion, and any token text
+mismatch fall back to intact plain code. Colored output is capped at 512 KiB per
+block and uses the existing bounded message cache. The code-copy picker preview
+stays plain; copying and source mode contain no generated colors.
 
-Preview.20 adds **Ctrl+F / Search** inside history. Enter submits a literal,
-case-insensitive query (up to 256 characters). The reader searches user/assistant
-message text from newest to oldest, including older pages beyond the live chat's
-50-message window. Tool arguments/results, permission records, and hidden service
-context are outside this search. The matched message is marked and scrolled into
-view. F3 moves to an older match; matches within the same validated page are kept
-together so later replacements cannot resurrect removed text during navigation.
+Preview.29 starts history tool cards **collapsed**, showing an argument summary
+and up to three result rows. **F6 / Shift+F6** select the next/previous card in
+display order; **Enter** or a click toggles full arguments and the bounded stored
+result. Arrow keys and PgUp/PgDn scroll long details; Tab/Shift+Tab return to
+message selection. Each nested card expands independently, and collapsing a
+parent leaves its children visible. Tool selection clears the message target,
+so Ctrl+B/Ctrl+Y/Ctrl+K require selecting a conversation message again.
 
-A batch reads at most ten pages with a 20-second timeout. If more history remains,
-the reader offers F3 to continue; it only reports exhaustion after reaching the
-start. Esc cancels a running search, exits query editing, or closes history, in
-that order. Ctrl+F cancels any pending search before editing another query. Late
-results are ignored. Searches use the history window's fixed cut; F5 loads newer
-messages and resets the search continuation. Existing page-size and cross-page
-replacement limits apply; failures preserve the page instead of claiming no
-matches. Queries, results, and navigation are local to this history window.
+Expansion preferences are local to this reader and keyed by call ID/start event.
+At most 256 expanded cards are retained across pinned page/search navigation,
+evicting the oldest preference when full. F5 starts a fresh snapshot with
+collapsed cards; closing discards preferences. History folding invokes no RPC
+and changes no live tool selection, expansion, observer, agent state, or draft.
+In-progress calls at the pinned cut remain explicitly unresolved; viewing an
+old card does not start a live output subscription. Shift+F6 uses Bubble Tea’s
+F18 decoding in history and live chat.
+
+Preview.27 adds **Ctrl+Y** to copy the selected history message and **Ctrl+K**
+to choose a fenced or indented code block. Select a message with Tab/Shift+Tab,
+a click, or source search. In the block picker, use ↑/↓ or click to select, Enter
+to copy, and Esc to return. Whole messages use exact source including Markdown;
+code excludes fences and surrounding Markdown indentation. Tabs, Unicode, and
+blank lines are preserved, independently of displayed wrapping. Empty fragments
+and fragments over 64 KiB leave the clipboard unchanged. Code extraction accepts
+at most 256 KiB, 64 blocks, 20,000 AST nodes, and depth 64. No automatic retries.
+
+On local Linux, available wl-copy, xclip, or xsel helpers receive text on stdin,
+without a shell. A successful helper exit is reported as a system clipboard copy.
+Without a working helper, and over SSH, the client sends an OSC 52 request to the
+terminal: its receipt explicitly says storage is unconfirmed. Terminal clipboard
+permissions apply; tmux uses passthrough (allow-passthrough must be enabled), and
+screen uses its transport wrapper. Clipboard contents are never read. Closing
+history cancels pending helper work; late results cannot overwrite a newer view.
+The browser demo uses ordinary browser text selection/copying.
+
+Preview.20 adds **Ctrl+F / Search** inside history. Preview.30 extends the default
+scope to conversation text and tool names, arguments, results, and error codes.
+In the query editor, **Ctrl+T** cycles **all / messages / tools**; Enter commits
+both the literal, case-insensitive query (up to 256 characters) and scope. Esc
+leaves the previous committed query/scope intact. Permission records and hidden
+service context remain excluded. Search uses the bounded text retained by TUI.
+
+The reader scans raw-log pages from newest to oldest through the fixed cut,
+including pages beyond the live chat’s 50-message window, filtering each against
+the same snapshot index. A tool matches once at its retained result/start event,
+including arguments from an earlier page; obsolete call/result versions and
+replaced text cannot return as matches. A tool match selects and expands its card
+and scrolls toward the matching displayed text; it clears the message boundary,
+so Ctrl+B/Ctrl+Y/Ctrl+K require selecting a conversation message again. Message
+matches retain source identities. F3 advances through matches in the validated
+page before reading older pages.
+
+A search batch reads at most ten pages with a 20-second timeout. If more history
+remains, F3 continues; exhaustion is reported only after reaching the start. Esc
+cancels a running search, exits query editing, or closes history, in that order.
+Ctrl+F cancels any pending search before editing another query. Late results are
+ignored. F5 loads a fresh snapshot/index and resets search continuation. Errors
+preserve the visible page instead of claiming no matches. Queries, scopes,
+results, and navigation are local to this history window.
 
 Actual-dsh check with a local controlled model, no paid calls:
 
@@ -536,8 +600,10 @@ preview.17 and live command stdout/stderr in preview.18. Preview.19 adds read-on
 paginated history; preview.20 adds message search and preview.21 adds renaming.
 Preview.22 branches at the latest completed turn; preview.23 branches at selected
 messages. Preview.24 adds archive/restore, preview.25 raises the minimum to 80×24,
-and preview.26 formats Markdown. Next: copying, syntax highlighting, and collapsible
-details. Permission dialogs are implemented in preview.11 and tested through the
+preview.26 formats Markdown, preview.27 adds message/code copying, and preview.28
+adds syntax coloring. Preview.29 adds collapsible history tool details; preview.30
+adds tool search and cross-page replacement support. Next: models and editable
+dsh settings. Permission dialogs are implemented in preview.11 and tested through the
 actual dsh approval service. Settings editing, workspace features,
 additional plugin support, and launcher lifecycle remain planned. No
 full-parity claim is made by this preview. The legacy JS client and its packaging

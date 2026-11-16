@@ -2,7 +2,7 @@
 
 [Русский](README.md) | **English**
 
-Baseline: November 16, 2026, Go client `0.2.0-preview.26`.
+Baseline: November 16, 2026, Go client `0.2.0-preview.30`.
 Terminal minimum: 80×24; recommended: 100×30.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.
@@ -48,8 +48,8 @@ The check used an isolated temporary profile; credentials are not bundled.
 | Application menu | Top menu and modal client settings | Basic milestone complete; further polish at milestone 14 | 1 ✓ |
 | Chat | Submission, streaming, cancellation, reconnection implemented | Verified with actual Qwen3.8-27B | 2 ✓ |
 | Tools and questions | Tool cards, permissions, questions, queue submission/view/removal/editing/steering, nested PTC calls, command stdout/stderr | Basic milestone complete; arbitrary plugin streams need backend APIs | 3 ✓ |
-| Sessions and history | Create/list/attach; paginated history and message-text search | Rename, fork, supported archive operations; cross-page replacement support | 4, partial |
-| Message rendering | Plain local records | Markdown, code, tables, folding, copying | 4 |
+| Sessions and history | Create/list/attach, rename, fork, archive; history, message/tool search, cross-page replacements | Current increment complete; permanent deletion needs dsh API support | 4 ✓ |
+| Message rendering | Markdown, syntax coloring, tables, folding, copying | Current increment complete | 4 ✓ |
 | Models and accounts | No configuration UI | Providers, authorization, model and parameter selection | 5 |
 | dsh settings | Read-only snapshots | Forms, validation, persistence, revision conflicts | 5 |
 | Agent modes | Ordinary/plan/goal and basic commands | Cards, plan review, goal editing, presets | 6 |
@@ -85,11 +85,11 @@ The check used an isolated temporary profile; credentials are not bundled.
    history with a fixed cut, older/newer pages, saved scroll positions, and F5
    for newer messages; live chat and its draft remain separate. Actual dsh checks
    cover 27 turns, an active answer, reconnect, and narrow terminals. Page limits:
-   100 displayed records, 4 MiB, 4096 events; cross-page replacements currently
-   report an explicit error. Preview.20 adds case-insensitive literal message-text
+   100 displayed records, 4 MiB, 4096 events. Preview.30 supports cross-page
+   replacements through a fixed-snapshot index. Preview.20 adds case-insensitive literal message-text
    search via Ctrl+F, jumps to matches, and F3 for an older result. Scans share the
    fixed cut in batches of up to ten pages; Esc cancels and F5 refreshes the cut.
-   Tool arguments/results are not searched. Preview.21 adds `/rename` for the current
+   Preview.30 adds tool search. Preview.21 adds `/rename` for the current
    session and F3 for a selected list entry; confirmed titles appear in the list
    and chat header. Preview.22 adds `/fork` and Ctrl+B in the list, branching at
    the latest completed turn. The source keeps running; the child inherits history
@@ -103,7 +103,20 @@ The check used an isolated temporary profile; credentials are not bundled.
    Preview.26 adds Markdown for committed replies and history: code, lists, quotes,
    links, and tables; Ctrl+R toggles source. Wide tables retain cells as labeled
    records. Search and branching preserve authoritative source event identities.
-   Next: copying, syntax highlighting, and collapsible details; deletion depends on dsh API support.
+   Preview.27 adds Ctrl+Y for message source and Ctrl+K for a code-block picker:
+   Linux clipboard helpers or OSC 52 with an explicit receipt status.
+   Preview.28 adds fence-language syntax coloring with bounded work and plain
+   fallback, preserving source and clipboard contents.
+   Preview.29 adds collapsible history tool cards: F6/Shift+F6 select and
+   Enter/click toggles details, with bounded preferences across snapshot pages
+   independent of live chat.
+   Preview.30 adds tool-name/argument/result search and all / messages / tools
+   scopes via Ctrl+T. Tool matches expand without selecting a message fork boundary.
+   A snapshot index folds cross-page and repeated replacements in surface order,
+   keeping replaced text and nested cards out of older pages and search results.
+   Index bounds: 100,000 events / 64 MiB read. The current stage-4 increment is
+   complete; permanent deletion remains separate and needs dsh API support.
+   Next: stage 5 — models and editable dsh settings.
    Done: reattachment restores actual history without duplicates.
 5. **Models and dsh settings.** Provider authorization, model selection,
    schema-driven forms, revision-checked writes; secrets stay out of transcripts

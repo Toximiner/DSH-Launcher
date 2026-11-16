@@ -66,7 +66,24 @@ active-session refusal, cancellation, durable membership across reconnect,
 active/archive filters, a blocked composer, restored continuation, and changes
 from another client. Markdown checks cover code and Unicode tables, source search,
 raw/formatted toggling, preserved drafts, and unchanged committed text at three
-terminal sizes. Go WebSocket checks cover fresh archive baselines, increments,
+terminal sizes. Clipboard checks decode PTY-only OSC 52 requests for exact source,
+code, tabs, Unicode, and blank lines; graphical clipboard helpers are disabled
+in this integration test so the host clipboard is untouched. Go tests cover
+helper stdin, errors, size limits, cancelled/stale results, and picker geometry.
+Syntax checks cover declared language aliases, exact code bytes and line wrapping,
+Unicode, monochrome terminals, lexer failures and budgets. The dsh PTY scenario
+requires actual string-token colors while copying the unchanged committed source.
+History tool checks exercise collapsed/expanded filesystem results at three sizes,
+Shift+F6, nested PTC card order, independent expansion under a collapsed parent,
+and no additional model requests. Go tests additionally cover mouse hit regions,
+page preference bounds, refresh reset, hidden/stale inputs and message boundaries.
+Preview.30 checks include all/messages/tools search scopes, argument/result matches
+scrolled into view, cross-page tool context and obsolete nested-card filtering.
+The isolated history probe invokes real Session.append to test cross-page
+replacement, replacement-of-replacement and reversed numeric endpoint order; no
+user profiles or paid models are involved. Go checks also cover invalid transitions,
+cancellation, and no resurrection during older-page navigation/search.
+Go WebSocket checks cover fresh archive baselines, increments,
 disconnection, replacement on reconnect, and cancellation.
 It uses a local controlled provider and no paid calls.
 Run `python3 apps/tui-go/test/prepare_ptc.py build/ptc-bootstrap` first, then pass

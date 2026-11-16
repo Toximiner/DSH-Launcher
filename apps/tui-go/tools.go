@@ -168,7 +168,7 @@ func (m *model) toolKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 	key := msg.String()
 	ids := m.toolIDs()
-	if key == "f6" || key == "shift+f6" || m.toolFocused && (key == "up" || key == "down") {
+	if key == "f6" || key == "shift+f6" || key == "f18" || m.toolFocused && (key == "up" || key == "down") {
 		if len(ids) == 0 {
 			return nil, true
 		}
@@ -180,7 +180,7 @@ func (m *model) toolKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			}
 		}
 		delta := 1
-		if key == "shift+f6" || key == "up" {
+		if key == "shift+f6" || key == "f18" || key == "up" {
 			delta = -1
 			if index < 0 {
 				index = 0

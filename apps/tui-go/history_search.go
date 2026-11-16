@@ -13,8 +13,25 @@ import (
 )
 
 const historySearchPages = 10
+const (
+	historySearchAll = iota
+	historySearchMessages
+	historySearchTools
+)
+
+func historyScopeLabel(scope int) string {
+	switch scope {
+	case historySearchMessages:
+		return "сообщения"
+	case historySearchTools:
+		return "инструменты"
+	default:
+		return "всё"
+	}
+}
 
 type historySearch struct {
+	scope, editScope           int
 	editor                     textinput.Model
 	editing, running, finished bool
 	query                      string
@@ -25,6 +42,8 @@ type historySearch struct {
 	before                     int
 }
 type historySearchResult struct {
+	snapshot                               *historySnapshot
+	scope                                  int
 	reader                                 *historyReader
 	serial                                 int
 	query                                  string
@@ -49,7 +68,7 @@ func (m *model) editHistorySearch() tea.Cmd {
 	if h.search == nil {
 		editor := textinput.New()
 		editor.Prompt = "Поиск: "
-		editor.Placeholder = "Текст сообщения…"
+		editor.Placeholder = "Текст сообщения или инструмента…"
 		editor.CharLimit = 256
 		h.search = &historySearch{editor: editor, hitSeq: -1, anchor: -1}
 	}
@@ -57,7 +76,8 @@ func (m *model) editHistorySearch() tea.Cmd {
 	h.search.editor.CursorEnd()
 	h.search.editor.Width = max(1, h.viewport.Width-7)
 	h.search.editing = true
-	h.note = "Поиск текста сообщений без учёта регистра. Enter — найти; Esc — назад."
+	h.search.editScope = h.search.scope
+	h.note = "Область: " + historyScopeLabel(h.search.editScope) + " · Ctrl+T — сменить · Enter — найти · Esc — назад."
 	return h.search.editor.Focus()
 }
 
@@ -86,6 +106,7 @@ func (m *model) startHistorySearch(fresh bool) tea.Cmd {
 			return nil
 		}
 		s.query, s.nextBefore, s.hitSeq, s.finished = query, h.cut+1, -1, false
+		s.scope = s.editScope
 		s.remaining, s.page = nil, historyPage{}
 		s.editing = false
 		s.editor.Blur()
@@ -108,20 +129,24 @@ func (m *model) startHistorySearch(fresh bool) tea.Cmd {
 	h.busy, h.note = true, "Поиск по истории… Esc — отменить."
 	h.serial++
 	serial, cut, before, query, login, id := h.serial, h.cut, s.nextBefore, s.query, m.settingsLogin, h.sessionID
+	snapshot, scope := h.snapshot, s.scope
 	return func() tea.Msg {
 		defer cancel()
-		result := historySearchResult{reader: h, serial: serial, query: query, cut: cut, before: before, nextBefore: before, hitSeq: -1}
+		result := historySearchResult{reader: h, serial: serial, query: query, cut: cut, before: before, nextBefore: before, hitSeq: -1, snapshot: snapshot, scope: scope}
 		api, err := openAPI(ctx, login)
 		if err == nil {
 			defer api.close()
-			result = scanHistory(ctx, result, id, func(ctx context.Context, before int) (historyPage, error) {
+			read := func(ctx context.Context, before int) (historyPage, error) {
 				var page historyPage
-				err := api.rpc(ctx, "session/events", map[string]any{"request": map[string]any{
-					"address":    map[string]any{"kind": "session", "sessionId": id},
-					"throughSeq": cut, "beforeSeq": before, "maxMessages": historyPageMessages,
-				}}, &page)
+				err := api.rpc(ctx, "session/events", map[string]any{"request": map[string]any{"address": map[string]any{"kind": "session", "sessionId": id}, "throughSeq": cut, "beforeSeq": before, "maxMessages": historyPageMessages}}, &page)
 				return page, err
-			})
+			}
+			if result.snapshot == nil {
+				result.snapshot, _, result.err = buildHistorySnapshot(ctx, cut, read)
+			}
+			if result.err == nil {
+				result = scanHistory(ctx, result, id, read)
+			}
 		} else {
 			result.err = errors.New("Поиск недоступен. Проверьте подключение и нажмите F3.")
 		}
@@ -143,7 +168,7 @@ func scanHistory(ctx context.Context, result historySearchResult, id string, rea
 			result.err = errors.New("Не удалось прочитать историю для поиска. F3 — повторить.")
 			return result
 		}
-		projection, first, err := projectHistory(page, id, result.cut, before)
+		projection, first, err := projectIndexedHistory(page, id, result.cut, before, result.snapshot)
 		if err != nil {
 			result.err = err
 			return result
@@ -151,9 +176,7 @@ func scanHistory(ctx context.Context, result historySearchResult, id string, rea
 		result.pages++
 		var hits []int
 		for _, message := range projection.messages {
-			// Tool arguments/results, permission records and hidden service context
-			// are not conversation text and are intentionally outside this search.
-			if message.tool == nil && message.approvalID == "" && message.text != "" && strings.Contains(strings.ToLower(message.text), query) {
+			if historyMatches(message, query, result.scope) {
 				hits = append(hits, message.seq)
 			}
 		}
@@ -191,6 +214,9 @@ func (m *model) handleHistorySearch(result historySearchResult) {
 		return
 	}
 	s := h.search
+	if result.snapshot != nil {
+		h.snapshot = result.snapshot
+	}
 	s.nextBefore, s.finished = result.nextBefore, result.finished
 	if result.hitSeq < 0 {
 		if result.finished {
@@ -211,16 +237,34 @@ func (m *model) handleHistorySearch(result historySearchResult) {
 func (m *model) showHistorySearchHit(page historyPage, before, hit int) {
 	h := m.historyReader
 	s := h.search
-	m.handleHistoryResult(historyResult{reader: h, serial: h.serial, direction: "search", cut: h.cut, before: before, page: page})
+	if _, _, err := projectIndexedHistory(page, h.sessionID, h.cut, before, h.snapshot); err != nil {
+		h.note = err.Error()
+		return
+	}
+	m.handleHistoryResult(historyResult{reader: h, serial: h.serial, direction: "search", cut: h.cut, before: before, page: page, snapshot: h.snapshot})
+	if h.projection == nil || h.before != before {
+		return
+	}
 	s.hitSeq = hit
 	h.selectedSeq = -1
+	h.toolFocused = false
 	for _, message := range h.projection.messages {
+		if message.seq == hit && message.tool != nil {
+			h.toolFocused = true
+			h.projection.selectedTool = message.tool.ID
+			h.projection.expandedTools[message.tool.ID] = true
+			h.rememberHistoryTool(historyToolKey{message.tool.ID, message.tool.StartSeq}, true)
+			break
+		}
 		if message.seq == hit && historyForkable(message) {
 			h.selectedSeq = hit
 			break
 		}
 	}
-	h.note = "Совпадение найдено. Ctrl+B — ветка; F3 — раньше; Ctrl+F — новый запрос."
+	h.note = "Совпадение найдено. Ctrl+Y — копия · Ctrl+K — код · F3 — раньше."
+	if h.toolFocused {
+		h.note = "Совпадение в инструменте · Enter — детали · F3 — раньше · Tab — сообщение."
+	}
 	m.resizeHistory()
 	if s.anchor >= 0 {
 		h.viewport.SetYOffset(s.anchor)
@@ -253,6 +297,10 @@ func (m *model) historySearchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if s.editing {
 		if control {
 			switch msg.String() {
+			case "ctrl+t":
+				s.editScope = (s.editScope + 1) % 3
+				h.note = "Область: " + historyScopeLabel(s.editScope) + " · Ctrl+T — сменить · Enter — найти."
+				return nil, true
 			case "esc":
 				s.editing = false
 				s.editor.Blur()
@@ -273,4 +321,19 @@ func (m *model) historySearchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.startHistorySearch(false), true
 	}
 	return nil, false
+}
+
+func historyMatches(message chatMessage, query string, scope int) bool {
+	if message.tool != nil {
+		if scope == historySearchMessages {
+			return false
+		}
+		for _, value := range []string{message.tool.Name, message.tool.Arguments, message.tool.Result, message.tool.ErrorCode} {
+			if strings.Contains(strings.ToLower(value), query) {
+				return true
+			}
+		}
+		return false
+	}
+	return scope != historySearchTools && message.approvalID == "" && message.text != "" && strings.Contains(strings.ToLower(message.text), query)
 }

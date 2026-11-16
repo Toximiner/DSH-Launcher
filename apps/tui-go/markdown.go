@@ -58,6 +58,7 @@ func (m *model) messageText(message chatMessage, width int, raw bool) string {
 type terminalMarkdown struct {
 	source []byte
 	failed bool
+	syntax *syntaxBudget
 }
 
 func renderMarkdown(source string, width int) string {
@@ -176,6 +177,10 @@ func (r *terminalMarkdown) code(node ast.Node, language string, width int) strin
 	}
 	content := strings.TrimSuffix(string(node.Lines().Value(r.source)), "\n")
 	content = strings.ReplaceAll(content, "\t", "    ")
+	if r.syntax == nil {
+		r.syntax = newSyntaxBudget()
+	}
+	content = highlightCode(content, language, r.syntax)
 	return muted.Render(ansi.Truncate("┌─ "+label, width, "…")) + "\n" + prefixMarkdown(ansi.Hardwrap(content, max(1, width-2), true), "│ ") + "\n" + muted.Render(strings.Repeat("─", min(width, 16)))
 }
 func (r *terminalMarkdown) block(node ast.Node, width, depth int) string {

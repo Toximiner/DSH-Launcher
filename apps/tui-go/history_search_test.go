@@ -107,7 +107,7 @@ func TestHistorySearchRejectsBadPagesAndIgnoresToolText(t *testing.T) {
 	p.Records[1].Event.Type = "tool/result"
 	data, _ := json.Marshal(toolResult("c", "needle", false))
 	p.Records[1].Event.Data = data
-	result = scanHistory(context.Background(), historySearchResult{cut: 2, nextBefore: 3, hitSeq: -1, query: "needle"}, "s", func(context.Context, int) (historyPage, error) { return p, nil })
+	result = scanHistory(context.Background(), historySearchResult{cut: 2, nextBefore: 3, hitSeq: -1, query: "needle", scope: historySearchMessages}, "s", func(context.Context, int) (historyPage, error) { return p, nil })
 	if result.err != nil || !result.finished || result.hitSeq != -1 {
 		t.Fatal("message search included tool arguments or results")
 	}
@@ -197,10 +197,10 @@ func TestHistorySearchTransportOnlyReadsPinnedHistory(t *testing.T) {
 			t.Error("invalid search RPC")
 		}
 		q := rpc.Payload.Args.Request
-		if q.Address.ID != "s" || q.Cut != 59 || q.Before != 60 {
+		if q.Address.ID != "s" || q.Cut != 59 || q.Before < 20 || q.Before > 60 || q.Before%20 != 0 {
 			t.Error("search lost its fixed session/cut")
 		}
-		json.NewEncoder(w).Encode(map[string]any{"type": "server-response", "rpcId": rpc.ID, "result": map[string]any{"ok": true, "value": historyFixture(40, 59, 59)}})
+		json.NewEncoder(w).Encode(map[string]any{"type": "server-response", "rpcId": rpc.ID, "result": map[string]any{"ok": true, "value": historyFixture(max(0, q.Before-20), q.Before-1, 59)}})
 	}))
 	defer server.Close()
 	m := chatModel(t)

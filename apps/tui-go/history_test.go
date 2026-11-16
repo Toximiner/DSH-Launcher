@@ -179,10 +179,10 @@ func TestHistoryTransportUsesReadOnlyPinnedPageRequest(t *testing.T) {
 			t.Error("invalid history RPC")
 		}
 		q := rpc.Payload.Args.Request
-		if q.Address.ID != "s" || q.Cut != 59 || q.Before != 40 || q.Max != historyPageMessages {
+		if q.Address.ID != "s" || q.Cut != 59 || q.Before < 20 || q.Before > 60 || q.Before%20 != 0 || q.Max != historyPageMessages {
 			t.Error("history lost session identity or pinned page coordinates")
 		}
-		json.NewEncoder(w).Encode(map[string]any{"type": "server-response", "rpcId": rpc.ID, "result": map[string]any{"ok": true, "value": historyFixture(20, 39, 59)}})
+		json.NewEncoder(w).Encode(map[string]any{"type": "server-response", "rpcId": rpc.ID, "result": map[string]any{"ok": true, "value": historyFixture(max(0, q.Before-20), q.Before-1, 59)}})
 	}))
 	defer server.Close()
 	m := chatModel(t)
