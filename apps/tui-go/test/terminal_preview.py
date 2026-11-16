@@ -113,6 +113,7 @@ class TerminalPreview(unittest.TestCase):
         self.app.wait('> unsent draft')
         self.app.send('\x1b[A')
         self.app.wait('> unsent draft')
+        wait_for(lambda: (self.app.pump(), b'\x1b[?1002l' in self.app.raw)[1])
         self.assertIn(b'\x1b[?1002l', self.app.raw)
         self.app.send('\x04')
         self.app.exited()
@@ -123,6 +124,9 @@ class TerminalPreview(unittest.TestCase):
         self.app.send('\x1bOS\r')
         self.app.wait('Мышь в интерфейсе')
         wait_for(lambda: saved(True, False))
+        # Persisting the preference and emitting the terminal command are
+        # separate events; the file write alone does not acknowledge mouse mode.
+        wait_for(lambda: (self.app.pump(), b'\x1b[?1002h' in self.app.raw)[1])
         self.assertIn(b'\x1b[?1002h', self.app.raw)
         self.app.send('\x1b[B\r')
         wait_for(lambda: saved(True, True))
