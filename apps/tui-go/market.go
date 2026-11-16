@@ -232,9 +232,6 @@ func (m *model) loadMarket() tea.Cmd {
 	if m.marketBusy {
 		return nil
 	}
-	if m.browserPreview {
-		return nil
-	}
 	if m.settingsLogin == "" {
 		m.marketError = "Укажите URL входа dsh; для предустановки маркета используйте --start."
 		m.rebuild()
@@ -306,12 +303,6 @@ func (m *model) confirmMarket(action string) {
 }
 func (m *model) executeMarket() tea.Cmd {
 	if m.marketConfirm == nil || m.marketBusy {
-		return nil
-	}
-	if m.browserPreview {
-		m.marketConfirm = nil
-		m.marketError = "Демо: операции с пакетами доступны в Linux-клиенте."
-		m.rebuild()
 		return nil
 	}
 	intent := *m.marketConfirm
@@ -437,9 +428,6 @@ func (m *model) marketView() string {
 	headingText := "Маркет · " + tab
 	if m.market != nil {
 		headingText += " · " + m.market.Profile
-	}
-	if m.browserPreview {
-		headingText += " · ДЕМО"
 	}
 	hit("tab", 0, 0, w)
 	add(headingText)

@@ -41,8 +41,12 @@ class Terminal:
         self.stream = pyte.Stream(self.screen)
         self.decoder = codecs.getincrementaldecoder('utf8')(errors='replace')
         self.raw = bytearray()
+        # This child is an interactive terminal, even when its driver runs in CI.
+        # termenv treats CI=true as redirected output and disables terminal colors.
+        terminal_env = dict(env)
+        terminal_env.pop('CI', None)
         self.proc = subprocess.Popen([executable, *args], stdin=self.slave, stdout=self.slave,
-                                     stderr=self.slave, env=env, start_new_session=True)
+                                     stderr=self.slave, env=terminal_env, start_new_session=True)
 
     def pump(self):
         if select.select([self.master], [], [], 0.03)[0]:
@@ -77,7 +81,10 @@ class Terminal:
     def exited(self, code=0, timeout=10):
         def finished():
             self.pump()
-            return self.proc.poll() is not None
+            status = self.proc.poll()
+            # A reaped child can still have unread terminal frames in the PTY.
+            # Wait for the final restore frame, not just the process exit.
+            return status is not None and (status != code or b'\x1b[?1049l' in self.raw)
         wait_for(finished, timeout)
         self.pump()
         assert self.proc.returncode == code, self.text

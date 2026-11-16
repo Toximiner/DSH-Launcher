@@ -22,7 +22,7 @@ module.exports = [
     languageOptions: { sourceType: 'module', globals: { ...globals.node } },
   },
   {
-    files: ['apps/tui-go/web/preview.js', 'tools/live/terminal.js'],
+    files: ['tools/live/terminal.js'],
     languageOptions: {
       sourceType: 'script',
       globals: { ...globals.browser, Terminal: 'readonly', FitAddon: 'readonly', Go: 'readonly', dshTui: 'readonly' },

@@ -111,35 +111,9 @@ jobs:
             --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
             --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh" "${extra[@]}"
 
-  browser-preview:
-    name: Build browser preview
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
-        with:
-          go-version: '1.27.3'
-          cache-dependency-path: apps/tui-go/go.sum
-      - name: Build static browser preview
-        run: python3 apps/tui-go/web/build.py
-      - uses: actions/upload-artifact@v7
-        with:
-          name: dsh-launcher-tui-browser-preview
-          path: |
-            build/tui-go-web/index.html
-            build/tui-go-web/*.js
-            build/tui-go-web/*.css
-            build/tui-go-web/tui.wasm.gz
-            build/tui-go-web/snapshot.json
-            build/tui-go-web/market-demo.json
-            build/tui-go-web/LICENSES.txt
-            build/tui-go-web/SHA256SUMS
-          if-no-files-found: error
-
   # Keep one stable required check and gate publication on every matrix entry.
   terminal-preview:
-    needs: [unit, native-build, terminal-pty, integration, browser-preview]
+    needs: [unit, native-build, terminal-pty, integration]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 1

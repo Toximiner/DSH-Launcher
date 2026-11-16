@@ -151,7 +151,7 @@ With a dsh session attached, ordinary text is sent to dsh and assistant text is
 streamed over its authenticated WebSocket API. F8 or `/stop` requests cancellation
 of the current turn. User messages are reconciled with authoritative history;
 service context is not displayed as user-authored text. Without a backend, input
-remains a clearly labeled local draft. The static WASM adapter remains offline.
+remains a clearly labeled local draft.
 
 Tool calls and results appear as correlated cards: running, done, error, stopped,
 or missing result. Folded output previews three wrapped lines; F6 / Shift+F6
@@ -253,7 +253,7 @@ history clears recall entries without erasing the current draft or chat records.
 Chat messages are not stored in this preferences file. `--no-mouse` overrides the
 saved preference for this run; use F4 to restore mouse reporting otherwise.
 A failed write leaves the old setting active. Electron graphics/window controls
-are excluded. The local WASM adapter applies settings for its current session.
+are excluded.
 
 `/help` lists commands, `/clear` clears the local view without deleting backend
 history, and `/exit` or Ctrl+D exits. Attaching the Go client needs no local Node;
@@ -272,7 +272,7 @@ The maintained terminal libraries are Bubble Tea, Bubbles (`textinput` and
 `viewport`), and Lip Gloss. The build produces a separate executable named
 `dsh-launcher-tui-go`, so it can be tried alongside the existing client.
 
-[Static browser preview build and limitations](web/README.md).
+The static browser/WASM preview has been removed. Use the native Linux binary.
 
 ## Connect and edit dsh settings
 

@@ -273,7 +273,7 @@ func (m *model) dialogBox() (area, string) {
 		lines = append(lines, "", muted.Render("F4 / Alt+T — открыть · Esc — закрыть"), muted.Render("↑/↓ — выбор · Enter/Пробел — изменить"), "", ansi.Truncate(m.preferencesNote, inner, "…"), "", selectedRow("[ Закрыть ]", m.chrome.selection == 2, inner))
 	case "help":
 		chatHint := "Чат локальный. /help — команды."
-		if m.settingsLogin != "" && !m.browserPreview {
+		if m.settingsLogin != "" {
 			chatHint = "Enter — отправить · F8 — остановить"
 		}
 		lines = []string{heading.Render("Горячие клавиши"), "", "F10 / Alt+F/V/H — верхнее меню", "F4 / Alt+T — настройки TUI", "Tab — разделы · Esc — чат", "Alt+C/S/D/L/M — разделы", "F2 / Alt+1/2/3 — режим агента", "↑/↓ — история · PgUp/PgDn — прокрутка", "Ctrl+D / Ctrl+C — выход", "", chatHint, "", "[ Закрыть · Enter / Esc ]"}

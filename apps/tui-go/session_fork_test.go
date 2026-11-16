@@ -119,7 +119,7 @@ func TestForkUncertainResultCannotRepeatMutation(t *testing.T) {
 	}
 }
 
-func TestForkShortcutRespectsOverlaysAndPreview(t *testing.T) {
+func TestForkShortcutRespectsOverlaysAndSessionSwitch(t *testing.T) {
 	m := newModel()
 	m.settingsLogin = "http://unused"
 	m.page = sessionsPage
@@ -131,12 +131,6 @@ func TestForkShortcutRespectsOverlaysAndPreview(t *testing.T) {
 		}
 	}
 	m.chrome.menuOpen = false
-	m.browserPreview = true
-	m.openSessionFork(false)
-	if m.forkDialog != nil {
-		t.Fatal("browser preview initiated fork")
-	}
-	m.browserPreview = false
 	m.sessionBusy = true
 	m.sessionAction = "connect"
 	m.openSessionFork(false)

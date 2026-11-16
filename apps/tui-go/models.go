@@ -110,7 +110,7 @@ func readModelDirectory(ctx context.Context, api *dshAPI, id string) (*modelCata
 }
 
 func (m *model) openModels() tea.Cmd {
-	if m.browserPreview || m.session == nil || m.chat == nil || !m.chat.ready || m.chatSessionChanging() {
+	if m.session == nil || m.chat == nil || !m.chat.ready || m.chatSessionChanging() {
 		m.append("Для выбора модели подключитесь к сессии dsh.")
 		return nil
 	}

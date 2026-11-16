@@ -80,7 +80,6 @@ type model struct {
 	settings            *settingsSnapshot
 	settingsIndex       int
 	settingsUpdated     time.Time
-	browserPreview      bool
 	session             *sessionView
 	sessionItems        []sessionItem
 	sessionBusy         bool

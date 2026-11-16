@@ -26,7 +26,7 @@ type sessionForkResult struct {
 }
 
 func (m *model) openSessionFork(current bool) tea.Cmd {
-	if m.browserPreview || m.settingsLogin == "" {
+	if m.settingsLogin == "" {
 		m.append("Ветвление доступно при подключении к dsh.")
 		return nil
 	}

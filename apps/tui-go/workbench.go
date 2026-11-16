@@ -74,7 +74,7 @@ func projectionValues(ctx context.Context, api *dshAPI, id string) (map[string]a
 	return p.Values, nil
 }
 func (m *model) openWorkbench(kind string) tea.Cmd {
-	if m.browserPreview || m.chat == nil || m.session == nil || !m.chat.ready || m.chatSessionChanging() {
+	if m.chat == nil || m.session == nil || !m.chat.ready || m.chatSessionChanging() {
 		m.append("Подключите сессию dsh.")
 		return nil
 	}

@@ -66,7 +66,7 @@ func parseArchiveFrame(raw json.RawMessage, baseline bool) (map[string]bool, boo
 }
 
 func (m *model) ensureArchive() tea.Cmd {
-	if m.archive != nil || m.settingsLogin == "" || m.browserPreview {
+	if m.archive != nil || m.settingsLogin == "" {
 		return nil
 	}
 	return m.restartArchive(nil)

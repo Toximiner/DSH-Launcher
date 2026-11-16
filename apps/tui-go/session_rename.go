@@ -24,7 +24,7 @@ type sessionRenameResult struct {
 }
 
 func (m *model) openSessionRename(current bool) tea.Cmd {
-	if m.browserPreview || m.settingsLogin == "" {
+	if m.settingsLogin == "" {
 		m.append("Переименование доступно при подключении к dsh.")
 		return nil
 	}

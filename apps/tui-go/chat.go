@@ -143,7 +143,7 @@ func newRequestID() (string, error) {
 }
 
 func (m *model) startChat(id string) tea.Cmd {
-	if m.browserPreview || (m.chat != nil && m.chat.id == id) {
+	if m.chat != nil && m.chat.id == id {
 		return nil
 	}
 	m.stopChat()
@@ -206,7 +206,7 @@ func (m *model) submitContent(text string, attachments []promptAttachment) tea.C
 		m.append("Сессия в архиве. /restore — восстановить; текст оставлен в поле ввода.")
 		return nil
 	}
-	if m.settingsLogin == "" || m.browserPreview {
+	if m.settingsLogin == "" {
 		m.append("Введено: " + text)
 		return nil
 	}
@@ -303,7 +303,7 @@ func (m *model) cancelChat() tea.Cmd {
 		m.append("Дождитесь переключения сессии.")
 		return nil
 	}
-	if m.session == nil || m.browserPreview {
+	if m.session == nil {
 		m.append("Нет подключённого агента для отмены.")
 		return nil
 	}
@@ -979,7 +979,7 @@ func (m *model) composerText() (string, string) {
 	if m.session != nil && m.isSessionArchived(m.session.ID) {
 		return " · архив", "/restore — восстановить перед отправкой"
 	}
-	if m.settingsLogin != "" && !m.browserPreview {
+	if m.settingsLogin != "" {
 		if m.session == nil {
 			return " · dsh", "Сначала /new или /session <id>"
 		}

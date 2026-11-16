@@ -137,7 +137,7 @@ func (s *chatState) registerToolJob(raw json.RawMessage) error {
 
 func (m *model) syncToolOutputs() tea.Cmd {
 	s := m.chat
-	if s == nil || m.browserPreview {
+	if s == nil {
 		return nil
 	}
 	if s.observers == nil {

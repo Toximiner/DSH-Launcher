@@ -647,7 +647,10 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-history-') as directory:
             fork_app.wait('ARCHIVE ANSWER 027', timeout=20)
             fork_app.send('REPLACEMENT DRAFT')
             fork_app.send('\x1b[23~')
-            fork_app.wait('PgUp/PgDn')
+            # The navigation footer is visible while the initial page is still
+            # loading; search is enabled only after that page has arrived.
+            fork_app.wait('Страница 1')
+            wait_for(lambda: (fork_app.pump(), 'Чтение истории…' not in fork_app.text)[1])
             fork_app.send('\x06')
             fork_app.wait('Поиск:')
             fork_app.send(old_text + '\r')

@@ -65,7 +65,7 @@ func (m *model) openHistory() tea.Cmd {
 	if m.historyReader != nil {
 		return m.closeHistory()
 	}
-	if m.browserPreview || m.chat == nil || !m.chat.ready || m.session == nil || m.chatSessionChanging() {
+	if m.chat == nil || !m.chat.ready || m.session == nil || m.chatSessionChanging() {
 		m.append("Для истории подключитесь к сессии dsh и дождитесь чата.")
 		return nil
 	}

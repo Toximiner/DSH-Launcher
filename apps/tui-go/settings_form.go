@@ -58,7 +58,7 @@ type settingsFormResult struct {
 }
 
 func (m *model) openSettingsForm(providers bool) tea.Cmd {
-	if m.browserPreview || m.settings == nil || !m.settings.Writable || m.settingsLoading {
+	if m.settings == nil || !m.settings.Writable || m.settingsLoading {
 		m.append("Настройки недоступны для записи. Обновите подключение и снимок.")
 		return nil
 	}

@@ -210,6 +210,9 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-settings-') as directory:
                     wait_for(lambda: (app.pump(), 'многострочный редактор' not in app.text)[1])
                     app.send('\x04')
                     finish()
+                except Exception:
+                    print(f'Credential scenario failed at {columns}x{rows}:\n{app.text}', flush=True)
+                    raise
                 finally:
                     app.close(root / f'settings-{columns}x{rows}.ansi')
         finally:

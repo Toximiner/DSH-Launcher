@@ -105,10 +105,6 @@ func TestRenameEditorLiteralKeysAndCancellation(t *testing.T) {
 	if m.renameDialog != nil || m.input.Value() != "draft" || !m.input.Focused() {
 		t.Fatal("cancel lost composer state")
 	}
-	m.browserPreview = true
-	if m.openSessionRename(true) != nil || m.renameDialog != nil {
-		t.Fatal("browser demo initiated rename")
-	}
 }
 
 func TestRenameDoesNotStealHistoryOrChromeShortcut(t *testing.T) {
@@ -129,7 +125,6 @@ func TestRenameDoesNotStealHistoryOrChromeShortcut(t *testing.T) {
 
 func TestOldPollCannotOverwriteConfirmedRename(t *testing.T) {
 	m := newModel()
-	m.browserPreview = true
 	m.session = &sessionView{ID: "current", Title: "Confirmed"}
 	m.titleRevision = 1
 	m.sessionItems = []sessionItem{{ID: "current"}}

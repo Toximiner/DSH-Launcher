@@ -165,7 +165,7 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 		}
 	}
 	composer := area{mainX, bodyTop + bodyHeight - composerHeight - 1, width, composerHeight}
-	if m.page == chatPage && m.session != nil && !m.browserPreview && msg.Y == composer.y+4 {
+	if m.page == chatPage && m.session != nil && msg.Y == composer.y+4 {
 		_, hint := m.composerText()
 		index := strings.Index(hint, "[F8 Стоп]")
 		if index < 0 {

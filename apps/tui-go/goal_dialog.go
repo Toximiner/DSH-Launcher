@@ -70,7 +70,7 @@ func readLiveGoal(ctx context.Context, api *dshAPI, id string) (*liveGoal, error
 	return goal, nil
 }
 func (m *model) openGoal() tea.Cmd {
-	if m.browserPreview || m.session == nil || m.chat == nil || !m.chat.ready || m.chatSessionChanging() {
+	if m.session == nil || m.chat == nil || !m.chat.ready || m.chatSessionChanging() {
 		m.append("Для просмотра цели подключитесь к сессии dsh.")
 		return nil
 	}

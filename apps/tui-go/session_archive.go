@@ -22,7 +22,7 @@ type sessionArchiveResult struct {
 }
 
 func (m *model) openSessionArchive(current, restore bool) tea.Cmd {
-	if m.browserPreview || m.settingsLogin == "" {
+	if m.settingsLogin == "" {
 		m.append("Архив доступен при подключении к dsh.")
 		return nil
 	}

@@ -191,22 +191,14 @@ func TestMarketReadFailurePreservesInstalledAndRejectsProfileChange(t *testing.T
 		t.Fatal("unsupported API version accepted")
 	}
 }
-func TestBrowserMarketIsReadOnlyAndFitsPhones(t *testing.T) {
+func TestMarketFitsTerminal(t *testing.T) {
 	m := newModel()
 	m.page = marketPage
-	m.browserPreview = true
-	m.market = &marketSnapshot{Profile: "demo", Installed: map[string]string{}, Plugins: []marketPlugin{{Name: "Beta", NPM: "beta-plugin", Description: map[string]string{"ru": "Плагин 世界"}}}}
+	m.market = &marketSnapshot{Profile: "fixture", Installed: map[string]string{}, Plugins: []marketPlugin{{Name: "Beta", NPM: "beta-plugin", Description: map[string]string{"ru": "Плагин 世界"}}}}
 	for _, size := range []tea.WindowSizeMsg{{Width: 100, Height: 30}, {Width: 80, Height: 24}} {
 		m.Update(size)
-		m.confirmMarket("install")
 		if lipgloss.Height(m.View()) > size.Height || lipgloss.Width(m.View()) > size.Width {
 			t.Fatal("market view does not fit terminal")
-		}
-		if m.executeMarket() != nil || m.marketBusy || m.marketOperating {
-			t.Fatal("browser demo tried to write to backend")
-		}
-		if !strings.Contains(m.marketError, "Демо") {
-			t.Fatal("demo limitation missing")
 		}
 	}
 }
@@ -214,7 +206,6 @@ func TestBrowserMarketIsReadOnlyAndFitsPhones(t *testing.T) {
 func TestMarketMouseTargetsAndProgress(t *testing.T) {
 	m := newModel()
 	m.page = marketPage
-	m.browserPreview = true
 	m.market = &marketSnapshot{Profile: "demo", Installed: map[string]string{}, Plugins: []marketPlugin{{Name: "Alpha", NPM: "alpha-plugin"}, {Name: "Beta", NPM: "beta-plugin"}}}
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	click := func(kind string, index int) {

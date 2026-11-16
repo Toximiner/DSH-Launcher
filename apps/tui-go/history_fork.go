@@ -75,7 +75,7 @@ func (m *model) moveHistorySelection(backward bool) {
 
 func (m *model) forkHistorySelection() tea.Cmd {
 	h := m.historyReader
-	if h == nil || h.busy || h.ctx.Err() != nil || h.projection == nil || m.browserPreview || m.chatSessionChanging() {
+	if h == nil || h.busy || h.ctx.Err() != nil || h.projection == nil || m.chatSessionChanging() {
 		return nil
 	}
 	if m.chat == nil || m.chat.id != h.sessionID || m.chat.epoch != h.epoch {

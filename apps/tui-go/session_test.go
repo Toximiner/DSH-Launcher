@@ -203,17 +203,6 @@ func TestPendingAndFailedModeChangesStayHonest(t *testing.T) {
 		t.Fatal("stale session response was accepted")
 	}
 }
-func TestBrowserModeControlNeverContactsBackend(t *testing.T) {
-	m := newModel()
-	m.browserPreview = true
-	m.settingsLogin = "http://127.0.0.1:1/?token=demo"
-	if m.chooseMode("plan") != nil || m.sessionBusy {
-		t.Fatal("browser demo started a backend command")
-	}
-	if !strings.Contains(strings.Join(m.lines, "\n"), "Браузерное демо") {
-		t.Fatal("browser limitation was not explained")
-	}
-}
 
 func TestModeCommandWaitsForBackgroundRead(t *testing.T) {
 	_, server := fakeSessions(t)

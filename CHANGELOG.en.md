@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- Remove the static browser/WASM TUI preview, its build job and CI artifacts; use the native Linux binary. Correct the interactive PTY environment in CI checks.
+
 - Go preview 0.2.0-preview.37 implements baseline client stages 11–13: `/runtime` adds user-local dsh installation/progress and owned processes; `/updates` adds version/release notes, dsh and TUI installation/rollback with SHA-256, atomic replacement and `.previous --rollback-tui`; `/diagnostics` adds bounded stdout/stderr, masked private tar.gz reports and journal/opt-in BEL notices. Actual isolated npm/dsh checks cover empty-home startup, restart, external-process preservation and actual TUI binary update/recovery; Go checks cover failures/cancellation and secrets. Dedicated `tui-v…` publication is prepared; public delivery remains unverified until its first release. Binary rollback does not downgrade or restore dsh profile data.
 
 - Go prototype 0.2.0-preview.36 verifies background-work clients against actual dsh: shell jobs, continuable children, schedule run/history, stopping and reconnect without duplicate work. Fixes parent-qualified child chat/history/search, direct child-ID connection, F8 parent routing and `/parent` navigation. Shared Host output omits the owner and displays scope/gaps. Tests cover retained drafts in child views and ordinary forks with inherited descriptors. Adds the actual-backend scenario to CI; team-task mutation still needs a backend API.

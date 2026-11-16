@@ -269,10 +269,6 @@ func changeSessionMode(ctx context.Context, api *dshAPI, id, action, objective s
 }
 
 func (m *model) sessionOperation(action, value string) tea.Cmd {
-	if m.browserPreview {
-		m.append("Браузерное демо: подключение к сессии и смена режима доступны в Linux-клиенте.")
-		return nil
-	}
 	if m.settingsLogin == "" {
 		m.append("Укажите URL входа dsh через --url или DSH_TUI_URL.")
 		return nil
@@ -374,7 +370,7 @@ func (m *model) modeLabel() string {
 }
 func (m *model) chooseMode(mode string) tea.Cmd {
 	if mode == "goal" {
-		if m.session == nil || m.browserPreview {
+		if m.session == nil {
 			return m.sessionOperation("goal", "")
 		}
 		value := m.input.Value()

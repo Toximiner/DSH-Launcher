@@ -39,7 +39,7 @@ func (m *model) openCompose() tea.Cmd {
 		m.append("Сообщения подагенту: /session " + m.session.Address.ParentID + " → /agents → F3.")
 		return nil
 	}
-	if m.browserPreview || m.chat == nil || m.session == nil || !m.chat.ready || m.chatSessionChanging() {
+	if m.chat == nil || m.session == nil || !m.chat.ready || m.chatSessionChanging() {
 		m.append("Для редактора подключите сессию dsh.")
 		return nil
 	}

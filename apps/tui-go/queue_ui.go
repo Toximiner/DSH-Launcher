@@ -55,7 +55,7 @@ func (m *model) queueSelection() (queuedMessage, int) {
 	return queuedMessage{}, -1
 }
 func (m *model) queueAvailable() bool {
-	return m.session != nil && m.session.QueueKnown && !m.sessionStale && m.chat != nil && m.chat.ready && m.chat.id == m.session.ID && !m.chatSessionChanging() && !m.browserPreview && m.settingsLogin != ""
+	return m.session != nil && m.session.QueueKnown && !m.sessionStale && m.chat != nil && m.chat.ready && m.chat.id == m.session.ID && !m.chatSessionChanging() && m.settingsLogin != ""
 }
 func (m *model) requestQueueRemoval() {
 	item, _ := m.queueSelection()
