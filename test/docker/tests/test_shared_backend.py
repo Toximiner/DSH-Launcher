@@ -22,7 +22,7 @@ process.stdin.once('data', () => {
   process.exit(0);
 });
 """
-    peer = subprocess.Popen(['node', '-e', script], user='tester', group='tester', extra_groups=[],
+    peer = subprocess.Popen(['/opt/node22/bin/node', '-e', script], user='tester', group='tester', extra_groups=[],
         env={'HOME': HOME, 'PATH': os.environ['PATH']}, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
     try:
         assert peer.stdout.readline().strip() == 'joined'
