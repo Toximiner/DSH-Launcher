@@ -648,8 +648,11 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-history-') as directory:
         def rewrite(start, end, text):
             result_path = root / 'history-rewrite-result.json'
             result_path.unlink(missing_ok=True)
-            (root / 'history-rewrite.json').write_text(json.dumps({'sessionId': session,
+            request_path = root / 'history-rewrite.json'
+            temporary = request_path.with_suffix('.tmp')
+            temporary.write_text(json.dumps({'sessionId': session,
                 'startSeq': start, 'endSeq': end, 'text': text}))
+            temporary.replace(request_path)
             wait_for(result_path.exists)
             result = json.loads(result_path.read_text())
             assert 'error' not in result, result

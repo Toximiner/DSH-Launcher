@@ -196,7 +196,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-settings-') as directory:
                         target.parent.mkdir(parents=True, exist_ok=True)
                         target.write_text(json.dumps({'source': 'Actual isolated dsh credentials form', 'columns': columns, 'rows': rows, 'cells': cells}, ensure_ascii=False))
                     app.send('\x1b')
-                    wait_for(lambda: (app.pump(), 'API-ключ ·' not in app.text)[1])
+                    app.wait('Настройки · llm-pi-ai', absent=('API-ключ · SETTINGS_TEST_KEY',))
                     choose('models')
                     app.send('\x05')
                     app.wait('Принять в форму; затем F5')
