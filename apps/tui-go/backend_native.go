@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -182,64 +183,94 @@ func prepareMarket(ctx context.Context, options backendOptions, input io.Reader,
 }
 
 func startBackend(ctx context.Context, options backendOptions, env []string) (string, func(), error) {
+	login, stop, _, err := startBackendLogged(ctx, options, env, io.Discard)
+	return login, stop, err
+}
+
+type backendLogWriter struct {
+	mu      sync.Mutex
+	pending string
+	out     io.Writer
+	port    int
+	ready   chan string
+}
+
+func (w *backendLogWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.out.Write(p)
+	w.pending += string(p)
+	for {
+		at := strings.IndexByte(w.pending, '\n')
+		if at < 0 {
+			break
+		}
+		line := clean(w.pending[:at])
+		w.pending = w.pending[at+1:]
+		at = strings.Index(line, "dsh web: ")
+		if at < 0 {
+			continue
+		}
+		fields := strings.Fields(line[at+len("dsh web: "):])
+		if len(fields) == 0 {
+			continue
+		}
+		u, e := url.Parse(fields[0])
+		if e == nil && u.Scheme == "http" && u.Host == fmt.Sprintf("127.0.0.1:%d", w.port) && u.Query().Get("token") != "" {
+			select {
+			case w.ready <- u.String():
+			default:
+			}
+		}
+	}
+	if len(w.pending) > 1<<20 {
+		w.pending = w.pending[len(w.pending)-(1<<20):]
+	}
+	return len(p), nil
+}
+func startBackendLogged(ctx context.Context, options backendOptions, env []string, out io.Writer) (string, func(), <-chan struct{}, error) {
 	command := exec.Command(options.Bin, "--profile", options.Profile, "--no-open", "--port", fmt.Sprint(options.Port))
 	command.Dir = options.CWD
 	command.Env = env
-	command.Stderr = io.Discard
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	stdout, err := command.StdoutPipe()
-	if err != nil {
-		return "", nil, err
-	}
-	if err = command.Start(); err != nil {
-		return "", nil, errors.New("не удалось запустить dsh; проверьте --dsh и Node.js 24.9+")
+	ready := make(chan string, 1)
+	writer := &backendLogWriter{out: out, port: options.Port, ready: ready}
+	command.Stdout = writer
+	command.Stderr = writer
+	if err := command.Start(); err != nil {
+		return "", nil, nil, errors.New("не удалось запустить dsh; проверьте путь и Node.js 24.9+")
 	}
 	done := make(chan struct{})
 	go func() { command.Wait(); close(done) }()
+	var once sync.Once
 	stop := func() {
-		syscall.Kill(-command.Process.Pid, syscall.SIGTERM)
-		select {
-		case <-done:
-		case <-time.After(4 * time.Second):
-			syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
-			<-done
-		}
+		once.Do(func() {
+			// Never signal a recycled process group after the child has been reaped.
+			select {
+			case <-done:
+				return
+			default:
+			}
+			syscall.Kill(-command.Process.Pid, syscall.SIGTERM)
+			select {
+			case <-done:
+			case <-time.After(4 * time.Second):
+				syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+				<-done
+			}
+		})
 	}
-	ready := make(chan string, 1)
-	go func() {
-		scanner := bufio.NewScanner(stdout)
-		scanner.Buffer(make([]byte, 4096), 1<<20)
-		for scanner.Scan() {
-			line := scanner.Text()
-			at := strings.Index(line, "dsh web: ")
-			if at < 0 {
-				continue
-			}
-			value := strings.Fields(line[at+len("dsh web: "):])
-			if len(value) == 0 {
-				continue
-			}
-			u, err := url.Parse(value[0])
-			if err == nil && u.Scheme == "http" && u.Host == fmt.Sprintf("127.0.0.1:%d", options.Port) && u.Query().Get("token") != "" {
-				select {
-				case ready <- u.String():
-				default:
-				}
-			}
-		}
-	}()
 	select {
 	case value := <-ready:
-		return value, stop, nil
+		return value, stop, done, nil
 	case <-ctx.Done():
 		stop()
-		return "", nil, ctx.Err()
+		return "", nil, nil, ctx.Err()
 	case <-done:
-		stop()
-		return "", nil, errors.New("dsh завершился до запуска; проверьте профиль, порт и Node.js 24.9+")
+		return "", nil, nil, errors.New("dsh завершился до запуска; откройте журнал")
 	case <-time.After(120 * time.Second):
 		stop()
-		return "", nil, errors.New("истекло время запуска dsh")
+		return "", nil, nil, errors.New("истекло время запуска dsh")
 	}
 }
 

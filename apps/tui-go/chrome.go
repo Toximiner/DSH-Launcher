@@ -29,9 +29,9 @@ type chromeState struct {
 
 var menuNames = []string{"Файл", "Вид", "Справка"}
 var menuEntries = [][]string{
-	{"Настройки TUI…   F4", "Выйти        Ctrl+D"},
+	{"Настройки TUI…   F4", "Выйти        Ctrl+D", "Установка и dsh…", "Обновления и откат…"},
 	{"Настройки dsh", "Журнал клиента"},
-	{"Горячие клавиши", "О программе"},
+	{"Горячие клавиши", "О программе", "Диагностика…"},
 }
 
 func (m *model) mouseEnabled() bool { return m.prefs.Mouse && !m.mouseForcedOff }
@@ -108,11 +108,20 @@ func (m *model) activateMenu() tea.Cmd {
 		if item == 0 {
 			return m.openDialog("settings")
 		}
+
+		if item >= 2 {
+			m.closeChrome()
+			return m.openRuntime([]string{"runtime", "updates"}[item-2])
+		}
 		return tea.Quit
 	}
 	if menu == 2 {
 		if item == 0 {
 			return m.openDialog("help")
+		}
+		if item == 2 {
+			m.closeChrome()
+			return m.openRuntime("diagnostics")
 		}
 		return m.openDialog("about")
 	}
@@ -201,8 +210,10 @@ func (m *model) chromeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case "right", "tab":
 		m.chrome.menu = (m.chrome.menu + 1) % 3
 		m.chrome.item = 0
-	case "up", "down":
-		m.chrome.item = 1 - m.chrome.item
+	case "up":
+		m.chrome.item = (m.chrome.item + len(menuEntries[m.chrome.menu]) - 1) % len(menuEntries[m.chrome.menu])
+	case "down":
+		m.chrome.item = (m.chrome.item + 1) % len(menuEntries[m.chrome.menu])
 	case "enter":
 		return m.activateMenu(), true
 	}
@@ -301,7 +312,7 @@ func (m *model) chromeView(base string) string {
 		for i, item := range menuEntries[m.chrome.menu] {
 			lines = append(lines, selectedRow(item, m.chrome.item == i, 24))
 		}
-		return overlay(base, panel(28, 4, strings.Join(lines, "\n"), "#79c0ff"), min(menuStart(m.chrome.menu), m.width-29), 2, m.width-1)
+		return overlay(base, panel(28, len(lines)+2, strings.Join(lines, "\n"), "#79c0ff"), min(menuStart(m.chrome.menu), m.width-29), 2, m.width-1)
 	}
 	return base
 }
@@ -344,7 +355,7 @@ func (m *model) chromeMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 	if m.chrome.menuOpen {
 		if msg.Button == tea.MouseButtonLeft {
 			x := min(menuStart(m.chrome.menu), m.width-29)
-			if (area{x + 1, 3, 26, 2}).contains(msg.X, msg.Y) {
+			if (area{x + 1, 3, 26, len(menuEntries[m.chrome.menu])}).contains(msg.X, msg.Y) {
 				m.chrome.item = msg.Y - 3
 				return m.activateMenu(), true
 			}

@@ -25,6 +25,9 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if !m.mouseEnabled() {
 		return nil
 	}
+	if m.runtimeDialog != nil {
+		return nil
+	}
 	if cmd, handled := m.approvalMouse(msg); handled {
 		return cmd
 	}

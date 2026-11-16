@@ -2,10 +2,45 @@
 
 [Русский](README.md) | **English**
 
-Baseline: November 16, 2026, Go client `0.2.0-preview.36`.
+Baseline: November 16, 2026, Go client `0.2.0-preview.37`.
 Terminal minimum: 80×24; recommended: 100×30.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.
+
+## Preview.37: stages 11–13
+
+- `/runtime` (also File → dsh): Node/dsh discovery, user-local npm installation
+  with live logs and retry, owned start/stop/restart, executable/profile/port/cwd.
+  Installations live under `${XDG_DATA_HOME:-~/.local/share}/dsh-launcher-tui/versions`;
+  global npm and the GUI are unchanged. The dsh profile remains shared.
+  A filesystem lock excludes concurrent process/install owners.
+- `/updates`: npm/GitHub versions and release notes, exact/latest dsh installation,
+  atomic promotion of a verified slot and previous-slot rollback. Stop owned dsh
+  before changing versions. Binary rollback does not roll back profile data.
+- TUI updates use an architecture-matched `tui-v…` release binary with SHA-256 or
+  a local file with an explicit SHA-256. The client checks `--version`, writes a
+  `.previous` backup, replaces atomically and restores automatically if the
+  post-install check fails. Recover manually through the menu or run
+  `./dsh-launcher-tui-go.previous --rollback-tui` if the new client cannot open.
+  The executable directory must be writable; restart explicitly to use the new
+  version. Tag-triggered binary publication is prepared in CI; no release has
+  been published yet. Missing compatible release assets produce an explanation.
+- `/diagnostics` (also Help → Diagnostics): bounded owned-dsh stdout/stderr and
+  operation output (256 KiB), previous-run log and a private 0600 tar.gz report.
+  URL tokens, Bearer/Basic, keys, passwords and cookies are masked, including
+  writes split across chunks. Profiles, environment and conversation history are
+  not collected. Review arbitrary log text before sharing. Operations, completed
+  turns and user requests produce journal notifications; BEL sound is opt-in.
+  Background status remains in the existing snapshot panels; this does not poll
+  every job/schedule in the background.
+
+Verified actual pinned-dsh npm installation into a new HOME, startup with empty
+DSH_HOME, owned start/restart/exit and preservation of an externally owned dsh.
+A copy of the actual TUI binary verifies update and `.previous` recovery. Go
+checks cover failed/cancelled npm installs, ownership locks, durable slot pointers,
+failed TUI post-install checks and report masking. UI checked at 100×30/80×24.
+The baseline client work for stages 11–13 is complete; public TUI delivery remains
+unverified until the first dedicated release.
 
 ## Preview.36: stage 10 client increment verified
 
@@ -112,9 +147,9 @@ The check used an isolated temporary profile; credentials are not bundled.
 | Plugins | Inventory, shared schemas/commands, market/packages | Declarative contract/SDK and dedicated adapters | 8–9, partial |
 | Marketplace | Basic operations | Compatibility, build approvals, restart, rollback, pending operation recovery | 9 |
 | Subagents and jobs | Subagents, read-only team tasks, jobs, schedules; actual flows/reconnect | Team-task writes need API; plugin workflows belong to stages 8–9 | 10, client ✓ |
-| dsh installation/process | Starts installed dsh | Installation progress, discovery, restart, recovery | 11 |
-| Updates and rollback | No UI | Client/dsh updates, release notes, rollback | 12 |
-| Diagnostics/notifications | Local TUI log | dsh log, reports, background status, terminal notifications | 13 |
+| dsh installation/process | Discovery, install progress, logs, owned processes/retry | Baseline client work complete | 11 ✓ |
+| Updates and rollback | dsh/TUI check, install, backup/recovery | Public TUI delivery needs its first dedicated release | 12, client ✓ |
+| Diagnostics/notifications | Owned dsh log, masked report, notices/BEL | Baseline client work complete | 13 ✓ |
 | Appearance/interaction | Fixed theme/language, basic mouse | Themes, language, search, panes, shortcuts, improved mouse | 14 |
 
 ## Milestones and acceptance criteria
@@ -219,14 +254,14 @@ The check used an isolated temporary profile; credentials are not bundled.
     against actual dsh, including reconnect without duplicate execution.
     Team tasks are read from projections; mutation needs a backend API.
     New views refresh with F5.
-11. **dsh installation and lifecycle.** Node/dsh discovery, offered installation
+11. **dsh installation and lifecycle — preview.37.** Node/dsh discovery, offered installation
     with live progress, errors/retry, owned process management.
     Done: a fresh profile installs and starts; exiting never stops an attached
     backend owned by someone else.
-12. **Updates and rollback.** Separate increments for dsh and the Go client:
+12. **Updates and rollback — preview.37 client baseline.** Separate increments for dsh and the Go client:
     version checks, release notes, installation, restoring a previous version.
     Done: failed updates have a verified recovery path.
-13. **Diagnostics and notifications.** dsh log, redacted report export, execution
+13. **Diagnostics and notifications — preview.37.** dsh log, redacted report export, execution
     state, applicable terminal notifications. Done: a report supports reproducing
     a failure without disclosing keys.
 14. **Polish and release.** Themes/language, search, panes, mouse, shortcut help,
@@ -246,7 +281,7 @@ The check used an isolated temporary profile; credentials are not bundled.
 
 Applicable: input history, mouse, language/theme, working directory, owned dsh
 path/profile/port, updates, logs, and notifications once their capabilities exist.
-Add launch parameters at milestone 11 and updates at milestone 12. Terminal font
+Launch parameters, updates and diagnostics were added in preview.37 (11–13). Terminal font
 and zoom normally belong to the terminal; browser zoom belongs to the live-server
 wrapper. Do not present unimplemented preferences as functional controls.
 

@@ -1,7 +1,72 @@
-# Go TUI preview — 0.2.0-preview.36
+# Go TUI preview — 0.2.0-preview.37
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
+
+## Installation, updates and diagnostics (preview.37)
+
+- `/runtime` (also File → dsh): Node/dsh discovery, user-local npm installation
+  with live logs and retry, owned start/stop/restart, executable/profile/port/cwd.
+  Installations live under `${XDG_DATA_HOME:-~/.local/share}/dsh-launcher-tui/versions`;
+  global npm and the GUI are unchanged. The dsh profile remains shared.
+  A filesystem lock excludes concurrent process/install owners.
+- `/updates`: npm/GitHub versions and release notes, exact/latest dsh installation,
+  atomic promotion of a verified slot and previous-slot rollback. Stop owned dsh
+  before changing versions. Binary rollback does not roll back profile data.
+- TUI updates use an architecture-matched `tui-v…` release binary with SHA-256 or
+  a local file with an explicit SHA-256. The client checks `--version`, writes a
+  `.previous` backup, replaces atomically and restores automatically if the
+  post-install check fails. Recover manually through the menu or run
+  `./dsh-launcher-tui-go.previous --rollback-tui` if the new client cannot open.
+  The executable directory must be writable; restart explicitly to use the new
+  version. Tag-triggered binary publication is prepared in CI; no release has
+  been published yet. Missing compatible release assets produce an explanation.
+- `/diagnostics` (also Help → Diagnostics): bounded owned-dsh stdout/stderr and
+  operation output (256 KiB), previous-run log and a private 0600 tar.gz report.
+  URL tokens, Bearer/Basic, keys, passwords and cookies are masked, including
+  writes split across chunks. Profiles, environment and conversation history are
+  not collected. Review arbitrary log text before sharing. Operations, completed
+  turns and user requests produce journal notifications; BEL sound is opt-in.
+  Background status remains in the existing snapshot panels; this does not poll
+  every job/schedule in the background.
+
+Verified actual pinned-dsh npm installation into a new HOME, startup with empty
+DSH_HOME, owned start/restart/exit and preservation of an externally owned dsh.
+A copy of the actual TUI binary verifies update and `.previous` recovery. Go
+checks cover failed/cancelled npm installs, ownership locks, durable slot pointers,
+failed TUI post-install checks and report masking. UI checked at 100×30/80×24.
+The baseline client work for stages 11–13 is complete; public TUI delivery remains
+unverified until the first dedicated release.
+
+Typical recovery:
+
+```sh
+# Start the previous binary to restore the main executable even if it cannot run.
+./dsh-launcher-tui-go.previous --rollback-tui
+# Restart manually after a successful update or rollback.
+./dsh-launcher-tui-go --start --market skip
+```
+
+Runtime defaults are saved in the TUI data directory's `runtime.json`.
+Explicit `--dsh/--profile/--port/--cwd` override saved launch defaults.
+`/runtime` starts without a market-install prompt; `--start --market ask`
+retains the prelaunch marketplace workflow. A managed installation takes
+precedence over the fallback `--dsh` executable. The first managed installation
+can roll back to that fallback only while it remains available. npm installation
+uses `--ignore-scripts`; Node.js 24.9+ and npm must already be present.
+The launcher does not install Node or migrate/downgrade dsh profile data.
+
+Local TUI installation accepts `/absolute/path/to/binary SHA256` (paths may contain
+spaces). The checksum is a corruption check, not independent publisher identity;
+use a trusted build. Staging, `.previous` and `.update.json` are beside the executable.
+Repeated installation of identical bytes leaves the existing backup intact.
+A failed/unfinished npm install never promotes its slot; interrupted disk promotion
+leaves either old or new complete bytes plus the backup. A successful `--version`
+check is not a guarantee that every new runtime workflow is compatible.
+
+The CI publishes architecture-specific binaries only for explicit `tui-v<version>`
+tags after all checks; GUI `v<version>` releases remain separate. No tag or release
+is created by this implementation change.
 
 Preview.36 verifies the background-work increment against the pinned actual dsh.
 Child sessions now use their durable parent-qualified address for chat, history
@@ -705,7 +770,8 @@ live before the fullscreen client opens; failures allow retry or skip.
 These apply to `--start`. Attach mode never alters another running backend's
 profile. Locally started dsh gets a new session automatically and is stopped
 with the client. Existing attached backends are not stopped.
-The dsh package itself must already be installed; its installer is not ported yet.
+If dsh is missing, `--start` offers installation into the TUI data directory.
+Alternatively, open `/runtime` without `--start` to install with live progress.
 
 JS plugins run inside Node.js/dsh independently of this client's Go code.
 The marketplace host exposes HTTP routes used by the marketplace TUI adapter.

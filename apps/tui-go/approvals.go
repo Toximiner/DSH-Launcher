@@ -124,6 +124,7 @@ func (m *model) handleApprovalUpdate(msg approvalUpdate) tea.Cmd {
 				}
 				request.Request.Reason = boundedToolText(request.Request.Reason, toolArgumentsLimit)
 				s.requests = append(s.requests, request)
+				m.runtimeNotice("Агент ожидает ответа пользователя · F7.")
 				if request.Event == "user-questions/request" {
 					if form := m.prepareQuestion(request); form.invalid {
 						s.requests[len(s.requests)-1].Request.Questions = nil

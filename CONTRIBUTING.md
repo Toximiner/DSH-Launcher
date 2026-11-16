@@ -70,6 +70,15 @@ follow-ups/history/search, direct child CLI reconnect, parent-address F8 and
 navigation, schedule history, and no duplicate work across reconnect. A dedicated
 producer checks ownerless jobs/gap markers through the actual registry. Capture
 100×30/80×24 terminal cells with `--capture <prefix>`.
+`test/real_runtime.py` verifies actual pinned-dsh user-local npm installation
+(`--install`), owned start/restart/exit, a completely empty DSH_HOME, preservation
+of an externally owned backend, report token masking, actual binary promotion and
+recovery by executing `.previous --rollback-tui`. It copies the TUI into a temporary
+HOME; the user's installed executable/profile and GUI remain untouched. Go tests
+exercise failed/cancelled installs, stale pointers, cross-process ownership,
+checksum/candidate/post-install failures, reports and modal confirmation/geometry.
+The TUI workflow publishes binaries only for explicit `tui-v<version>` tags;
+ordinary branch/PR checks produce artifacts without publishing a release.
 `test/real_goals.py` checks actual goal snapshots, phase versus activation,
 multiline objective/round-cap editing, cancellation, stale-revision refusal,
 explicit conflict review, preservation of untouched foreign fields, empty goals,

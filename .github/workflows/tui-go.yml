@@ -6,6 +6,7 @@ on:
     paths: ['apps/tui-go/**', '.github/workflows/tui-go.yml']
   push:
     branches: [main]
+    tags: ['tui-v*']
     paths: ['apps/tui-go/**', '.github/workflows/tui-go.yml']
   workflow_dispatch:
 
@@ -15,7 +16,7 @@ permissions:
 jobs:
   terminal-preview:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v6
@@ -74,6 +75,11 @@ jobs:
           build/go-pty-env/bin/python apps/tui-go/test/real_background.py \
             --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
             --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh"
+      - name: Actual dsh installation, process ownership, TUI rollback and reports
+        run: |
+          build/go-pty-env/bin/python apps/tui-go/test/real_runtime.py \
+            --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
+            --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh" --install
       - name: Build static browser preview
         run: python3 apps/tui-go/web/build.py
       - uses: actions/upload-artifact@v7
@@ -89,8 +95,36 @@ jobs:
             build/tui-go-web/LICENSES.txt
             build/tui-go-web/SHA256SUMS
           if-no-files-found: error
+
       - uses: actions/upload-artifact@v7
         with:
           name: dsh-launcher-tui-go-preview
           path: build/tui-go/dsh-launcher-tui-go_linux_*
           if-no-files-found: error
+
+  publish-tui:
+    if: startsWith(github.ref, 'refs/tags/tui-v')
+    needs: terminal-preview
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: dsh-launcher-tui-go-preview
+          path: binaries
+      - name: Verify the tag and prepare checksums
+        working-directory: binaries
+        run: |
+          chmod +x dsh-launcher-tui-go_linux_amd64
+          test "$(./dsh-launcher-tui-go_linux_amd64 --version)" = "${GITHUB_REF_NAME#tui-v}"
+          sha256sum dsh-launcher-tui-go_linux_* > SHA256SUMS
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          prerelease: true
+          make_latest: false
+          generate_release_notes: true
+          files: |
+            binaries/dsh-launcher-tui-go_linux_*
+            binaries/SHA256SUMS

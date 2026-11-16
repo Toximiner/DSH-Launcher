@@ -897,6 +897,8 @@ func (m *model) handleChatUpdate(msg chatUpdate) tea.Cmd {
 		return nil
 	}
 	bottom := m.viewport.AtBottom()
+	previousCursor := s.cursor
+	previousError := s.streamError
 	if msg.notice.err != nil {
 		s.ready = false
 		s.streamError = msg.notice.err.Error()
@@ -927,6 +929,12 @@ func (m *model) handleChatUpdate(msg chatUpdate) tea.Cmd {
 				}
 			}
 		}
+	}
+	if msg.notice.err != nil && previousError == "" {
+		m.runtimeNotice("Связь с чатом потеряна; выполняется переподключение.")
+	}
+	if f := msg.notice.frame; f != nil && f.Type == "event" && f.Event.Seq > previousCursor && f.Event.Type == "turn/end" {
+		m.runtimeNotice("Выполнение агента завершено.")
 	}
 	m.reconcileQueuedPrompt()
 	m.rebuild()

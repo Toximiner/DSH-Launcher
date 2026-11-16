@@ -3,6 +3,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -10,8 +11,10 @@ import (
 	"golang.org/x/term"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 )
 
@@ -29,6 +32,7 @@ func run(args []string, out io.Writer) error {
 	cwdFlag := f.String("cwd", "", "рабочая папка dsh")
 	marketFlag := f.String("market", "ask", "предустановка маркета: ask, install или skip")
 	noMouseFlag := f.Bool("no-mouse", false, "отключить мышь для обычного выделения текста")
+	rollbackFlag := f.Bool("rollback-tui", false, "восстановить предыдущий TUI; работает также из .previous")
 	versionFlag := f.Bool("version", false, "показать версию")
 	if err := f.Parse(args); err != nil {
 		return err
@@ -37,13 +41,30 @@ func run(args []string, out io.Writer) error {
 		return fmt.Errorf("unexpected positional arguments")
 	}
 	if *helpFlag {
-		fmt.Fprintln(out, "dsh-launcher-tui-go [--help] [--version] [--no-mouse] [--url URL]\nGo-прототип: F10 — меню, F4 — настройки TUI, Tab — разделы, Esc — чат. /help, /clear, /exit.\nНастройки dsh доступны только для чтения через --url или DSH_TUI_URL.\nПодключение: --session ID или --new. Режимы: /mode default|plan|goal.\nЛокальный запуск: --start [--dsh PATH] [--profile web] [--port 3080] [--market ask|install|skip].\nС сессией dsh: Enter — отправить, F8 — остановить. Без подключения — локальный черновик.\nNode.js нужен только бэкенду dsh.")
+		fmt.Fprintln(out, "dsh-launcher-tui-go [--help] [--version] [--no-mouse] [--url URL]\nGo-прототип: F10 — меню, F4 — настройки TUI, Tab — разделы, Esc — чат. /help, /clear, /exit.\nНастройки dsh доступны через --url или DSH_TUI_URL.\nПодключение: --session ID или --new. Режимы: /mode default|plan|goal.\nЛокальный запуск: --start [--dsh PATH] [--profile web] [--port 3080] [--market ask|install|skip].\nС сессией dsh: Enter — отправить, F8 — остановить. Без подключения — локальный черновик.\n/runtime — установка/процесс · /updates — обновление/откат · /diagnostics — отчёт.\nNode.js нужен только бэкенду dsh.")
 		return nil
 	}
 	if *versionFlag {
 		fmt.Fprintln(out, version)
 		return nil
 	}
+	if *rollbackFlag {
+		exe, err := os.Executable()
+		if err != nil {
+			return err
+		}
+		exe, err = filepath.EvalSymlinks(exe)
+		if err != nil {
+			return err
+		}
+		c := &nativeRuntime{executable: strings.TrimSuffix(exe, ".previous")}
+		if err = c.rollbackTUI(context.Background()); err != nil {
+			return err
+		}
+		fmt.Fprintln(out, "Предыдущий TUI восстановлен. Запустите его снова.")
+		return nil
+	}
+
 	if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
 		return fmt.Errorf("run this application in an interactive terminal")
 	}
@@ -66,32 +87,90 @@ func run(args []string, out io.Writer) error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	defer cancel()
+	cwd := *cwdFlag
+	if cwd == "" {
+		cwd, _ = os.Getwd()
+	}
+	cwd, _ = filepath.Abs(cwd)
+	control, controlErr := newNativeRuntime(backendOptions{Bin: *binFlag, Profile: *profileFlag, Port: *portFlag, CWD: cwd})
+	if controlErr == nil {
+		// Explicit CLI arguments override saved launch defaults.
+		f.Visit(func(flag *flag.Flag) {
+			switch flag.Name {
+			case "dsh":
+				control.config.Bin = *binFlag
+			case "profile":
+				control.config.Profile = *profileFlag
+			case "port":
+				control.config.Port = *portFlag
+			case "cwd":
+				control.config.CWD = cwd
+			}
+		})
+		if err := validateRuntimeConfig(control.config); err != nil && *startFlag {
+			return err
+		}
+		defer func() { cancel(); control.Close() }()
+	}
 	if *startFlag {
+		if controlErr != nil {
+			return controlErr
+		}
 		if err := checkBackendNode(ctx); err != nil {
 			return err
 		}
 		if *loginFlag != "" {
 			return fmt.Errorf("--start cannot be combined with a login URL")
 		}
-		cwd := *cwdFlag
-		if cwd == "" {
-			cwd, _ = os.Getwd()
+		if _, err := exec.LookPath(control.selectedBin()); err != nil {
+			reader := bufio.NewReader(os.Stdin)
+			for {
+				fmt.Fprint(out, "dsh не найден. [i] Установить в каталог TUI · [q] Выйти: ")
+				type reply struct {
+					line string
+					err  error
+				}
+				response := make(chan reply, 1)
+				go func() { line, e := reader.ReadString('\n'); response <- reply{line, e} }()
+				var answer string
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case r := <-response:
+					if r.err != nil {
+						return r.err
+					}
+					answer = r.line
+				}
+				if strings.TrimSpace(answer) != "i" {
+					return fmt.Errorf("установка отменена; запустите без --start для /runtime")
+				}
+				control.live = out
+				err = control.Execute(ctx, "install", "latest")
+				control.live = nil
+				if err == nil {
+					break
+				}
+				fmt.Fprintln(out, control.logSnapshot())
+				fmt.Fprintln(out, redactDiagnostic(err.Error()))
+			}
 		}
-		cwd, err := filepath.Abs(cwd)
-		if err != nil {
-			return err
-		}
-		options := backendOptions{Bin: *binFlag, Profile: *profileFlag, Port: *portFlag, CWD: cwd, Market: *marketFlag}
+		options := backendOptions{Bin: control.selectedBin(), Profile: control.config.Profile, Port: control.config.Port, CWD: control.config.CWD, Market: *marketFlag}
 		env, err := prepareMarket(ctx, options, os.Stdin, out)
 		if err != nil {
 			return err
 		}
 		fmt.Fprintln(out, "Запуск dsh…")
-		login, stop, err := startBackend(ctx, options, env)
+		owner, err := lockRuntime(control.root)
 		if err != nil {
 			return err
 		}
-		defer stop()
+		control.owner = owner
+		login, stop, done, err := startBackendLogged(ctx, options, env, control)
+		if err != nil {
+			return err
+		}
+		control.adopt(login, stop, done)
 		*loginFlag = login
 		if *sessionFlag == "" {
 			*newFlag = true
@@ -101,6 +180,13 @@ func run(args []string, out io.Writer) error {
 		return fmt.Errorf("a login URL or --start is required for sessions")
 	}
 	m := newModel()
+	if controlErr == nil {
+		m.runtime = control
+		control.setStatus("Управление dsh готово.", "")
+		m.runtimeState = control.Snapshot()
+	} else {
+		m.events = append(m.events, "Управление установкой недоступно: "+redactDiagnostic(controlErr.Error()))
+	}
 	defer m.stopChat()
 	m.mouseForcedOff = *noMouseFlag
 	if path, prefErr := clientPreferencesPath(); prefErr == nil {
