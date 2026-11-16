@@ -9,6 +9,12 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+## [1.18.1] — 2026-11-16
+
+### Changed
+
+- Update Electron from 45.2.1 to 45.2.3, including Chromium and other bundled component fixes, a fix for hidden parent window crashes on Wayland, and user-origin CSS removal fixes.
+
 ## [1.18.0] — 2026-11-05
 
 ### Added
