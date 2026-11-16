@@ -77,6 +77,14 @@ recovery by executing `.previous --rollback-tui`. It copies the TUI into a tempo
 HOME; the user's installed executable/profile and GUI remain untouched. Go tests
 exercise failed/cancelled installs, stale pointers, cross-process ownership,
 checksum/candidate/post-install failures, reports and modal confirmation/geometry.
+The TUI workflow runs Go race checks, native builds and the browser build as
+independent jobs. PTY checks and seven actual-dsh suites fan out after the native
+build and download the same binary artifact. Each integration suite has its own
+runner/profile; PTC preparation runs only for chat. npm downloads are cached;
+`fail-fast: false` lets other suites finish after one fails. The stable
+`terminal-preview` aggregate rejects failed, cancelled or skipped prerequisites.
+Publication waits for that aggregate, including all matrix entries.
+
 The TUI workflow publishes binaries only for explicit `tui-v<version>` tags;
 ordinary branch/PR checks produce artifacts without publishing a release.
 `test/real_goals.py` checks actual goal snapshots, phase versus activation,
