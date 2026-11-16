@@ -2,10 +2,32 @@
 
 [Русский](README.md) | **English**
 
-Baseline: November 16, 2026, Go client `0.2.0-preview.35`.
+Baseline: November 16, 2026, Go client `0.2.0-preview.36`.
 Terminal minimum: 80×24; recommended: 100×30.
 This document tracks differences from the Electron launcher and its dsh interface,
 and the order of implementation. Planned items are not shipped capabilities.
+
+## Preview.36: stage 10 client increment verified
+
+Actual-dsh scenarios cover:
+
+- shell output before completion, rereads, cancelled/confirmed stop and reconnect
+  without rerunning the process;
+- shared ownerless Host output, gap indicators and stop through the real registry
+  with a dedicated test producer;
+- a native continuable child: queued follow-up, child navigation/history/search,
+  reconnect while running, interruption and `/parent` navigation;
+- direct `--session <child-id>` reconnect and F8 through the parent API;
+- explicit schedule run, cancelled confirmation, saved delivery history and
+  reconnect without duplicate delivery.
+
+Child chat/history now use the durable parent/child/mode address. Ordinary forks
+retain ordinary addresses even with an inherited descriptor. Child chat is a
+viewer; follow-ups use the parent's `/agents`. New panels remain manual F5
+snapshots. The stage 10 client increment is complete within the available API.
+Team-task writes remain an external backend-contract dependency; a generic plugin
+workflow UI belongs to stages 8–9. Registry jobs are not promised to survive a dsh
+process restart.
 
 ## Preview.35 progress across stages 6–10
 
@@ -32,9 +54,11 @@ and the order of implementation. Planned items are not shipped capabilities.
 Actual isolated dsh checks cover inventories, file pages, schedule lifecycle,
 shell attach/detach/close, upload/multiline send and both plan decisions. Full chat
 regressions and Go race tests pass. New panels are F5 snapshots, not live feeds.
-Advanced agent operations, job output, schedule history/run and package update
-still need dedicated actual-backend scenarios. Stages 7–10 have a working
-baseline; their full completion criteria have not yet been satisfied.
+In preview.35 advanced agent operations, job output, schedule history/run and
+package updates still needed dedicated actual-backend scenarios. Preview.36 adds
+background-work verification; actual package updates remain outstanding. Stages 7–10 had a working
+baseline in preview.35; stage 10 verification is extended in preview.36 above.
+Stages 7–9 remain partial.
 
 ## Goal and workflow
 
@@ -81,13 +105,13 @@ The check used an isolated temporary profile; credentials are not bundled.
 | Message rendering | Markdown, syntax coloring, tables, folding, copying | Current increment complete | 4 ✓ |
 | Models and accounts | Catalog, session model/reasoning selection, provider creation, API keys | OAuth, specialized editors, remaining account flows | 5, partial |
 | dsh settings | Forms, multiline/JSON editor, local/backend validation, persistence, revision conflicts | Basic client increment complete; specialized editors are future improvements | 5 ✓ |
-| Agent modes | Modes, commands and editable goal card | Plan inspection/review and presets | 6 |
-| Workspace | Current directory path | File tree, previews, workspace selection | 7 |
-| Input and attachments | Single-line input | Multiline editor, file references, attachments | 7 |
-| Additional panes | None | Terminal/documents; investigate terminal equivalents of browser workflows | 7 |
-| Plugins | Dedicated marketplace view | Generic settings/commands, declarative contract, dedicated adapters | 8–9 |
+| Agent modes | Editable goals, plan review, presets | Client increment implemented | 6 ✓ |
+| Workspace | Workspace selection, directory tree, paged text reads | File writes and richer document previews | 7, partial |
+| Input and attachments | Multiline editor and receipt-based uploads | Basic input/attachments implemented | 7 ✓ |
+| Additional panes | Native interactive TTY | PDF/image/web documents and terminal equivalents of browser workflows | 7, partial |
+| Plugins | Inventory, shared schemas/commands, market/packages | Declarative contract/SDK and dedicated adapters | 8–9, partial |
 | Marketplace | Basic operations | Compatibility, build approvals, restart, rollback, pending operation recovery | 9 |
-| Subagents and jobs | No views | Progress, agent teams, jobs, schedules, workflows | 10 |
+| Subagents and jobs | Subagents, read-only team tasks, jobs, schedules; actual flows/reconnect | Team-task writes need API; plugin workflows belong to stages 8–9 | 10, client ✓ |
 | dsh installation/process | Starts installed dsh | Installation progress, discovery, restart, recovery | 11 |
 | Updates and rollback | No UI | Client/dsh updates, release notes, rollback | 12 |
 | Diagnostics/notifications | Local TUI log | dsh log, reports, background status, terminal notifications | 13 |
@@ -190,9 +214,11 @@ The check used an isolated temporary profile; credentials are not bundled.
    views only for workflows the generic contract cannot represent. Done: rejection,
    conflicts, and restart recovery are tested; each claimed adapter has a scenario
    against the actual plugin API.
-10. **Subagents, jobs, schedules.** Port monitoring, available control actions,
-    results, and links to related sessions one screen at a time.
-    Done: states come from dsh and recover on reconnection.
+10. **Subagents, jobs, schedules — client increment preview.35–36.**
+    Views, available controls, output, delivery history and navigation are verified
+    against actual dsh, including reconnect without duplicate execution.
+    Team tasks are read from projections; mutation needs a backend API.
+    New views refresh with F5.
 11. **dsh installation and lifecycle.** Node/dsh discovery, offered installation
     with live progress, errors/retry, owned process management.
     Done: a fresh profile installs and starts; exiting never stops an attached

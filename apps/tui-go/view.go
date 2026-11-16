@@ -171,6 +171,9 @@ func (m *model) View() string {
 }
 
 func (m *model) modeControls() string {
+	if m.session != nil && m.session.Address.Kind == "subagent" {
+		return "Просмотр подагента · /parent — к родителю"
+	}
 	names := []string{"Обычный", "План", "Цель"}
 	selected := -1
 	if m.session != nil && !m.sessionStale {

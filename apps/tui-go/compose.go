@@ -35,6 +35,10 @@ type composeUpload struct {
 }
 
 func (m *model) openCompose() tea.Cmd {
+	if m.session != nil && m.session.Address.Kind == "subagent" {
+		m.append("Сообщения подагенту: /session " + m.session.Address.ParentID + " → /agents → F3.")
+		return nil
+	}
 	if m.browserPreview || m.chat == nil || m.session == nil || !m.chat.ready || m.chatSessionChanging() {
 		m.append("Для редактора подключите сессию dsh.")
 		return nil

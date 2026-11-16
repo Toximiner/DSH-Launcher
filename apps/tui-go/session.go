@@ -29,7 +29,26 @@ type goalState struct {
 	} `json:"goal"`
 	Rounds int `json:"roundsStarted"`
 }
+
+// Child logs require a durable parent-qualified address, including after reconnect.
+type sessionReadAddress struct {
+	Kind      string `json:"kind"`
+	SessionID string `json:"sessionId,omitempty"`
+	ParentID  string `json:"parentSessionId,omitempty"`
+	ChildID   string `json:"childSessionId,omitempty"`
+	Mode      string `json:"mode,omitempty"`
+}
+
+func (a sessionReadAddress) wire(id string) sessionReadAddress {
+	if a.Kind == "subagent" && a.ChildID == id {
+		return a
+	}
+	return sessionReadAddress{Kind: "session", SessionID: id}
+}
+
 type sessionView struct {
+	Address sessionReadAddress
+
 	Title          string
 	Queue          []queuedMessage
 	QueueKnown     bool
@@ -78,7 +97,44 @@ func readSession(ctx context.Context, api *dshAPI, id string) (*sessionView, err
 	if projection.Kind != "sequenced" {
 		return nil, errors.New("сессии нужна миграция; откройте её в dsh")
 	}
-	view := &sessionView{ID: id}
+	view := &sessionView{ID: id, Address: sessionReadAddress{Kind: "session", SessionID: id}}
+	if raw := projection.Values["subagent"]; len(raw) > 0 && string(raw) != "null" {
+		var identity struct {
+			Mode string `json:"mode"`
+		}
+		if json.Unmarshal(raw, &identity) != nil {
+			return nil, errors.New("Не удалось прочитать адрес подагента.")
+		}
+		var list struct {
+			Items []struct {
+				ID       string `json:"sessionId"`
+				ParentID string `json:"parentSessionId"`
+				Origin   string `json:"origin"`
+			} `json:"items"`
+		}
+		if err := api.rpc(ctx, "session/list", map[string]any{"_request": map[string]any{}}, &list); err != nil {
+			return nil, err
+		}
+		found := false
+		for _, item := range list.Items {
+			if item.ID != id {
+				continue
+			}
+			// An ordinary fork may inherit a descriptor; the durable origin wins.
+			if item.Origin != "subagent" {
+				found = true
+				break
+			}
+			if item.ParentID != "" {
+				view.Address = sessionReadAddress{Kind: "subagent", ParentID: item.ParentID, ChildID: id, Mode: identity.Mode}
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, errors.New("Родитель подагента недоступен; откройте его из каталога родителя.")
+		}
+	}
 	if data, ok := projection.Values["title"]; ok {
 		_ = json.Unmarshal(data, &view.Title)
 	}
@@ -145,6 +201,9 @@ func changeSessionMode(ctx context.Context, api *dshAPI, id, action, objective s
 	current, err := readSession(ctx, api, id)
 	if err != nil {
 		return nil, err
+	}
+	if current.Address.Kind == "subagent" {
+		return current, errors.New("Режим подагента задаётся его родителем.")
 	}
 	goalActive := current.Goal != nil && current.Goal.Goal.Phase == "active"
 	goalOp := func(operation string) error {

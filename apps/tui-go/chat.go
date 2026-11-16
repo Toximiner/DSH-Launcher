@@ -158,7 +158,11 @@ func (m *model) startChat(id string) tea.Cmd {
 	s := &chatState{id: id, epoch: m.chatEpoch, ctx: ctx, cancel: cancel, inbox: make(chan chatNotice, 32), cursor: -1, clearedThrough: -1}
 	m.chat = s
 	login := m.settingsLogin
-	return tea.Batch(func() tea.Msg { go followChat(ctx, login, id, s.inbox); return waitChat(s)() }, m.startApprovals(ctx, id, s.epoch), m.ensureArchive())
+	address := sessionReadAddress{Kind: "session", SessionID: id}
+	if m.session != nil {
+		address = m.session.Address.wire(id)
+	}
+	return tea.Batch(func() tea.Msg { go followChat(ctx, login, id, s.inbox, address); return waitChat(s)() }, m.startApprovals(ctx, id, s.epoch), m.ensureArchive())
 }
 
 func (m *model) stopChat() {
@@ -186,6 +190,16 @@ func waitChat(s *chatState) tea.Cmd {
 
 func (m *model) submitText(text string) tea.Cmd { return m.submitContent(text, nil) }
 func (m *model) submitContent(text string, attachments []promptAttachment) tea.Cmd {
+	if m.session != nil && m.session.Address.Kind == "subagent" {
+		if m.chat == nil {
+			return nil
+		}
+		m.chat.note = "Просмотр подагента. /session " + m.session.Address.ParentID + " → /agents → F3 — сообщение."
+		m.input.SetValue(text)
+		m.rebuild()
+		return nil
+	}
+
 	if m.session != nil && m.isSessionArchived(m.session.ID) {
 		m.input.SetValue(text)
 		m.input.CursorEnd()
@@ -294,6 +308,11 @@ func (m *model) cancelChat() tea.Cmd {
 		return nil
 	}
 	id, login, ctx := m.session.ID, m.settingsLogin, m.settingsContext
+	address := m.session.Address
+	if address.Kind == "subagent" && address.Mode != "continuable" {
+		m.append("Остановку этого подагента задаёт его родитель.")
+		return nil
+	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -308,7 +327,11 @@ func (m *model) cancelChat() tea.Cmd {
 			var receipt struct {
 				Accepted bool `json:"accepted"`
 			}
-			err = api.rpc(ctx, "session/cancel", map[string]any{"request": map[string]any{"sessionId": id}}, &receipt)
+			if address.Kind == "subagent" {
+				err = api.rpc(ctx, "subagents/interruptByParent", map[string]any{"parentSessionId": address.ParentID, "childSessionId": id, "mode": "continuable"}, &receipt)
+			} else {
+				err = api.rpc(ctx, "session/cancel", map[string]any{"request": map[string]any{"sessionId": id}}, &receipt)
+			}
 			if err == nil && !receipt.Accepted {
 				err = errors.New("неподдерживаемое подтверждение отмены")
 			}
@@ -942,6 +965,9 @@ func (m *model) handlePromptResult(msg promptResult) {
 }
 
 func (m *model) composerText() (string, string) {
+	if m.session != nil && m.session.Address.Kind == "subagent" {
+		return " · подагент · просмотр", "F8 стоп · сообщения через /agents родителя"
+	}
 	if m.session != nil && m.isSessionArchived(m.session.ID) {
 		return " · архив", "/restore — восстановить перед отправкой"
 	}

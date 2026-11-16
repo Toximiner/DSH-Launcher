@@ -5,7 +5,9 @@ package main
 import "context"
 
 // The static adapter never opens a connection to a backend.
-func followChat(ctx context.Context, login, id string, out chan<- chatNotice) { <-ctx.Done() }
+func followChat(ctx context.Context, login, id string, out chan<- chatNotice, addresses ...sessionReadAddress) {
+	<-ctx.Done()
+}
 
 func followToolOutput(ctx context.Context, login, sessionID, jobID string, out chan<- toolOutput) {
 	<-ctx.Done()

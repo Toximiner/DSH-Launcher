@@ -130,6 +130,7 @@ func (m *model) startHistorySearch(fresh bool) tea.Cmd {
 	h.serial++
 	serial, cut, before, query, login, id := h.serial, h.cut, s.nextBefore, s.query, m.settingsLogin, h.sessionID
 	snapshot, scope := h.snapshot, s.scope
+	address := h.address.wire(id)
 	return func() tea.Msg {
 		defer cancel()
 		result := historySearchResult{reader: h, serial: serial, query: query, cut: cut, before: before, nextBefore: before, hitSeq: -1, snapshot: snapshot, scope: scope}
@@ -138,7 +139,7 @@ func (m *model) startHistorySearch(fresh bool) tea.Cmd {
 			defer api.close()
 			read := func(ctx context.Context, before int) (historyPage, error) {
 				var page historyPage
-				err := api.rpc(ctx, "session/events", map[string]any{"request": map[string]any{"address": map[string]any{"kind": "session", "sessionId": id}, "throughSeq": cut, "beforeSeq": before, "maxMessages": historyPageMessages}}, &page)
+				err := api.rpc(ctx, "session/events", map[string]any{"request": map[string]any{"address": address, "throughSeq": cut, "beforeSeq": before, "maxMessages": historyPageMessages}}, &page)
 				return page, err
 			}
 			if result.snapshot == nil {

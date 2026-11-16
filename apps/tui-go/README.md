@@ -1,8 +1,29 @@
-# Go TUI preview — 0.2.0-preview.35
+# Go TUI preview — 0.2.0-preview.36
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)
 
+Preview.36 verifies the background-work increment against the pinned actual dsh.
+Child sessions now use their durable parent-qualified address for chat, history
+and search, including direct `--session <child-id>` reconnect. `/parent` returns
+to the parent. The child chat is a viewer: send follow-ups through the parent's
+`/agents` → F3, and F8 interrupts through the parent API. Ordinary forks keep
+ordinary addresses even when their history contains an inherited descriptor.
+Shared Host jobs use ownerless output reads, display their scope and output gaps,
+and require explicit stop confirmation. F5 reads a new output snapshot without
+consuming the model's output cursor. Schedule history misses are errors, preserving
+the previous snapshot.
+
+`test/real_background.py` runs an actual shell job, a native continuable subagent,
+and actual schedule delivery against an isolated dsh/local model. It covers output
+refresh, cancelled/confirmed stops, child continuation, child history/search,
+parent navigation, direct child CLI reconnect/F8, schedule run/history, and
+reconnect without repeating work. A small test producer exercises shared jobs
+and gap markers through the real registry; it does not simulate a shell process.
+`--capture <prefix>` saves actual 100×30 and 80×24 terminal cells.
+Team-task projections remain read-only; mutation needs a backend contract.
+These panels remain manual F5 snapshots; registry jobs are not promised to survive
+a dsh process restart.
 
 Preview.35 adds shared workbench dialogs for roadmap stages 6–10. All lists are
 point-in-time snapshots; F5 rereads them. Search filters names, ↑/↓ selects,

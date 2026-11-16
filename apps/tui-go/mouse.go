@@ -173,7 +173,7 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 			return m.cancelChat()
 		}
 	}
-	if m.page == chatPage && msg.Y == composer.y+2 {
+	if m.page == chatPage && msg.Y == composer.y+2 && (m.session == nil || m.session.Address.Kind != "subagent") {
 		x := mainX + 2 + len([]rune("Режим: "))
 		for i, name := range []string{"Обычный", "План", "Цель"} {
 			width := len([]rune(name)) + 2

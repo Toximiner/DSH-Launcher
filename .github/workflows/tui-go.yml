@@ -69,6 +69,11 @@ jobs:
           build/go-pty-env/bin/python apps/tui-go/test/real_workbench.py \
             --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
             --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh"
+      - name: Actual dsh child agents, background jobs and schedule delivery
+        run: |
+          build/go-pty-env/bin/python apps/tui-go/test/real_background.py \
+            --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
+            --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh"
       - name: Build static browser preview
         run: python3 apps/tui-go/web/build.py
       - uses: actions/upload-artifact@v7

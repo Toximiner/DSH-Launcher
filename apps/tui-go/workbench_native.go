@@ -25,7 +25,11 @@ func readBenchJob(ctx context.Context, api *dshAPI, session, id string) (string,
 	state := toolOutput{}
 	total := int64(-1)
 	var invalid error
-	err := readMuxStream(ctx, api, "job/follow", map[string]any{"request": map[string]any{"sessionId": session, "jobId": id}}, func(raw json.RawMessage) bool {
+	request := map[string]any{"jobId": id}
+	if session != "" {
+		request["sessionId"] = session
+	}
+	err := readMuxStream(ctx, api, "job/follow", map[string]any{"request": request}, func(raw json.RawMessage) bool {
 		var frame jobOutputFrame
 		if json.Unmarshal(raw, &frame) != nil {
 			invalid = errors.New("invalid output")
@@ -45,6 +49,9 @@ func readBenchJob(ctx context.Context, api *dshAPI, session, id string) (string,
 	label := "Вывод задания · снимок · F5 обновить\n"
 	if state.Gap {
 		label += "Часть вывода недоступна (разрыв/лимит).\n"
+	}
+	if state.Text == "" {
+		label += "Пока нет вывода. F5 — перечитать.\n"
 	}
 	return label + state.Text, nil
 }

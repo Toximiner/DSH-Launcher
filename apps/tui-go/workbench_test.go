@@ -182,3 +182,19 @@ func TestWorkbenchMouseSelectsWithoutExecutingAndScrollsFile(t *testing.T) {
 		t.Fatal("file wheel did not scroll")
 	}
 }
+
+func TestWorkbenchJobSearchKeepsSpacesAndRefusesForeignOwner(t *testing.T) {
+	m := benchTestModel(t, "jobs")
+	d := m.workbench
+	m.benchKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Shared")})
+	m.benchKey(tea.KeyMsg{Type: tea.KeySpace})
+	m.benchKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("host")})
+	if d.search.Value() != "Shared host" || d.action != nil {
+		t.Fatal("job search swallowed a space or triggered an action", d.search.Value())
+	}
+	d.search.SetValue("")
+	d.rows[0].Data["owner"] = "other"
+	if m.benchPrepare(tea.KeyEnter) != nil || d.document != "" {
+		t.Fatal("foreign job output was opened")
+	}
+}

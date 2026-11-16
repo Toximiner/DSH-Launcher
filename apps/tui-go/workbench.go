@@ -28,6 +28,7 @@ type benchAction struct {
 }
 type workbench struct {
 	lastResult                               string
+	documentOwner                            string
 	fileBody                                 string
 	ctx                                      context.Context
 	cancel                                   context.CancelFunc
@@ -221,7 +222,7 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 		}
 	case "jobs":
 		if d.document != "" {
-			text, e := readBenchJob(ctx, api, d.id, d.document)
+			text, e := readBenchJob(ctx, api, d.documentOwner, d.document)
 			return nil, text, true, e
 		}
 		raw, e := firstBenchFrame(ctx, api, "job/list", map[string]any{"request": map[string]any{"sessionId": d.id}})
@@ -232,14 +233,21 @@ func readBench(ctx context.Context, api *dshAPI, d *workbench) ([]benchRow, stri
 			} else {
 				for _, v := range arrayValue(objectValue(value)["jobs"]) {
 					r := objectValue(v)
-					add(stringValue(r, "id"), stringValue(r, "label")+" · "+stringValue(r, "status"), fmt.Sprintf("Тип: %v\nСостояние: %v\nПрогресс: %v\n\nCtrl+X — запросить остановку задания.", r["kind"], r["status"], r["progress"]), r)
+					owner := stringValue(r, "owner")
+					if owner != "" && owner != d.id {
+						return nil, "", false, errors.New("Список содержит задание другой сессии; F5 перечитать.")
+					}
+					if owner == "" {
+						owner = "Общее задание Host"
+					}
+					add(stringValue(r, "id"), stringValue(r, "label")+" · "+stringValue(r, "status"), fmt.Sprintf("Тип: %s\nСостояние: %s\nВладелец: %s\nПрогресс: %s\n\nCtrl+X — запросить остановку задания.", stringValue(r, "kind"), stringValue(r, "status"), owner, stringValue(r, "progress")), r)
 				}
 			}
 		}
 	case "schedules":
 		if d.document != "" {
 			err = api.rpc(ctx, "schedule/history", map[string]any{"request": map[string]any{"id": d.document, "limit": 100}}, &value)
-			if err != nil {
+			if err != nil || stringValue(objectValue(value), "code") != "" || objectValue(value)["records"] == nil {
 				return nil, "", false, errors.New("История расписания недоступна; F5 обновить.")
 			}
 			return nil, "История расписания · последние 100 записей\n" + clean(prettyValue(value)), true, nil
@@ -502,6 +510,11 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 		return m.loadWorkbench()
 	}
 	if d.kind == "jobs" && ok && key == tea.KeyEnter {
+		d.documentOwner = stringValue(r.Data, "owner")
+		if d.documentOwner != "" && d.documentOwner != d.id {
+			d.note = "Задание принадлежит другой сессии; F5 перечитать."
+			return nil
+		}
 		d.document = r.ID
 		return m.loadWorkbench()
 	}
@@ -596,6 +609,9 @@ func (m *model) benchPrepare(key tea.KeyType) tea.Cmd {
 	case "jobs":
 		if key == tea.KeyCtrlX {
 			action = &benchAction{"job/kill", map[string]any{"request": map[string]any{"sessionId": d.id, "jobId": r.ID}}, "Запросить остановку задания " + r.Title}
+			if stringValue(r.Data, "owner") == "" {
+				action.Label = "Остановить общее задание Host: " + r.Title
+			}
 		}
 	case "agents":
 		if key == tea.KeyF3 && r.Data["mode"] == "continuable" {
@@ -795,7 +811,12 @@ func (m *model) benchKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			var cmd tea.Cmd
 			d.view, cmd = d.view.Update(msg)
 			return cmd, true
-		case tea.KeyEnter, tea.KeyCtrlN, tea.KeyCtrlX, tea.KeyF3, tea.KeySpace, tea.KeyCtrlG:
+		case tea.KeySpace:
+			if d.kind == "packages" || d.kind == "schedules" {
+				return m.benchPrepare(msg.Type), true
+			}
+			msg.Type, msg.Runes = tea.KeyRunes, []rune{' '}
+		case tea.KeyEnter, tea.KeyCtrlN, tea.KeyCtrlX, tea.KeyF3, tea.KeyCtrlG:
 			return m.benchPrepare(msg.Type), true
 		}
 	}

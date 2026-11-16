@@ -13,7 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func followChat(ctx context.Context, login, id string, out chan<- chatNotice) {
+func followChat(ctx context.Context, login, id string, out chan<- chatNotice, addresses ...sessionReadAddress) {
 	post := func(n chatNotice) bool {
 		select {
 		case out <- n:
@@ -24,7 +24,7 @@ func followChat(ctx context.Context, login, id string, out chan<- chatNotice) {
 	}
 	delay := time.Second
 	for ctx.Err() == nil {
-		err := readChatConnection(ctx, login, id, func(frame *chatFrame) bool { return post(chatNotice{frame: frame}) })
+		err := readChatConnection(ctx, login, id, func(frame *chatFrame) bool { return post(chatNotice{frame: frame}) }, addresses...)
 		if ctx.Err() != nil {
 			return
 		}
@@ -45,14 +45,18 @@ func followChat(ctx context.Context, login, id string, out chan<- chatNotice) {
 	}
 }
 
-func readChatConnection(ctx context.Context, login, id string, receive func(*chatFrame) bool) error {
+func readChatConnection(ctx context.Context, login, id string, receive func(*chatFrame) bool, addresses ...sessionReadAddress) error {
 	api, err := openAPI(ctx, login)
 	if err != nil {
 		return err
 	}
 	defer api.close()
+	address := sessionReadAddress{Kind: "session", SessionID: id}
+	if len(addresses) > 0 {
+		address = addresses[0].wire(id)
+	}
 	return readMuxStream(ctx, api, "session/follow", map[string]any{"request": map[string]any{
-		"address": map[string]any{"kind": "session", "sessionId": id}, "maxMessages": 50, "assistantStream": true,
+		"address": address, "maxMessages": 50, "assistantStream": true,
 	}}, func(data json.RawMessage) bool {
 		var frame chatFrame
 		if json.Unmarshal(data, &frame) != nil {

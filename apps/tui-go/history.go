@@ -24,6 +24,7 @@ type historyLocation struct{ before, offset, number int }
 type historyMessageRow struct{ seq, start, end int }
 
 type historyReader struct {
+	address                    sessionReadAddress
 	snapshot                   *historySnapshot
 	toolFocused                bool
 	toolRows                   []chatToolHit
@@ -69,7 +70,7 @@ func (m *model) openHistory() tea.Cmd {
 		return nil
 	}
 	ctx, cancel := context.WithCancel(m.chat.ctx)
-	h := &historyReader{selectedSeq: -1, ctx: ctx, cancel: cancel, sessionID: m.chat.id, epoch: m.chat.epoch,
+	h := &historyReader{address: m.session.Address.wire(m.chat.id), selectedSeq: -1, ctx: ctx, cancel: cancel, sessionID: m.chat.id, epoch: m.chat.epoch,
 		cut: m.chat.cursor, before: m.chat.cursor + 1, first: -1, focused: m.input.Focused(), viewport: viewport.New(1, 1)}
 	m.historyReader = h
 	m.input.Blur()
@@ -111,7 +112,7 @@ func (m *model) requestHistory(direction string, cut, before int) tea.Cmd {
 			defer api.close()
 			read := func(ctx context.Context, before int) (historyPage, error) {
 				var page historyPage
-				err := api.rpc(ctx, "session/events", map[string]any{"request": map[string]any{"address": map[string]any{"kind": "session", "sessionId": h.sessionID}, "throughSeq": cut, "beforeSeq": before, "maxMessages": historyPageMessages}}, &page)
+				err := api.rpc(ctx, "session/events", map[string]any{"request": map[string]any{"address": h.address.wire(h.sessionID), "throughSeq": cut, "beforeSeq": before, "maxMessages": historyPageMessages}}, &page)
 				if err != nil {
 					err = errors.New("История недоступна. Проверьте подключение; ←/→ или F5 повторят чтение.")
 				}
