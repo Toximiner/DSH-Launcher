@@ -167,7 +167,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-history-') as directory:
             }).encode(), headers={'Content-Type': 'application/json', 'Origin': origin})
             with opener.open(call, timeout=15) as response:
                 value = json.load(response)['result']
-            assert value['ok'], f'Actual dsh refused {method}'
+            assert value['ok'], f'Actual dsh refused {method}: {value}'
             return value.get('value')
 
         session = rpc('session/create', {'cwd': str(project), 'sessionId': 'session-' + uuid.uuid4().hex})['sessionId']
@@ -297,6 +297,9 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-history-') as directory:
         fork_app.wait('Ветвление сессии')
         fork_app.send('\r')
         child = wait_for(lambda: next(iter(session_ids() - before_fork), None), timeout=20)
+        # Discovery can expose a child while its fork request is still seeding
+        # history. The dialog closes only after the creation RPC acknowledges.
+        wait_for(lambda: (fork_app.pump(), 'Ветвление сессии' not in fork_app.text)[1], timeout=20)
         assert len(session_ids() - before_fork) == 1, 'Fork created multiple sessions'
         child_page = rpc('session/events', {'address': {'kind': 'session', 'sessionId': child}, 'maxMessages': 4})
         child_text = json.dumps(child_page['records'])
@@ -420,6 +423,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-history-') as directory:
         fork_app.wait(f'История — по событие #{exact_seq}')
         fork_app.send('\r')
         exact_child = wait_for(lambda: next(iter(session_ids() - before_exact_fork), None), timeout=20)
+        wait_for(lambda: (fork_app.pump(), 'Ветвление сессии' not in fork_app.text)[1], timeout=20)
         assert len(session_ids() - before_exact_fork) == 1, 'Exact fork created multiple children'
         exact_records = rpc('session/events', {'address': {'kind': 'session', 'sessionId': exact_child}, 'maxMessages': 100})['records']
         exact_text = json.dumps(exact_records)
@@ -453,6 +457,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-history-') as directory:
         fork_app.wait('История — по событие #')
         fork_app.send('\r')
         user_child = wait_for(lambda: next(iter(session_ids() - before_user_fork), None), timeout=20)
+        wait_for(lambda: (fork_app.pump(), 'Ветвление сессии' not in fork_app.text)[1], timeout=20)
         user_records = rpc('session/events', {'address': {'kind': 'session', 'sessionId': user_child}, 'maxMessages': 100})['records']
         user_text = json.dumps(user_records)
         assert 'ARCHIVE USER 001' in user_text and 'ARCHIVE ANSWER 001' not in user_text, 'User cut included the old answer'

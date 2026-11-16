@@ -822,23 +822,11 @@ compatibility.
 
 Work proceeds in small, reviewable checkpoints with user feedback. The
 [roadmap](../../docs/tui-roadmap/README.en.md) is the maintained capability inventory
-and milestone order. Milestone 1 is complete: TUI preferences live in the top menu,
-while dsh settings remain separate. Streamed text chat is implemented in preview.9;
-actual-model acceptance was checked with Qwen3.8-27B on November 16, 2026. Tool-result cards are implemented in preview.10. Agent questions are implemented in preview.12, including timed waits and continued
-answers. Queue submission and observation are implemented in preview.13; individual
-queue removal is implemented in preview.14 and multiline editing in preview.15.
-Queue-to-steering promotion is implemented in preview.16; nested PTC calls in
-preview.17 and live command stdout/stderr in preview.18. Preview.19 adds read-only
-paginated history; preview.20 adds message search and preview.21 adds renaming.
-Preview.22 branches at the latest completed turn; preview.23 branches at selected
-messages. Preview.24 adds archive/restore, preview.25 raises the minimum to 80×24,
-preview.26 formats Markdown, preview.27 adds message/code copying, and preview.28
-adds syntax coloring. Preview.29 adds collapsible history tool details; preview.30
-adds tool search and cross-page replacement support. Preview.31 adds session
-model/reasoning selection. Preview.32 adds provider creation/editing, schema forms,
-revision conflicts, and masked API-key entry. Preview.33 completes generic
-settings editing with multiline/JSON values and local validation. Permission dialogs are implemented
-in preview.11 and tested through the actual dsh approval service. OAuth/account adapters, workspace features,
-additional plugin support, and launcher lifecycle remain planned. No
-full-parity claim is made by this preview. The legacy JS client and its packaging
-have been removed; its dsh installation flow remains pending in Go.
+and milestone order. The client includes streamed chat, tool output, questions,
+permissions, queues, history/search/forks/archive, models/settings, goals/presets,
+workbench adapters and owned runtime installation/update/rollback/diagnostics.
+Actual-model acceptance was checked with Qwen3.8-27B on November 16, 2026.
+OAuth/account adapters, full document editing, the declarative plugin contract,
+remaining package adapters and release polish remain in the roadmap. Public TUI
+update delivery still needs its first dedicated release. Full GUI/plugin parity
+is not claimed.

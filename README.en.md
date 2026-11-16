@@ -13,19 +13,22 @@ Run a private live instance with actual dsh in GitHub Codespaces: [instructions]
 
 GUI parity inventory, implementation milestones, and plugin strategy: [TUI roadmap](docs/tui-roadmap/README.en.md).
 
-The public demo preview is disabled. For a live instance with actual dsh, use
-the [private Codespaces deployment](tools/live/README.md).
+Install a native Linux build from the
+[TUI workflow artifacts](https://github.com/Toximiner/DSH-Launcher/actions/workflows/tui-go.yml).
 
 The Linux terminal client uses **Go + Bubble Tea** in [apps/tui-go](apps/tui-go/README.md).
 It provides panels, mouse and keyboard navigation, input history, and scrolling.
 TUI preferences open from the top File menu, F4, or Alt+T; mouse/history choices
 are persisted. dsh settings remain a separate section. Pass a running dsh login URL through
-`DSH_TUI_URL` or `--url` to read its settings without editing them.
+`DSH_TUI_URL` or `--url` to read and edit available settings through dsh schemas.
 Session attachment/creation and agent modes are available. `--start` launches dsh
 and offers dshmarket preinstallation into its profile. The Marketplace page provides
 search and confirmed plugin install/update/remove actions. Attached sessions support
 streamed text chat: Enter sends, F8 stops. Offline input remains a local draft.
-Actual replies require a configured LLM provider in dsh. The dsh installer remains pending. The legacy JS terminal client is removed.
+Actual replies require a configured LLM provider in dsh. `/runtime` manages a
+user-local dsh installation and its owned process; `/updates` updates and rolls
+back dsh and the TUI itself; `/diagnostics` shows logs and exports masked reports.
+See the [TUI instructions](apps/tui-go/README.md).
 
 Tool cards show execution state and results; F6 selects a card, Enter or click
 expands its details, and Esc restores composer focus. Permission dialogs support explicit one-shot allow/reject; F7 reopens a deferred request. Agent questions support options, multiple selections, and multiline custom text; F5 submits the batch and F7 reopens deferred requests.
@@ -33,8 +36,8 @@ expands its details, and Esc restores composer focus. Permission dialogs support
 While the agent runs, Enter queues the next task in dsh. Pending tasks appear
 in chat; F8 stops the current task and retains the queue.
 
-Download Go binaries: [Linux amd64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.17/dsh-launcher-tui-go_linux_amd64) ·
-[Linux arm64](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.17/dsh-launcher-tui-go_linux_arm64) · [SHA-256](https://toximiner.github.io/DSH-Launcher/go-preview/0.2.0-preview.17/SHA256SUMS).
+The `dsh-launcher-tui-go-preview` artifact of a successful CI run on the selected
+branch contains the amd64/arm64 binaries.
 The Go client runs without Node.js; the dsh backend requires Node.js 24.9+.
 
 ## How it works
