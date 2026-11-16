@@ -110,6 +110,13 @@ func (m *model) togglePreference(index int) tea.Cmd {
 	}
 	m.prefs = next
 	m.applyClientAppearance()
+	if index == 6 {
+		if m.savePreferences != nil {
+			m.preferencesNote = tr("Сохранено.")
+		} else {
+			m.preferencesNote = tr("Применено на время этого сеанса.")
+		}
+	}
 	if index == 5 {
 		m.resize()
 	}
@@ -305,6 +312,9 @@ func (m *model) menuBar(width int) string {
 }
 
 func selectedRow(text string, selected bool, width int) string {
+	if selected {
+		text = "› " + text
+	}
 	text = ansi.Truncate(text, width, "…")
 	if selected {
 		return lipgloss.NewStyle().Width(width).Bold(true).Foreground(uiColor("#79c0ff")).Background(uiColor("#233044")).Render(text)
