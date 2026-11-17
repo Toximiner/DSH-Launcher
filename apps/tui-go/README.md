@@ -1,6 +1,6 @@
-# Go TUI preview — OpenCode tools and decisions
+# Go TUI preview — OpenCode settings and shortcuts
 
-The experimental `0.2.0-preview.40-opencode.7` includes visited session tabs,
+The experimental `0.2.0-preview.40-opencode.8` includes visited session tabs,
 per-session drafts, compact home/conversation composers, optional right context
 and Ctrl+P navigation. Command, session/workspace and model pickers share a flat
 frame, measured hit targets, teal selection and a dimmed backdrop. Tool calls
@@ -9,10 +9,22 @@ agent questions use flat decision dialogs. Actual reasoning supplied by dsh is
 collapsed separately; Ctrl+O or `/thoughts` toggles it, as do header clicks.
 Ctrl+O also works within history. Copying replies preserves the reply source.
 
+Preview `.8` replaces the GUI-style settings panes with a compact searchable,
+grouped list retaining all 15 settings actions and current values. Left/Right
+changes local theme, language, mouse and input-history preferences; dsh settings
+still open explicit revision-checked forms. The shortcut reference, schema forms
+and small launcher dialogs use flat surfaces. F10 terminal selection and F7
+pending-request access remain available.
+
+Auxiliary-screen migration (stage 4) is in progress. Plugins, market, automation,
+files, terminals, subagents, queue/history, runtime install/update/rollback and
+diagnostics still await this visual pass. The separate preview does not replace
+the installed application.
+
 From the repository root, run the separate local build:
 
 ```sh
-./build/previews/opencode-07/dsh-launcher-tui --start
+./build/previews/opencode-08/dsh-launcher-tui --start
 ```
 
 The binary remains separate from earlier builds. Main entry points:

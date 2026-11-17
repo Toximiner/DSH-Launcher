@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestShortcutGroupsCoverEveryContextOnce(t *testing.T) {
@@ -128,5 +129,55 @@ func TestShortcutHelpMouseAndStickyHeading(t *testing.T) {
 	}
 	if m.chrome.dialog != "" {
 		t.Fatal("close button missed its visible target")
+	}
+}
+
+func TestShortcutHelpFlatSurfaceAndMeasuredTargets(t *testing.T) {
+	defer activeEnglish.Store(false)
+	for _, english := range []bool{false, true} {
+		activeEnglish.Store(english)
+		for _, size := range []tea.WindowSizeMsg{{Width: 80, Height: 24}, {Width: 100, Height: 30}, {Width: 160, Height: 40}} {
+			m := newModel()
+			if english {
+				m.prefs.Language = "en"
+			}
+			m.Update(size)
+			m.openDialog("help")
+			for group := 0; group <= len(shortcutGroups); group++ {
+				m.chrome.helpGroup = group
+				box, lines, hits := m.shortcutHelpLayout()
+				_, view := m.shortcutHelpView()
+				if lipgloss.Width(view) != box.width || lipgloss.Height(view) != box.height {
+					t.Fatalf("flat help frame changed measured geometry: %dx%d vs %+v", lipgloss.Width(view), lipgloss.Height(view), box)
+				}
+				if strings.ContainsAny(clean(view), "╭╮╰╯│─") {
+					t.Fatal("help retained decorative box borders")
+				}
+				for _, hit := range hits {
+					row := hit.y - box.y - 1
+					x := hit.x - box.x - 2
+					if row < 0 || row >= len(lines) || x < 0 || x+hit.width > box.width-4 {
+						t.Fatalf("help hit outside visible content: %+v", hit)
+					}
+					visible := ansi.Cut(clean(lines[row]), x, x+hit.width)
+					want := ""
+					switch hit.action {
+					case "previous":
+						want = "‹"
+					case "next":
+						want = "›"
+					case "close":
+						if row == 0 {
+							want = "esc"
+						} else {
+							want = strings.Trim(tr("[ Закрыть · Enter / Esc ]"), "[] ")
+						}
+					}
+					if visible != want {
+						t.Fatalf("mouse hit %s does not match visible control: %q vs %q", hit.action, visible, want)
+					}
+				}
+			}
+		}
 	}
 }

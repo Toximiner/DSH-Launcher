@@ -7,8 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+)
 
 type shortcutGroup struct {
 	title    string
@@ -46,7 +45,7 @@ func shortcutSection(s shortcut) int {
 	return 0
 }
 func shortcutHeading(group, width int) string {
-	return accent().Bold(true).Render(ansi.Truncate("── "+tr(shortcutGroups[group-1].title)+" ──", width, "…"))
+	return chooserGroup(ansi.Truncate(tr(shortcutGroups[group-1].title), width, "…"))
 }
 func shortcutContent(query string, group, width int) ([]shortcutHelpLine, int) {
 	query = strings.ToLower(strings.TrimSpace(query))
@@ -81,7 +80,7 @@ func shortcutContent(query string, group, width int) ([]shortcutHelpLine, int) {
 			for row := 0; row < max(len(keys), len(actions)); row++ {
 				key, action := "", ""
 				if row < len(keys) {
-					key = accent().Bold(true).Render(keys[row])
+					key = heading().Render(keys[row])
 				}
 				if row < len(actions) {
 					action = actions[row]
@@ -119,18 +118,18 @@ func (m *model) shortcutHelpLayout() (area, []string, []shortcutHelpHit) {
 	if c.helpGroup > 0 && c.helpGroup <= len(shortcutGroups) {
 		group = tr(shortcutGroups[c.helpGroup-1].title)
 	}
-	close := "[×]"
-	title := bar(heading().Render(tr("Горячие клавиши")), accent().Render(close), width)
-	prev, next := "[‹]", "[›]"
-	category := tr("Раздел: ") + accent().Render(prev) + " " + group + " " + accent().Render(next)
+	close := "esc"
+	title := bar(heading().Render(tr("Горячие клавиши")), muted().Render(close), width)
+	prev, next := "‹", "›"
+	category := tr("Раздел: ") + muted().Render(prev) + " " + group + " " + muted().Render(next)
 	keyWidth := min(31, max(22, width*2/5))
 	columns := lipgloss.NewStyle().Width(keyWidth).Render(tr("Клавиши")) + "  " + tr("Действие")
-	lines := []string{title, category, tr("Поиск: ") + c.helpQuery, muted().Render(columns), muted().Render(strings.Repeat("─", width))}
+	lines := []string{title, category, tr("Поиск: ") + c.helpQuery, muted().Render(columns), ""}
 	x, y := box.x+2, box.y+1
 	hits := []shortcutHelpHit{
 		{area{x + width - lipgloss.Width(close), y, lipgloss.Width(close), 1}, "close"},
-		{area{x + lipgloss.Width(tr("Раздел: ")), y + 1, 3, 1}, "previous"},
-		{area{x + lipgloss.Width(tr("Раздел: ")) + 3 + 1 + lipgloss.Width(group) + 1, y + 1, 3, 1}, "next"},
+		{area{x + lipgloss.Width(tr("Раздел: ")), y + 1, lipgloss.Width(prev), 1}, "previous"},
+		{area{x + lipgloss.Width(tr("Раздел: ")) + lipgloss.Width(prev) + 1 + lipgloss.Width(group) + 1, y + 1, lipgloss.Width(next), 1}, "next"},
 	}
 	all, matches := shortcutContent(c.helpQuery, c.helpGroup, width)
 	maxOffset := 0
@@ -155,8 +154,8 @@ func (m *model) shortcutHelpLayout() (area, []string, []shortcutHelpHit) {
 		lines = append(lines, "")
 	}
 	lines = append(lines, muted().Render(fmt.Sprintf(tr("Найдено: %d · строки %d–%d/%d"), matches, offset+1, end, len(all))),
-		muted().Render(tr("Tab / ← → раздел · ↑/↓ PgUp/PgDn прокрутка · Ctrl+U сброс")), tr("[ Закрыть · Enter / Esc ]"))
-	hits = append(hits, shortcutHelpHit{area{x, y + len(lines) - 1, lipgloss.Width(tr("[ Закрыть · Enter / Esc ]")), 1}, "close"})
+		muted().Render(tr("Tab / ← → раздел · ↑/↓ PgUp/PgDn прокрутка · Ctrl+U сброс")), strings.Trim(tr("[ Закрыть · Enter / Esc ]"), "[] "))
+	hits = append(hits, shortcutHelpHit{area{x, y + len(lines) - 1, lipgloss.Width(strings.Trim(tr("[ Закрыть · Enter / Esc ]"), "[] ")), 1}, "close"})
 	for i, line := range lines {
 		lines[i] = ansi.Truncate(line, width, "…")
 	}
@@ -164,7 +163,7 @@ func (m *model) shortcutHelpLayout() (area, []string, []shortcutHelpHit) {
 }
 func (m *model) shortcutHelpView() (area, string) {
 	box, lines, _ := m.shortcutHelpLayout()
-	return box, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Highlight)
+	return box, flatDialogSurface(box, lines)
 }
 func (m *model) shortcutHelpMouse(msg tea.MouseMsg) tea.Cmd {
 	box, _, hits := m.shortcutHelpLayout()

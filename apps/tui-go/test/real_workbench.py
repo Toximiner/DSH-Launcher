@@ -18,7 +18,7 @@ import uuid
 from terminal import Terminal, wait_for
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--binary', default='build/previews/opencode-04/dsh-launcher-tui')
+parser.add_argument('--binary', default='build/previews/opencode-08/dsh-launcher-tui')
 parser.add_argument('--dsh', required=True)
 parser.add_argument('--capture', help='Prefix for actual workbench terminal-cell captures')
 args = parser.parse_args()
@@ -340,32 +340,50 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         assert rpc('session/projections', {'request': {'sessionId': session_id}})['value']['values']['permissions']['currentValue'] == initial_permission
         back()
         assert not requests, 'Agent controls invoked a model'
-        # The GUI-shaped settings hub keeps its modal context across actual panels.
-        app.send('\x1bOS')
-        app.wait('Конфигурация dsh')
+        # The searchable settings hub keeps its modal context and never writes on navigation.
+        app.send('settings preserved draft')
+        app.send('\x1bOS')  # F4 opens the flat grouped settings hub.
+        app.wait('Настройки TUI')
         def settings_ready():
             app.pump()
             return 'Загрузка настроек…' not in app.text
         wait_for(settings_ready)
         capture('Настройки TUI', sizes=((160, 40), (100, 30), (80, 24)))
-        app.send('\x1b[B\r\r')
+        # F1 opens searchable shortcuts over settings, and Esc restores the same hub.
+        app.send('\x1bOP')
+        app.wait('Горячие клавиши')
+        capture('Горячие клавиши', sizes=((160, 40), (100, 30), (80, 24)))
+        app.send('Ctrl+O')
+        app.wait('Поиск: Ctrl+O')
+        app.wait('размышления')
+        capture('Горячие клавиши', sizes=((160, 40), (100, 30), (80, 24)))
+        app.send('\x1b')
+        app.wait('Настройки TUI')
+        def settings_action(query):
+            app.send('\x15' + query)
+            app.wait('Поиск: ' + query)
+            app.send('\r')
+        settings_action('Модель сессии')
         app.wait('Модель сессии')
         app.wait('Текущая:')
         app.send('\x1b')
-        app.wait('Конфигурация dsh')
-        app.send('\x1b[D\x1b[B\r\r')
+        app.wait('Настройки TUI')
+        app.wait('Поиск: Модель сессии')
+        settings_action('Состав и состояние')
         app.wait('Плагины dsh')
         app.wait('Снимок dsh')
         app.send('\x1b')
-        app.wait('Конфигурация dsh')
-        app.send('\x1b[D\x1b[B\r\r')
+        app.wait('Настройки TUI')
+        settings_action('Просмотр пресетов')
         app.wait('Пресеты агента')
         app.wait('Текущий пресет:')
         app.send('\x1b')
-        app.wait('Конфигурация dsh')
-        app.send('\x1b[D\x1b[H\x1b[C\r')
+        app.wait('Настройки TUI')
+        settings_action('Доступ по умолчанию')
         app.wait('Настройки · permission')
         app.wait('Значение:')
+        capture('Настройки · permission', sizes=((160, 40), (100, 30), (80, 24)))
+        assert rpc('session/projections', {'request': {'sessionId': session_id}})['value']['values']['permissions']['currentValue'] == initial_permission, 'Opening settings changed the current permission'
         app.send('\x15read-only\r\x1b[15~')
         app.wait('Настройки сохранены.')
         assert rpc('session/projections', {'request': {'sessionId': session_id}})['value']['values']['permissions']['currentValue'] == initial_permission, 'Default permission changed the existing session'
@@ -373,15 +391,18 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         assert future['ok'], future
         assert rpc('session/projections', {'request': {'sessionId': future['value']['sessionId']}})['value']['values']['permissions']['currentValue'] == 'read-only', 'New session did not inherit the saved permission default'
         app.send('\x1b')
-        app.wait('Конфигурация dsh')
+        app.wait('Настройки TUI')
+        app.wait('Поиск: Доступ по умолчанию')
         app.send('\r')
         app.wait('Настройки · permission')
         app.wait('Значение:')
         app.send('\x15workspace-write\r\x1b[15~')
         app.wait('Настройки сохранены.')
         app.send('\x1b')
-        app.wait('Конфигурация dsh')
+        app.wait('Настройки TUI')
         app.send('\x1b')
+        app.wait('settings preserved draft')
+        app.send('\x15')
         app.wait(landing_marker)
         assert not requests, 'Settings navigation unexpectedly invoked a model'
         for command, title in [('/workspaces-manager', 'Рабочие области'), ('/packages', 'Управление пакетами'),
@@ -626,7 +647,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         assert any('approved' in str(message) for message in requests[4]['messages'] if message.get('role') == 'tool')
         app.send('\x04')
         app.exited()
-        print('Actual dsh workbench: OpenCode shell landing/palette/tab mouse navigation and per-session drafts, shared session/workspace picker filtering/mouse/cancellation/F3 management, grouped long-model chooser mouse selection without hidden writes and explicit selection/readback/restore, agent landing, conversation layout/stats/source copy/history, actual public reasoning show/hide via CtrlO/slash/mouse/history with no extra model calls, model/preset controls, permission confirmation/cancellation/restore, GUI-shaped plugins page/settings/components/toggle cancellation/enable/restore, inventories, workspace files/pages, explicit schedule create/pause/delete, terminal bridge/detach/close, multiline draft/upload/send, schedule CAS conflict, both plan-review choices and exactly five local model requests OK')
+        print('Actual dsh workbench: OpenCode shell landing/palette/tab mouse navigation and per-session drafts, shared session/workspace picker filtering/mouse/cancellation/F3 management, grouped long-model chooser mouse selection without hidden writes and explicit selection/readback/restore, agent landing, conversation layout/stats/source copy/history, actual public reasoning show/hide via CtrlO/slash/mouse/history with no extra model calls, model/preset controls, permission confirmation/cancellation/restore, searchable grouped settings/help/schema forms with preserved draft and default-permission readback/restore, plugins page/components/toggle cancellation/enable/restore, inventories, workspace files/pages, explicit schedule create/pause/delete, terminal bridge/detach/close, multiline draft/upload/send, schedule CAS conflict, both plan-review choices and exactly five local model requests OK')
     except Exception:
         if app:
             print(app.text, flush=True)

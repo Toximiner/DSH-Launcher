@@ -6,8 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
 )
 
 var settingsTabs = []string{"Общие", "Модели", "Встроенные плагины", "Пресеты агента", "Маркет плагинов"}
@@ -19,9 +17,9 @@ type settingsHubHit struct {
 	index  int
 }
 
-func (m *model) settingsHubRows() []settingsHubRow {
+func (m *model) settingsHubGroupRows(group int) []settingsHubRow {
 	open := tr("Открыть")
-	switch m.chrome.settingsTab {
+	switch group {
 	case 1:
 		return []settingsHubRow{
 			{tr("Модель сессии"), m.modelButton(), tr("Модель и уровень рассуждения текущего диалога"), "models"},
@@ -167,97 +165,164 @@ func (m *model) settingsHubAction(action string) tea.Cmd {
 	return nil
 }
 
+type settingsHubEntry struct {
+	settingsHubRow
+	group int
+}
+
+func (m *model) settingsHubEntries() []settingsHubEntry {
+	var entries []settingsHubEntry
+	query := strings.ToLower(strings.TrimSpace(m.chrome.settingsQuery))
+	for group := range settingsTabs {
+		if m.chrome.settingsTab >= 0 && m.chrome.settingsTab != group {
+			continue
+		}
+		for _, row := range m.settingsHubGroupRows(group) {
+			text := tr(settingsTabs[group]) + " " + row.label + " " + row.value + " " + row.description
+			if query == "" || strings.Contains(strings.ToLower(text), query) {
+				entries = append(entries, settingsHubEntry{row, group})
+			}
+		}
+	}
+	return entries
+}
+
+func (m *model) settingsHubRows() []settingsHubRow {
+	var rows []settingsHubRow
+	for _, entry := range m.settingsHubEntries() {
+		rows = append(rows, entry.settingsHubRow)
+	}
+	return rows
+}
+
+func (m *model) settingsHubQueryKey(msg tea.KeyMsg) tea.Cmd {
+	c := &m.chrome
+	switch msg.Type {
+	case tea.KeyCtrlU:
+		c.settingsQuery = ""
+	case tea.KeyBackspace:
+		r := []rune(c.settingsQuery)
+		if len(r) > 0 {
+			c.settingsQuery = string(r[:len(r)-1])
+		}
+	case tea.KeySpace:
+		if len(c.settingsQuery) < 256 {
+			c.settingsQuery += " "
+		}
+	case tea.KeyRunes:
+		text := singleLine(clean(string(msg.Runes)))
+		if len(c.settingsQuery)+len(text) <= 256 {
+			c.settingsQuery += text
+		}
+	}
+	c.settingsRow, c.settingsOffset = 0, 0
+	return nil
+}
+
 func (m *model) settingsHubKey(key string) tea.Cmd {
 	c := &m.chrome
 	rows := m.settingsHubRows()
 	switch key {
 	case "tab", "shift+tab":
-		c.settingsNav = !c.settingsNav
-	case "left":
-		c.settingsNav = true
-	case "right":
-		c.settingsNav = false
+		delta := 1
+		if key == "shift+tab" {
+			delta = -1
+		}
+		c.settingsTab = (c.settingsTab+1+delta+len(settingsTabs)+1)%(len(settingsTabs)+1) - 1
+		c.settingsRow, c.settingsOffset = 0, 0
 	case "up", "down", "home", "end", "pgup", "pgdown":
-		index, count := &c.settingsRow, len(rows)
-		if c.settingsNav {
-			index, count = &c.settingsTab, len(settingsTabs)
+		if len(rows) == 0 {
+			return nil
 		}
 		switch key {
 		case "up":
-			*index = (*index + count - 1) % count
+			c.settingsRow = (c.settingsRow + len(rows) - 1) % len(rows)
 		case "down":
-			*index = (*index + 1) % count
-		case "home", "pgup":
-			*index = 0
-		case "end", "pgdown":
-			*index = count - 1
+			c.settingsRow = (c.settingsRow + 1) % len(rows)
+		case "home":
+			c.settingsRow = 0
+		case "end":
+			c.settingsRow = len(rows) - 1
+		case "pgup":
+			c.settingsRow = max(0, c.settingsRow-5)
+		case "pgdown":
+			c.settingsRow = min(len(rows)-1, c.settingsRow+5)
 		}
-		if c.settingsNav {
-			c.settingsRow, c.settingsOffset = 0, 0
-		}
-	case "enter", " ":
-		if c.settingsNav {
-			c.settingsNav = false
+	case "enter", "left", "right":
+		if len(rows) == 0 {
 			return nil
 		}
-		return m.settingsHubAction(rows[min(c.settingsRow, len(rows)-1)].action)
+		action := rows[max(0, min(c.settingsRow, len(rows)-1))].action
+		if key != "enter" && action != "theme" && action != "language" && action != "mouse" && action != "input-history" {
+			return nil
+		}
+		return m.settingsHubAction(action)
 	case "f5":
 		return m.loadSettings()
 	}
 	return nil
 }
 
-// Rendering and mouse input share the same measured cells and scroll window.
+// Rendering and mouse input share the same physical rows, including group headings.
 func (m *model) settingsHubLayout() (area, []string, []settingsHubHit) {
-	width, height := min(112, m.width-3), min(34, m.height-4)
-	box := area{(m.width - 1 - width) / 2, max(2, (m.height-height)/2), width, height}
-	inner, nav := width-4, 21
-	right := inner - nav - 3
+	geometry := m.chooserLayout(chooserSpec{Width: 60, Height: 26})
+	box := geometry.Box
+	inner := box.width - 4
 	x, y := box.x+2, box.y+1
-	close, config := "[×]", "["+tr("Конфигурация dsh")+"]"
-	top := bar(heading().Render(tr("Настройки TUI")), accent().Render(config+" "+close), inner)
-	hits := []settingsHubHit{
-		{area{x + inner - lipgloss.Width(close), y, lipgloss.Width(close), 1}, "close", 0},
-		{area{x + inner - lipgloss.Width(close) - 1 - lipgloss.Width(config), y, lipgloss.Width(config), 1}, "config", 0},
-	}
-	rows := m.settingsHubRows()
 	c := &m.chrome
-	c.settingsRow = max(0, min(c.settingsRow, len(rows)-1))
-	count := max(1, (height-7)/3)
-	c.settingsOffset = max(0, min(c.settingsOffset, max(0, len(rows)-count)))
-	if c.settingsRow < c.settingsOffset {
-		c.settingsOffset = c.settingsRow
+	entries := m.settingsHubEntries()
+	c.settingsRow = max(0, min(c.settingsRow, len(entries)-1))
+	group := tr("Все разделы")
+	if c.settingsTab >= 0 && c.settingsTab < len(settingsTabs) {
+		group = tr(settingsTabs[c.settingsTab])
 	}
-	if c.settingsRow >= c.settingsOffset+count {
-		c.settingsOffset = c.settingsRow - count + 1
+	close := "esc"
+	lines := []string{bar(heading().Render(tr("Настройки TUI")), muted().Render(close), inner),
+		ansi.Truncate(tr("Поиск: ")+c.settingsQuery, inner, "…"),
+		muted().Render(ansi.Truncate(tr("Раздел: ")+group, inner, "…")), ""}
+	hits := []settingsHubHit{{area{x + inner - lipgloss.Width(close), y, lipgloss.Width(close), 1}, "close", 0},
+		{area{x, y + 2, inner, 1}, "group", 0}}
+	type line struct {
+		text  string
+		index int
 	}
-	rightLines := []string{}
-	for i := c.settingsOffset; i < min(len(rows), c.settingsOffset+count); i++ {
-		r := rows[i]
-		value := "[" + ansi.Truncate(singleLine(r.value), max(8, right/2)-2, "…") + "]"
-		label := ansi.Truncate(r.label, max(1, right-lipgloss.Width(value)-3), "…")
-		line := bar(label, accent().Render(value), right)
-		if !c.settingsNav && c.settingsRow == i {
-			line = lipgloss.NewStyle().Width(right).Foreground(theme.Color(theme.Highlight)).Background(theme.Color(theme.Active)).Render(line)
+	var content []line
+	previous, selected := -1, 0
+	for i, entry := range entries {
+		if entry.group != previous {
+			content = append(content, line{chooserGroup(tr(settingsTabs[entry.group])), -1})
+			previous = entry.group
 		}
-		rightLines = append(rightLines, line, muted().Render(ansi.Truncate(r.description, right, "…")), muted().Render(strings.Repeat("─", right)))
-		hits = append(hits, settingsHubHit{area{x + nav + 3, y + 2 + (i-c.settingsOffset)*3, right, 2}, "row", i})
+		if i == c.settingsRow {
+			selected = len(content)
+		}
+		value := ansi.Truncate(singleLine(entry.value), max(10, inner/2), "…")
+		content = append(content, line{chooserItem(entry.label, value, i == c.settingsRow, true, inner), i})
 	}
-	lines := []string{top, ""}
-	for i := 0; i < height-6; i++ {
-		left, content := "", ""
-		if i < len(settingsTabs)*2 && i%2 == 0 {
-			index := i / 2
-			left = selectedRow(tr(settingsTabs[index]), c.settingsTab == index, nav)
-			if c.settingsNav && c.settingsTab == index {
-				left = heading().Render(left)
+	count := max(1, box.height-10)
+	c.settingsOffset = max(0, min(c.settingsOffset, max(0, len(content)-count)))
+	if selected < c.settingsOffset {
+		c.settingsOffset = selected
+	}
+	if selected >= c.settingsOffset+count {
+		c.settingsOffset = selected - count + 1
+	}
+	for n := 0; n < count; n++ {
+		index := c.settingsOffset + n
+		text := ""
+		if index < len(content) {
+			text = content[index].text
+			if content[index].index >= 0 {
+				hits = append(hits, settingsHubHit{area{x, y + 4 + n, inner, 1}, "row", content[index].index})
 			}
-			hits = append(hits, settingsHubHit{area{x, y + 2 + i, nav, 1}, "tab", index})
+		} else if len(content) == 0 && n == 0 {
+			text = muted().Render(tr("Ничего не найдено"))
 		}
-		if i < len(rightLines) {
-			content = rightLines[i]
-		}
-		lines = append(lines, lipgloss.NewStyle().Width(nav).Render(left)+" │ "+content)
+		lines = append(lines, text)
+	}
+	description := ""
+	if len(entries) > 0 {
+		description = entries[c.settingsRow].description
 	}
 	note := m.preferencesNote
 	if m.settingsLoading {
@@ -266,12 +331,15 @@ func (m *model) settingsHubLayout() (area, []string, []settingsHubHit) {
 	if m.settingsError != "" {
 		note = tr("Не удалось прочитать настройки dsh; F5 — повторить.")
 	}
-	lines = append(lines, muted().Render(ansi.Truncate(note, inner, "…")), muted().Render(ansi.Truncate(tr("Tab панели · ↑/↓ выбор · Enter изменить · F1 клавиши · Esc закрыть"), inner, "…")))
+	lines = append(lines, muted().Render(ansi.Truncate(description, inner, "…")),
+		muted().Render(ansi.Truncate(note, inner, "…")),
+		muted().Render(ansi.Truncate(tr("↑/↓ выбор · Enter открыть · ←/→ изменить"), inner, "…")),
+		muted().Render(ansi.Truncate(tr("Tab раздел · F1 клавиши · F5 обновить · Esc закрыть"), inner, "…")))
 	return box, lines, hits
 }
 func (m *model) settingsHubView() (area, string) {
 	box, lines, _ := m.settingsHubLayout()
-	return box, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Highlight)
+	return box, flatDialogSurface(box, lines)
 }
 func (m *model) settingsHubMouse(msg tea.MouseMsg) tea.Cmd {
 	box, _, hits := m.settingsHubLayout()
@@ -279,7 +347,6 @@ func (m *model) settingsHubMouse(msg tea.MouseMsg) tea.Cmd {
 		return nil
 	}
 	if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
-		m.chrome.settingsNav = false
 		delta := 1
 		if msg.Button == tea.MouseButtonWheelUp {
 			delta = -1
@@ -295,14 +362,14 @@ func (m *model) settingsHubMouse(msg tea.MouseMsg) tea.Cmd {
 			continue
 		}
 		switch hit.action {
-		case "tab":
-			m.chrome.settingsTab, m.chrome.settingsRow, m.chrome.settingsOffset = hit.index, 0, 0
-			m.chrome.settingsNav = true
-			return nil
+		case "group":
+			return m.settingsHubKey("tab")
 		case "row":
-			m.chrome.settingsNav = false
-			m.chrome.settingsRow = hit.index
-			return m.settingsHubAction(m.settingsHubRows()[hit.index].action)
+			rows := m.settingsHubRows()
+			if hit.index >= 0 && hit.index < len(rows) {
+				m.chrome.settingsRow = hit.index
+				return m.settingsHubAction(rows[hit.index].action)
+			}
 		default:
 			return m.settingsHubAction(hit.action)
 		}

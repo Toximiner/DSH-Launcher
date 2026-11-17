@@ -7,8 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+)
 
 func (m *model) settingsFormKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	d := m.settingsForm
@@ -174,6 +173,10 @@ func (m *model) settingsFormBox() area {
 	width, height := min(98, m.width-3), min(32, m.height-2)
 	return area{(m.width - 1 - width) / 2, (m.height - height) / 2, width, height}
 }
+func (m *model) settingsFormListArea() area {
+	box := m.settingsFormBox()
+	return area{box.x + 2, box.y + 5, box.width - 4, max(1, box.height-11)}
+}
 func (m *model) settingsFormView(base string) string {
 	d := m.settingsForm
 	if d == nil {
@@ -186,11 +189,11 @@ func (m *model) settingsFormView(base string) string {
 	if d.field != nil && d.field.credential {
 		title = tr("API-ключ · ") + d.field.ref
 	}
-	lines := []string{heading().Render(trim(title)), trim("/" + strings.Join(d.path, "/")), fmt.Sprintf(tr("Ревизия %d · изменений %d · F5 сохранить"), d.namespace.Revision, len(d.ops)), ""}
+	lines := []string{bar(heading().Render(trim(title)), muted().Render("esc"), width), trim("/" + strings.Join(d.path, "/")), fmt.Sprintf(tr("Ревизия %d · изменений %d · F5 сохранить"), d.namespace.Revision, len(d.ops)), ""}
 	if d.field != nil && d.field.credential {
 		lines[2] = tr("Enter — записать новый ключ · Esc — отменить")
 	}
-	available := box.height - 11
+	available := m.settingsFormListArea().height
 	if d.field != nil {
 		field := d.field
 		field.editor.Width = max(1, width-13)
@@ -244,9 +247,7 @@ func (m *model) settingsFormView(base string) string {
 				prefix = "› "
 			}
 			label = trim(prefix + label)
-			if i == d.index {
-				label = heading().Render(label)
-			}
+			label = chooserItem(label, "", i == d.index, true, width)
 			lines = append(lines, label)
 		}
 		if count == 0 {
@@ -285,15 +286,23 @@ func (m *model) settingsFormView(base string) string {
 		hint2 = tr("Esc — вернуться к форме")
 	}
 	lines = append(lines, trim(hint), trim(hint2))
-	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Accent), box.x, box.y, m.width-1)
+	return overlay(dimBackdrop(base), flatDialogSurface(box, lines), box.x, box.y, m.width-1)
 }
 func (m *model) settingsFormMouse(msg tea.MouseMsg) tea.Cmd {
 	d := m.settingsForm
-	if d == nil || d.busy || d.field != nil || d.discard {
+	if d == nil {
 		return nil
 	}
 	box := m.settingsFormBox()
-	available := box.height - 11
+	if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft && flatDialogClose(box).contains(msg.X, msg.Y) {
+		cmd, _ := m.settingsFormKey(tea.KeyMsg{Type: tea.KeyEsc})
+		return cmd
+	}
+	if d.busy || d.field != nil || d.discard {
+		return nil
+	}
+	body := m.settingsFormListArea()
+	available := body.height
 	rows := d.rows()
 	node, _ := d.schema.at(d.path)
 	count := len(rows)
@@ -310,9 +319,9 @@ func (m *model) settingsFormMouse(msg tea.MouseMsg) tea.Cmd {
 		}
 		d.index = max(0, min(max(0, count-1), d.index+delta))
 	}
-	if msg.Button == tea.MouseButtonLeft && (area{box.x + 2, box.y + 5, box.width - 4, available}).contains(msg.X, msg.Y) {
+	if msg.Button == tea.MouseButtonLeft && body.contains(msg.X, msg.Y) {
 		start := max(0, min(d.index-available/2, count-available))
-		index := start + msg.Y - (box.y + 5)
+		index := start + msg.Y - body.y
 		if index < count {
 			d.index = index
 			return m.formEnter()

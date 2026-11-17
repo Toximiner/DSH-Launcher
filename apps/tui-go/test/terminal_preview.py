@@ -92,6 +92,14 @@ class TerminalPreview(unittest.TestCase):
                 return
         self.fail(f'No visible click target: {text!r}')
 
+    def setting(self, query):
+        # Preferences use one searchable list. Search each action explicitly;
+        # this also verifies filtering rather than relying on obsolete tab rows.
+        self.app.wait(('Настройки TUI', 'Поиск: ', 'Раздел: '))
+        self.app.send('\x15' + query)
+        self.app.wait('Поиск: ' + query)
+        self.app.send('\r')
+
     def close_preferences(self):
         self.app.send('\x1b')
 
@@ -105,9 +113,9 @@ class TerminalPreview(unittest.TestCase):
         self.app.send('preserved draft')
         self.app.send('\x1bOS')  # F4
         self.app.wait('Настройки TUI')
-        self.app.send('\x1b[C' + '\x1b[B' * 2 + '\r')
-        self.app.wait('[светлая]')
-        self.app.send('\x1b[A\r')
+        self.setting('Оформление')
+        self.app.wait('светлая')
+        self.setting('Язык')
         self.app.wait('TUI Settings')
         self.app.send('\x1bOP')  # F1
         self.app.wait('Hotkeys')
@@ -124,7 +132,8 @@ class TerminalPreview(unittest.TestCase):
         self.app.wait('DeepSeek Harness')
         self.app.send('\x1bOS')
         self.app.wait('TUI Settings')
-        self.app.wait('[light]')
+        self.app.send('\x15Theme')
+        self.app.wait('light')
 
     def test_mouse_navigation_and_scroll(self):
         self.assertIn(b'\x1b[?1002h', self.app.raw)
@@ -204,9 +213,8 @@ class TerminalPreview(unittest.TestCase):
         self.app.send('unsent draft')
         self.palette('Настройки TUI')
         self.app.wait('Настройки TUI')
-        for key in ('\x1b[C', '\x1b[F', '\r', '\x1b[A', '\r'):
-            self.app.send(key)
-            self.app.pump()
+        self.setting('История ввода')
+        self.setting('Мышь в интерфейсе')
         path = Path(self.env['XDG_CONFIG_HOME']) / 'dsh-launcher-tui/preferences.json'
 
         def saved(mouse, history):
@@ -228,15 +236,13 @@ class TerminalPreview(unittest.TestCase):
         self.assertNotIn(b'\x1b[?1002h', self.app.raw)
         self.app.send('\x1bOS')
         self.app.wait('Настройки TUI')
-        for key in ('\x1b[C', '\x1b[F', '\x1b[A', '\r'):
-            self.app.send(key)
-            self.app.pump()
+        self.setting('Мышь в интерфейсе')
         wait_for(lambda: saved(True, False))
         # Persisting the preference and emitting the terminal command are
         # separate events; the file write alone does not acknowledge mouse mode.
         wait_for(lambda: (self.app.pump(), b'\x1b[?1002h' in self.app.raw)[1])
         self.assertIn(b'\x1b[?1002h', self.app.raw)
-        self.app.send('\x1b[B\r')
+        self.setting('История ввода')
         wait_for(lambda: saved(True, True))
 
     def test_chat_stream_cancel_and_reconnect_without_resubmission(self):

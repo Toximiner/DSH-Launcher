@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- TUI `preview.40-opencode.8`: compact searchable grouped settings retain all 15 actions in place of two panes; arrows change local preferences. The shortcut reference, dsh schema forms and small launcher dialogs use flat surfaces, retaining explicit saves, revision checks and secret protection. Other auxiliary screens remain in progress; the local build does not replace the installed TUI.
+
 - TUI `preview.40-opencode.7`: successful question/permission replies no longer leave an error-looking delivery confirmation in the conversation. Delivery failures, uncertain replies and unrelated chat errors remain visible.
 
 - TUI `preview.40-opencode.6`: removed the persistent warning for a confirmed message leaving the queue. F10 enables native terminal selection with a frozen visible frame; Esc/F10 restores live updates and the prior mouse mode while incoming messages remain processed. Enter confirms a question option and advances or submits a complete batch; Space marks options and custom answers retain multiline input. The existing question dialog appearance is retained by user preference.

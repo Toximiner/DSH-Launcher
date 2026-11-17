@@ -159,6 +159,41 @@ actual errors and uncertain-delivery safeguards remain.
 ./build/previews/opencode-06/dsh-launcher-tui --start
 ```
 
+## Checkpoint 7: confirmations without false errors
+
+Build `0.2.0-preview.40-opencode.7` removes successful question/permission reply
+confirmations from the conversation error line. Actual failures, uncertain
+delivery and unrelated chat errors remain visible.
+
+```sh
+./build/previews/opencode-07/dsh-launcher-tui --start
+```
+
+## Checkpoint 8: settings and shortcut reference
+
+Intermediate build: `0.2.0-preview.40-opencode.8`.
+
+- TUI settings use a compact flat list following running OpenCode 2.3.0:
+  search, groups, current values and a description of the selected setting.
+  All 15 actions remain available. Tab/Shift+Tab filter sections, Enter opens
+  an action, and Left/Right only change local theme, language, mouse and
+  input-history preferences.
+- The shortcut reference, dsh schema forms and small launcher dialogs use flat
+  surfaces. Shortcut search and return to settings are retained.
+- Shared dsh settings still use explicit forms with F5 saves, revision checks,
+  conflict handling and secret protection. Opening a setting or pressing an
+  arrow does not write backend settings.
+- F10 native selection, F7 pending-request access and drafts are retained.
+
+Stage 4 remains **in progress**: plugins/market, automation, files, terminals,
+subagents, queue/history, runtime management, install/update/rollback and
+diagnostics still await migration. This separate local build does not replace
+the installed application.
+
+```sh
+./build/previews/opencode-08/dsh-launcher-tui --start
+```
+
 ## Revised implementation order
 
 1. **Screenshot correction, preview `opencode.3` (implemented; user review pending).** Active conversation
@@ -174,9 +209,11 @@ actual errors and uncertain-delivery safeguards remain.
    editors and confirmations continue in subsequent stages.
 3. **Tools and permissions (implemented in preview5; user review pending).** Compact expandable results/thoughts, clear failures and
    decisions, complete input capture by the topmost modal. Show only information dsh provides.
-4. **Auxiliary pages.** Settings, plugins/market, automation, files, terminals,
-   subagents, queue/history, install/update/rollback and diagnostics use the same
-   visual system while retaining operations and revision/confirmation safeguards.
+4. **Auxiliary pages (in progress; settings and shortcuts in preview8).** Searchable
+   grouped settings, flat help/schema forms and small launcher dialogs are migrated.
+   Plugins/market, automation, files, terminals, subagents, queue/history, runtime
+   install/update/rollback and diagnostics remain. Preserve operations and
+   revision/confirmation safeguards throughout.
 
 5. **Visual acceptance.** Compare actual captures of the four supplied scenes at a
    wide size and at 100×30/80×24; test Go race/PTY/isolated real dsh. Ask for a specific

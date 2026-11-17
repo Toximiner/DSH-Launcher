@@ -27,6 +27,7 @@ func defaultClientPreferences() clientPreferences {
 type chromeState struct {
 	settingsTab, settingsRow, settingsOffset int
 	settingsNav                              bool
+	settingsQuery                            string
 	helpFromSettings                         bool
 	menuOpen                                 bool
 	menu, item                               int
@@ -73,8 +74,9 @@ func (m *model) openDialog(kind string) tea.Cmd {
 	m.chrome.helpQuery = ""
 	m.chrome.helpGroup = 0
 	if kind == "settings" {
-		m.chrome.settingsTab, m.chrome.settingsRow, m.chrome.settingsOffset = 0, 0, 0
-		m.chrome.settingsNav = true
+		m.chrome.settingsTab, m.chrome.settingsRow, m.chrome.settingsOffset = -1, 0, 0
+		m.chrome.settingsQuery = ""
+		m.chrome.settingsNav = false
 		if m.settings == nil {
 			return m.loadSettings()
 		}
@@ -200,7 +202,7 @@ func (m *model) activateMenu() tea.Cmd {
 func (m *model) chromeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	key := msg.String()
 	active := m.chrome.menuOpen || m.chrome.dialog != ""
-	if m.chrome.dialog == "help" && (msg.Type == tea.KeyRunes || msg.Type == tea.KeyBackspace || msg.Type == tea.KeyCtrlU) && !msg.Alt {
+	if m.chrome.dialog == "help" && (msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace || msg.Type == tea.KeyBackspace || msg.Type == tea.KeyCtrlU) && !msg.Alt {
 		if msg.Type == tea.KeyCtrlU {
 			m.chrome.helpQuery = ""
 		} else if msg.Type == tea.KeyBackspace {
@@ -208,11 +210,16 @@ func (m *model) chromeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			if len(r) > 0 {
 				m.chrome.helpQuery = string(r[:len(r)-1])
 			}
+		} else if msg.Type == tea.KeySpace && len(m.chrome.helpQuery) < 128 {
+			m.chrome.helpQuery += " "
 		} else if len(m.chrome.helpQuery)+len(string(msg.Runes)) <= 128 {
 			m.chrome.helpQuery += clean(string(msg.Runes))
 		}
 		m.chrome.helpOffset = 0
 		return nil, true
+	}
+	if m.chrome.dialog == "settings" && !msg.Alt && (msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace || msg.Type == tea.KeyBackspace || msg.Type == tea.KeyCtrlU) {
+		return m.settingsHubQueryKey(msg), true
 	}
 	if msg.Paste {
 		return nil, active
@@ -356,20 +363,20 @@ func (m *model) dialogBox() (area, string) {
 		if m.chrome.dialog == "conversation" {
 			title = tr("Сессия")
 		}
-		lines = []string{heading().Render(title), ""}
+		lines = []string{bar(heading().Render(title), muted().Render("esc"), inner), ""}
 		for i, entry := range sidebarDialogEntries(m.chrome.dialog) {
-			lines = append(lines, selectedRow(tr(entry.label), m.chrome.selection == i, inner))
+			lines = append(lines, chooserItem(tr(entry.label), "", m.chrome.selection == i, true, inner))
 		}
 		lines = append(lines, "", muted().Render(tr("↑/↓ выбор · Enter открыть · Esc назад")))
 	default:
-		lines = []string{heading().Render(tr("О программе")), "", "DSH Launcher TUI · " + version, "Go + Bubble Tea · Linux", tr("Интерфейс: русский · тема из настроек"), fmt.Sprintf(tr("Терминал: %d × %d"), m.width, m.height), "", tr("Рабочая папка:"), clean(m.workspace), "", tr("[ Закрыть · Enter / Esc ]")}
+		lines = []string{bar(heading().Render(tr("О программе")), muted().Render("esc"), inner), "", "DSH Launcher TUI · " + version, "Go + Bubble Tea · Linux", tr("Интерфейс: русский · тема из настроек"), fmt.Sprintf(tr("Терминал: %d × %d"), m.width, m.height), "", tr("Рабочая папка:"), clean(m.workspace), "", tr("[ Закрыть · Enter / Esc ]")}
 	}
 	for i, line := range lines {
 		lines[i] = ansi.Truncate(line, inner, "…")
 	}
 	height := len(lines) + 2
 	box := area{(m.width - 1 - width) / 2, max(2, (m.height-height)/2), width, height}
-	return box, panel(width, height, strings.Join(lines, "\n"), theme.Highlight)
+	return box, flatDialogSurface(box, lines)
 }
 
 // Composite by terminal cells so ANSI styles and wide characters keep hit areas aligned.
@@ -389,7 +396,7 @@ func overlay(base, front string, x, y, width int) string {
 func (m *model) chromeView(base string) string {
 	if m.chrome.dialog != "" {
 		box, view := m.dialogBox()
-		return overlay(base, view, box.x, box.y, m.width-1)
+		return overlay(dimBackdrop(base), view, box.x, box.y, m.width-1)
 	}
 	if m.chrome.menuOpen {
 		lines := []string{}
@@ -411,6 +418,9 @@ func (m *model) chromeMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 		}
 		if msg.Button == tea.MouseButtonLeft {
 			box, _ := m.dialogBox()
+			if flatDialogClose(box).contains(msg.X, msg.Y) {
+				return m.closeChrome(), true
+			}
 			if box.contains(msg.X, msg.Y) {
 				row := msg.Y - box.y - 1
 				if entries := sidebarDialogEntries(m.chrome.dialog); len(entries) > 0 {
