@@ -218,49 +218,55 @@ func (m *model) pluginsBox() area {
 	box := m.benchBox()
 	return area{box.x + 2, box.y + 1, box.width - 4, box.height - 2}
 }
+func pluginListCapacity(box area) int { return max(1, box.height-11) }
+
 func (m *model) pluginsLayout(box area) ([]string, []pluginHit) {
 	d := m.workbench
-	w := box.width
-	refresh, add := "["+tr("Обновить")+"]", "[+ "+tr("Добавить плагин")+"]"
-	toolbar := refresh + " " + add
-	lines := []string{bar(heading().Render(tr("Плагины dsh")), accent().Render(toolbar), w), muted().Render(tr("Установка, включение и настройка плагинов"))}
+	w := max(1, box.width)
+	refresh, add := tr("Обновить")+" F5", "+ "+tr("Добавить плагин")
+	toolbar := refresh + "  " + add
+	lines := []string{bar(heading().Render(tr("Плагины dsh")), muted().Render(toolbar), w)}
 	installed, market, components := "["+tr("Установленные")+"]", "["+tr("Маркет плагинов")+"]", "["+tr("Компоненты · F2")+"]"
-	lines = append(lines, accent().Bold(true).Render(installed)+" "+accent().Render(market)+" "+muted().Render(components))
-	d.search.Width = max(1, w-10)
-	lines = append(lines, d.search.View(), muted().Render(strings.Repeat("─", w)))
+	installedStyle, componentsStyle := accent().Bold(true), muted()
+	if d.pluginTechnical {
+		installedStyle, componentsStyle = muted(), accent().Bold(true)
+	}
+	lines = append(lines, installedStyle.Render(installed)+" "+muted().Render(market)+" "+componentsStyle.Render(components))
+	d.search.Width = max(1, w-lipgloss.Width(d.search.Prompt)-1)
+	lines = append(lines, d.search.View(), "")
 	hits := []pluginHit{
-		{area{box.x, box.y + 2, lipgloss.Width(installed), 1}, "installed", 0},
+		{area{box.x, box.y + 1, lipgloss.Width(installed), 1}, "installed", 0},
 		{area{box.x + w - lipgloss.Width(toolbar), box.y, lipgloss.Width(refresh), 1}, "refresh", 0},
 		{area{box.x + w - lipgloss.Width(add), box.y, lipgloss.Width(add), 1}, "add", 0},
-		{area{box.x + lipgloss.Width(installed) + 1, box.y + 2, lipgloss.Width(market), 1}, "market", 0},
-		{area{box.x + lipgloss.Width(installed) + lipgloss.Width(market) + 2, box.y + 2, lipgloss.Width(components), 1}, "components", 0},
+		{area{box.x + lipgloss.Width(installed) + 1, box.y + 1, lipgloss.Width(market), 1}, "market", 0},
+		{area{box.x + lipgloss.Width(installed) + lipgloss.Width(market) + 2, box.y + 1, lipgloss.Width(components), 1}, "components", 0},
 	}
 	rows := d.visible()
 	d.index = max(0, min(d.index, max(0, len(rows)-1)))
 	body := []string{}
-	cardHits := []pluginHit{}
-	toggleHits := []pluginHit{}
-	moreHits := []pluginHit{}
+	cardHits, toggleHits, moreHits := []pluginHit{}, []pluginHit{}, []pluginHit{}
 	group := ""
+	groupStart, selectedY, selectedGroupY := 0, -1, -1
 	for i, row := range rows {
 		current := stringValue(row.Data, "pluginGroup")
 		if current != group || i == 0 {
-			if len(body) > 0 {
-				body = append(body, "")
-			}
-			header := heading().Render(pluginGroupTitle(current))
+			groupStart = len(body)
+			header := chooserGroup(pluginGroupTitle(current))
 			if current == "experimental" {
 				more := "[" + tr("Ещё · Ctrl+O") + "]"
 				if d.pluginMore {
 					more = "[" + tr("Свернуть · Ctrl+O") + "]"
 				}
 				moreHits = append(moreHits, pluginHit{area{w - lipgloss.Width(more), len(body), lipgloss.Width(more), 1}, "more", -1})
-				header = bar(header, accent().Render(more), w)
+				header = bar(header, muted().Render(more), w)
 			}
 			body = append(body, header)
 			group = current
 		}
-		start := len(body)
+		y := len(body)
+		if i == d.index {
+			selectedY, selectedGroupY = y, groupStart
+		}
 		state := "[" + tr("Выкл") + "]"
 		if row.Data["enabled"] == true {
 			state = "[" + tr("Вкл") + "]"
@@ -274,38 +280,43 @@ func (m *model) pluginsLayout(box area) ([]string, []pluginHit) {
 		if current == "components" {
 			state = "[" + tr("Только чтение") + "]"
 		}
-		text := bar("  "+singleLine(row.Title), accent().Render(state), w)
-		if i == d.index {
-			text = selectedRow(singleLine(row.Title), true, max(1, w-lipgloss.Width(state)-1)) + " " + accent().Render(state)
-		}
-		body = append(body, text)
-		description := singleLine(row.Body)
-		if description == "" {
-			description = tr("Описание отсутствует.")
-		}
-		body = append(body, "  "+muted().Render(ansi.Truncate(description, max(1, w-2), "…")), "")
-		cardHits = append(cardHits, pluginHit{area{0, start, w, 2}, "card", i})
+		body = append(body, chooserItem(singleLine(row.Title), state, i == d.index, true, w))
+		cardHits = append(cardHits, pluginHit{area{0, y, w, 1}, "card", i})
 		if current == "experimental" || current == "installed" {
-			toggleHits = append(toggleHits, pluginHit{area{w - lipgloss.Width(state), start, lipgloss.Width(state), 1}, "toggle", i})
+			toggleHits = append(toggleHits, pluginHit{area{w - lipgloss.Width(state), y, lipgloss.Width(state), 1}, "toggle", i})
 		}
 	}
 	if len(body) == 0 {
 		body = append(body, muted().Render(tr("Нет плагинов по этому запросу.")))
 	}
-	count := max(1, box.height-8)
+	count := pluginListCapacity(box)
 	d.pluginOffset = max(0, min(d.pluginOffset, max(0, len(body)-count)))
-	for _, hit := range cardHits {
-		if hit.index == d.index {
-			if hit.y < d.pluginOffset {
-				d.pluginOffset = max(0, hit.y-1)
-			}
-			if hit.y+hit.height > d.pluginOffset+count {
-				d.pluginOffset = hit.y + hit.height - count
-			}
+	if selectedY >= 0 {
+		if selectedY < d.pluginOffset {
+			d.pluginOffset = max(0, selectedY-1)
+		}
+		if selectedY >= d.pluginOffset+count {
+			d.pluginOffset = selectedY - count + 1
 		}
 	}
-	for row := 0; row < count; row++ {
-		index := d.pluginOffset + row
+	// Keep the selected item's group visible when its heading scrolled offscreen.
+	sticky := ""
+	if selectedGroupY >= 0 && selectedGroupY < d.pluginOffset && count > 1 {
+		sticky = body[selectedGroupY]
+		if selectedY >= d.pluginOffset+count-1 {
+			d.pluginOffset = selectedY - count + 2
+		}
+	}
+
+	listTop := box.y + 4
+	contentCount := count
+	if sticky != "" {
+		lines = append(lines, sticky)
+		listTop++
+		contentCount--
+	}
+	for n := 0; n < contentCount; n++ {
+		index := d.pluginOffset + n
 		line := ""
 		if index < len(body) {
 			line = body[index]
@@ -313,22 +324,63 @@ func (m *model) pluginsLayout(box area) ([]string, []pluginHit) {
 		lines = append(lines, line)
 	}
 	for _, hit := range append(append(toggleHits, cardHits...), moreHits...) {
-		y := box.y + 5 + hit.y - d.pluginOffset
-		if y >= box.y+5 && y+hit.height <= box.y+5+count {
+		y := listTop + hit.y - d.pluginOffset
+		if y >= listTop && y+hit.height <= listTop+contentCount {
 			hit.x, hit.y = box.x+hit.x, y
 			hits = append(hits, hit)
 		}
 	}
+	if sticky != "" {
+		// A pinned experimental heading retains its real More action.
+		for _, hit := range moreHits {
+			if hit.y == selectedGroupY {
+				hit.x, hit.y = box.x+hit.x, box.y+4
+				hits = append(hits, hit)
+				break
+			}
+		}
+	}
+	details := []string{"", "", "", ""}
+	if len(rows) > 0 {
+		selected := rows[d.index]
+		description := singleLine(selected.Body)
+		if description == "" {
+			description = tr("Описание отсутствует.")
+		}
+		wrapped := strings.Split(ansi.Wrap(description, w, ""), "\n")
+		version := stringValue(selected.Data, "version")
+		versionLabel := ""
+		if version != "" {
+			versionLabel = tr("Версия: ") + singleLine(version)
+		}
+		details[1] = muted().Render(bar(ansi.Truncate(clean(selected.ID), w, "…"), versionLabel, w))
+		details[2] = muted().Render(wrapped[0])
+		if len(wrapped) > 1 {
+			details[3] = muted().Render(ansi.Truncate(strings.Join(wrapped[1:], " "), w, "…"))
+		}
+	}
+	lines = append(lines, details...)
 	note := d.note
 	if d.busy {
 		note = tr("Запрос dsh…")
 	}
-	lines = append(lines, muted().Render(ansi.Truncate(clean(note), w, "…")), muted().Render(tr("↑/↓ выбор · Enter настройки/детали · Space вкл/выкл")), muted().Render(tr("F5 обновить · Ctrl+N добавить · F3 обновление · Ctrl+X удалить · Esc назад")))
+	lines = append(lines, muted().Render(ansi.Truncate(singleLine(note), w, "…")),
+		muted().Render(tr("↑/↓ выбор · Enter настройки/детали · Space вкл/выкл")),
+		muted().Render(tr("F5 обновить · Ctrl+N добавить · F3 обновление · Ctrl+X удалить · Esc назад")))
 	for i, line := range lines {
 		lines[i] = ansi.Truncate(line, w, "…")
 	}
-	return lines, hits
+	clipped := hits[:0]
+	for _, hit := range hits {
+		left, right := max(box.x, hit.x), min(box.x+w, hit.x+hit.width)
+		if left < right && hit.y >= box.y && hit.y < box.y+box.height {
+			hit.x, hit.width = left, right-left
+			clipped = append(clipped, hit)
+		}
+	}
+	return lines, clipped
 }
+
 func (m *model) pluginsContent(box area) string {
 	d := m.workbench
 	if d.document == "plugin-details" {
@@ -401,7 +453,7 @@ func (m *model) pluginsKey(msg tea.KeyMsg) tea.Cmd {
 				delta = -1
 			}
 			if msg.Type == tea.KeyPgUp || msg.Type == tea.KeyPgDown {
-				delta *= max(1, (m.pluginsBox().height-8)/3)
+				delta *= pluginListCapacity(m.pluginsBox())
 			}
 			d.index = max(0, min(max(0, len(d.visible())-1), d.index+delta))
 			if msg.Type == tea.KeyHome {

@@ -11,8 +11,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+)
 
 type pluginField struct {
 	ID, Label, Type string
@@ -268,7 +267,7 @@ func (m *model) pluginPanelView(base string) string {
 	p := d.pluginPanel
 	box := m.benchBox()
 	width := box.width - 4
-	lines := []string{heading().Render(clean(p.Title)), muted().Render(tr("Плагин: ") + p.Owner), ""}
+	lines := []string{bar(heading().Render(clean(p.Title)), muted().Render("esc"), width), muted().Render(tr("Плагин: ") + p.Owner), ""}
 	var body []string
 	selectedRowIndex := 0
 	for i, f := range p.Fields {
@@ -326,5 +325,5 @@ func (m *model) pluginPanelView(base string) string {
 		hint = tr("Enter — подтвердить действие · Esc — отменить")
 	}
 	lines = append(lines, ansi.Truncate(clean(d.note), width, "…"), hint, tr("F5 — перечитать команды · Esc — назад"))
-	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Accent), box.x, box.y, m.width-1)
+	return overlay(dimBackdrop(base), flatDialogSurface(box, lines), box.x, box.y, m.width-1)
 }

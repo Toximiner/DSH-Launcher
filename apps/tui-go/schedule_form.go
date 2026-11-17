@@ -10,8 +10,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+)
 
 type scheduleForm struct {
 	title, minutes textinput.Model
@@ -146,7 +145,7 @@ func (m *model) scheduleFormView(base string) string {
 	if !f.create {
 		title = tr("Изменить задачу")
 	}
-	lines := []string{heading().Render(title), "", tr("Название"), f.title.View(), tr("Инструкция"), f.prompt.View()}
+	lines := []string{bar(heading().Render(title), muted().Render("esc"), w), "", tr("Название"), f.title.View(), tr("Инструкция"), f.prompt.View()}
 	if f.create {
 		once, every := "["+tr("Однократно")+"]", "["+tr("Повторять")+"]"
 		mode := accent().Render(once) + " " + muted().Render(every)
@@ -172,5 +171,5 @@ func (m *model) scheduleFormView(base string) string {
 	lines = append(lines, "", muted().Render(d.note), accent().Render(note))
 	text := strings.Join(lines, "\n")
 	text = ansi.Hardwrap(text, w, true)
-	return overlay(base, panel(box.width, box.height, text, theme.Accent), box.x, box.y, m.width-1)
+	return overlay(dimBackdrop(base), flatDialogSurface(box, []string{text}), box.x, box.y, m.width-1)
 }

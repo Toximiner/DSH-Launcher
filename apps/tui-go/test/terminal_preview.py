@@ -406,6 +406,8 @@ class TerminalPreview(unittest.TestCase):
                'XDG_DATA_HOME': str(root / 'data'), 'DSH_TEST_ROOT': self.temp.name,
                'TERM': 'xterm-256color'}
         env.pop('DSH_TUI_URL', None)
+        env.pop('NO_COLOR', None)
+        env['COLORTERM'] = 'truecolor'
         self.app = Terminal(BINARY, ['--start', '--dsh', str(Path(__file__).with_name('fake_dsh.py')),
                                     '--port', str(port), '--cwd', str(root)], env)
         self.app.wait('Не спрашивать больше')
@@ -433,10 +435,17 @@ class TerminalPreview(unittest.TestCase):
         self.assertIn('session-pty', self.app.screen.display[0])
         self.app.command('/market')
         self.app.wait('Alpha plugin')
+        if os.environ.get('DSH_TUI_CAPTURE_DIR'):
+            for columns, rows in ((80, 24), (100, 30), (160, 40)):
+                self.app.resize(columns, rows)
+                self.app.wait('Alpha plugin')
+                self.capture('market')
+            self.app.resize(100, 30)
         self.app.send('/Beta\r')
         self.app.wait('Beta plugin')
         self.app.send('i')
         self.app.wait('[y Подтвердить]')
+        self.capture('market-confirmation')
         writes = root / 'market-writes.jsonl'
         self.assertFalse(writes.exists())
         self.app.send('n')

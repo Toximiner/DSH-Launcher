@@ -17,6 +17,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
 )
 
 type marketPlugin struct {
@@ -417,35 +419,47 @@ func (m *model) marketKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	return nil, false
 }
 func (m *model) marketView() string {
-	w, h := m.viewport.Width, m.viewport.Height
+	w, h := max(1, m.viewport.Width), max(1, m.viewport.Height)
+	inner := max(1, w-4)
+	contentHeight := max(1, h-2)
 	lines := []string{}
 	m.marketHits = nil
 	add := func(text string) {
-		lines = append(lines, ansi.Truncate(strings.ReplaceAll(text, "\n", " "), w, "…"))
+		lines = append(lines, ansi.Truncate(strings.ReplaceAll(text, "\n", " "), inner, "…"))
 	}
 	hit := func(kind string, index, x, width int) {
-		m.marketHits = append(m.marketHits, marketHit{kind, index, area{x, len(lines), min(width, max(0, w-x)), 1}})
+		if x >= inner || width <= 0 {
+			return
+		}
+		m.marketHits = append(m.marketHits, marketHit{kind, index, area{x + 2, len(lines) + 1, min(width, inner-x), 1}})
 	}
-	headingText := tr("Маркет плагинов")
+	title := tr("Маркет плагинов")
 	if m.market != nil {
-		headingText += " · " + singleLine(m.market.Profile)
+		title += " · " + singleLine(m.market.Profile)
 	}
-	hit("refresh", 0, max(0, w-lipgloss.Width("[r "+tr("Обновить")+"]")), lipgloss.Width("[r "+tr("Обновить")+"]"))
-	add(bar(heading().Render(headingText), accent().Render("[r "+tr("Обновить")+"]"), w))
-	// The two tabs share the same toggle action, with a measured hit region.
+	refresh := "[r " + tr("Обновить") + "]"
+	hit("refresh", 0, max(0, inner-lipgloss.Width(refresh)), lipgloss.Width(refresh))
+	add(bar(heading().Render(title), muted().Render(refresh), inner))
 	catalog, installed := "["+tr("Каталог")+"]", "["+tr("Установленные")+"]"
 	hit("catalog", 0, 0, lipgloss.Width(catalog))
 	hit("installed", 0, lipgloss.Width(catalog)+1, lipgloss.Width(installed))
+	filter := accent().Bold(true).Render(catalog) + " " + muted().Render(installed)
 	if m.marketInstalledOnly {
-		lines = append(lines, muted().Render(catalog)+" "+accent().Bold(true).Render(installed))
-	} else {
-		lines = append(lines, accent().Bold(true).Render(catalog)+" "+muted().Render(installed))
+		filter = muted().Render(catalog) + " " + accent().Bold(true).Render(installed)
 	}
-	hit("search", 0, 0, w)
+	rows := m.marketRows()
+	m.marketIndex = max(0, min(m.marketIndex, max(0, len(rows)-1)))
+	position := "0/0"
+	if len(rows) > 0 {
+		position = fmt.Sprintf("%d/%d", m.marketIndex+1, len(rows))
+	}
+	add(bar(filter, muted().Render(position), inner))
+	hit("search", 0, 0, inner)
+	m.marketSearch.Width = max(1, inner-lipgloss.Width(m.marketSearch.Prompt))
 	if m.marketEditing {
-		lines = append(lines, ansi.Truncate(m.marketSearch.View(), w, "…"))
+		add(m.marketSearch.View())
 	} else {
-		add(tr("Поиск: ") + m.marketSearch.Value())
+		add(muted().Render(tr("Поиск: ") + m.marketSearch.Value()))
 	}
 	status := m.marketMessage
 	if m.marketBusy {
@@ -461,92 +475,96 @@ func (m *model) marketView() string {
 		}
 	}
 	if m.marketError != "" {
-		status = m.marketError
+		status = "! " + m.marketError
+		add(lipgloss.NewStyle().Foreground(theme.Color(theme.Warning)).Render(singleLine(status)))
+	} else {
+		add(muted().Render(singleLine(status)))
 	}
-	add(muted().Render(singleLine(status)))
-	rows := m.marketRows()
-	m.marketIndex = max(0, min(m.marketIndex, max(0, len(rows)-1)))
-	listHeight := max(1, (h-10)/4)
+	add("")
+	listHeight := max(1, min(14, contentHeight-13))
 	start := max(0, min(m.marketIndex-listHeight+1, max(0, len(rows)-listHeight)))
 	for i := 0; i < listHeight; i++ {
 		index := start + i
 		if index >= len(rows) {
 			if i == 0 {
-				add(tr("Нет результатов."))
+				add(muted().Render(tr("Нет результатов.")))
 			} else {
 				add("")
 			}
-			add("")
-			add("")
-			add("")
 			continue
 		}
-		p := rows[index]
-		prefix := "  "
-		if index == m.marketIndex {
-			prefix = "› "
+		plugin := rows[index]
+		state := tr("Доступен")
+		if plugin.NPM == "" {
+			state = tr("Только чтение")
 		}
-		badge := "[" + tr("Доступен") + "]"
-		if _, ok := m.market.Installed[p.pkg()]; ok {
-			badge = "[" + tr("Установлен") + "]"
+		version := singleLine(plugin.Version)
+		if installedVersion, ok := m.market.Installed[plugin.pkg()]; ok {
+			state = tr("Установлен")
+			version = singleLine(installedVersion)
 		}
-		hit("row", index, 0, w)
-		m.marketHits[len(m.marketHits)-1].box.height = 4
-		title := prefix + singleLine(p.Name)
-		if index == m.marketIndex {
-			title = accent().Bold(true).Render(title)
+		if version != "" {
+			state += " · " + version
 		}
-		add(bar(title, muted().Render(badge), w))
-		description := strings.Split(ansi.Hardwrap(singleLine(p.description()), max(1, w-2), true), "\n")
-		for j := 0; j < 2; j++ {
-			line := ""
-			if j < len(description) {
-				line = description[j]
-			}
-			if j == 1 && len(description) > 2 {
-				line = ansi.Truncate(line, max(1, w-3), "…") + "…"
-			}
-			add(muted().Render("  " + line))
+		name := singleLine(plugin.Name)
+		if name == "" {
+			name = singleLine(plugin.pkg())
 		}
-		add("")
+		hit("row", index, 0, inner)
+		add(chooserItem(name, state, index == m.marketIndex, true, inner))
 	}
+	add("")
 	if len(rows) > 0 {
-		p := rows[m.marketIndex]
-		add(singleLine(p.pkg()))
-		lines[len(lines)-1] = heading().Render(lines[len(lines)-1])
+		plugin := rows[m.marketIndex]
+		add(heading().Render(singleLine(plugin.pkg())))
+		description := strings.Split(ansi.Hardwrap(singleLine(plugin.description()), inner, true), "\n")
+		for i := 0; i < 2; i++ {
+			line := ""
+			if i < len(description) {
+				line = description[i]
+			}
+			if i == 1 && len(description) > 2 {
+				line = ansi.Truncate(line, max(1, inner-1), "") + "…"
+			}
+			add(muted().Render(line))
+		}
 		spec := tr("не установлен")
-		if value, ok := m.market.Installed[p.pkg()]; ok {
-			spec = tr("в профиле: ") + value
+		if plugin.NPM == "" {
+			spec = tr("Git-only источник пока доступен только для просмотра.")
+		}
+		if value, ok := m.market.Installed[plugin.pkg()]; ok {
+			spec = tr("в профиле: ") + singleLine(value)
 			if m.market.Present != nil {
-				spec = tr("файлы не найдены: ") + value
+				spec = tr("файлы не найдены: ") + singleLine(value)
 				for _, name := range m.market.Present {
-					if name == p.pkg() {
-						spec = tr("установлен: ") + value
+					if name == plugin.pkg() {
+						spec = tr("установлен: ") + singleLine(value)
 						break
 					}
 				}
 			}
 		}
-		add(singleLine(spec) + fmt.Sprintf(" · %d/%d", m.marketIndex+1, len(rows)))
-		source := singleLine(p.URL)
-		if p.Version != "" {
-			source = tr("Версия каталога: ") + singleLine(p.Version) + " · " + source
+		if plugin.Version != "" {
+			spec += " · " + tr("Версия каталога: ") + singleLine(plugin.Version)
 		}
-		add(source)
+		add(muted().Render(spec))
+		add(muted().Render(singleLine(plugin.URL)))
 	} else {
-		add("")
-		add("")
-		add("")
+		for range 5 {
+			add("")
+		}
 	}
-	for len(lines) < h-2 {
+	for len(lines) < contentHeight-2 {
 		add("")
 	}
 	if m.marketConfirm != nil {
-		add(fmt.Sprintf("%s: %s · %s", map[string]string{"install": tr("Установить"), "update": tr("Обновить"), "uninstall": tr("Удалить")}[m.marketConfirm.Action], singleLine(m.marketConfirm.Package), singleLine(m.marketConfirm.Profile)))
-		yes, no := tr("[y Подтвердить]"), tr("[n Отмена]")
-		hit("yes", 0, 0, len([]rune(yes)))
-		hit("no", 0, len([]rune(yes))+1, len([]rune(no)))
-		add(yes + " " + no)
+		intent := m.marketConfirm
+		action := map[string]string{"install": tr("Установить"), "update": tr("Обновить"), "uninstall": tr("Удалить")}[intent.Action]
+		add(lipgloss.NewStyle().Foreground(theme.Color(theme.Warning)).Render(fmt.Sprintf("%s: %s · %s", action, singleLine(intent.Package), singleLine(intent.Profile))))
+		no, yes := tr("[n Отмена]"), tr("[y Подтвердить]")
+		hit("no", 0, 0, lipgloss.Width(no))
+		hit("yes", 0, lipgloss.Width(no)+1, lipgloss.Width(yes))
+		add(no + " " + yes)
 	} else {
 		actions := []struct{ key, label string }{{"install", tr("[i Уст.]")}, {"update", tr("[u Обн.]")}, {"uninstall", tr("[d Удал.]")}}
 		text := ""
@@ -554,14 +572,13 @@ func (m *model) marketView() string {
 			if text != "" {
 				text += " "
 			}
-			hit(action.key, 0, len([]rune(text)), len([]rune(action.label)))
+			hit(action.key, 0, lipgloss.Width(text), lipgloss.Width(action.label))
 			text += action.label
 		}
 		add(text)
-		add(tr("Операции требуют подтверждения."))
+		add(muted().Render(tr("Операции требуют подтверждения.")))
 	}
-
-	return strings.Join(lines[:min(len(lines), h)], "\n")
+	return flatDialogSurface(area{width: w, height: h}, lines)
 }
 
 func newMarketSearch() textinput.Model {

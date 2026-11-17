@@ -107,7 +107,12 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-packages-') as directory:
         wait_for(lambda: login or backend.poll() is not None, timeout=40)
         assert login, ''.join(logs)[-5000:]
         app = Terminal(str(Path(args.binary).resolve()), ['--new'], {**env, 'DSH_TUI_URL': login[0]}, columns=100, rows=30)
-        app.wait('Введите сообщение.', timeout=30)
+        app.wait(('Что будем делать?', 'session-'), timeout=30)
+        def saved_navigation():
+            files = list((root / 'config/dsh-launcher-tui/tabs').glob('*.json'))
+            return json.loads(files[0].read_text()) if len(files) == 1 else {}
+        wait_for(lambda: bool(saved_navigation().get('activeId')), timeout=10)
+        initial_session = saved_navigation()['activeId']
         app.command('/packages')
         app.wait(('Управление пакетами dsh', 'Снимок dsh'), absent=('Чтение снимка dsh…',))
         app.send('\x0e')  # Ctrl+N
@@ -151,7 +156,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-packages-') as directory:
             app.send('tui-lifecycle-fixture')
             app.wait('tui-lifecycle-fixture · 1.1.0')
             app.send('\x1b')
-            app.wait('Введите сообщение.')
+            app.wait('Что будем делать?')
             app.command('/operations')
             app.wait('Журнал операций пакетов')
             app.wait('confirmed')
@@ -162,14 +167,20 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-packages-') as directory:
             app.send('\x04')
             app.exited()
             app = Terminal(str(Path(args.binary).resolve()), [], {**env, 'DSH_TUI_URL': login[0]}, columns=100, rows=30)
-            app.wait('Новый разговор')
+            # A new process restores the visited session rather than creating one.
+            app.wait(('Что будем делать?', initial_session[:16]), timeout=30)
+            assert saved_navigation()['activeId'] == initial_session
+            assert saved_navigation()['ids'] == [initial_session]
+            # This fixture deliberately opens a second conversation to verify
+            # package-operation receipts belong to the client, not one session.
             app.command('/new')
-            app.wait('Введите сообщение.')
+            wait_for(lambda: bool(saved_navigation().get('activeId')) and saved_navigation()['activeId'] != initial_session, timeout=15)
+            app.wait(('Что будем делать?', saved_navigation()['activeId'][:16]))
             app.command('/operations')
             app.wait('Журнал операций пакетов')
             app.wait('confirmed')
             app.send('\x1b')
-            app.wait('Введите сообщение.')
+            app.wait('Что будем делать?')
             app.command('/packages')
             app.wait(('Управление пакетами dsh', 'Снимок dsh'), absent=('Чтение снимка dsh…',))
             app.send('\x15\x0e')

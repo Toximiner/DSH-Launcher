@@ -100,9 +100,9 @@ func scheduleHistory(value map[string]any) string {
 func (m *model) schedulesLayout(box area) ([]string, []pluginHit) {
 	d := m.workbench
 	w := box.width
-	refresh, add := "["+tr("Обновить")+"]", "[+ "+tr("Новая задача")+"]"
-	toolbar := refresh + " " + add
-	lines := []string{bar(heading().Render(tr("Автоматизация")), accent().Render(toolbar), w), muted().Render(tr("Задачи всего Host · время в часовом поясе терминала"))}
+	refresh, add := tr("Обновить")+" F5", "+ "+tr("Новая задача")+" Ctrl+N"
+	toolbar := refresh + " · " + add
+	lines := []string{bar(heading().Render(tr("Автоматизация")), muted().Render(toolbar), w), muted().Render(tr("Задачи всего Host · время в часовом поясе терминала"))}
 	hits := []pluginHit{{area{box.x + w - lipgloss.Width(toolbar), box.y, lipgloss.Width(refresh), 1}, "refresh", 0}, {area{box.x + w - lipgloss.Width(add), box.y, lipgloss.Width(add), 1}, "create", 0}}
 	tabs := ""
 	for i, status := range scheduleStatuses {
@@ -116,56 +116,60 @@ func (m *model) schedulesLayout(box area) ([]string, []pluginHit) {
 				count++
 			}
 		}
-		text := fmt.Sprintf("[%s %d]", label, count)
+		text := fmt.Sprintf("%s %d", label, count)
 		hits = append(hits, pluginHit{area{box.x + lipgloss.Width(tabs), box.y + 2, lipgloss.Width(text), 1}, "filter", i})
 		if i == d.scheduleFilter {
-			tabs += accent().Bold(true).Render(text) + " "
+			tabs += heading().Render(text) + "  "
 		} else {
-			tabs += muted().Render(text) + " "
+			tabs += muted().Render(text) + "  "
 		}
 	}
 	d.search.Width = max(1, w-10)
-	lines = append(lines, tabs, d.search.View(), muted().Render(strings.Repeat("─", w)))
-	count := max(1, (box.height-8)/4)
+	lines = append(lines, tabs, d.search.View(), "", chooserGroup(tr("Расписания · весь Host")))
 	rows := d.visible()
 	d.index = max(0, min(d.index, max(0, len(rows)-1)))
-	start := max(0, min(d.index-count+1, max(0, len(rows)-count)))
-	for i := 0; i < count; i++ {
-		index := start + i
-		if index >= len(rows) {
-			text := ""
-			if i == 0 {
-				text = tr("Нет задач. Ctrl+N — создать; F2 — сменить фильтр.")
-			}
-			lines = append(lines, muted().Render(text), "", "", "")
-			continue
-		}
+	count := max(1, box.height-13)
+	start, end := chooserWindow(d.index, len(rows), count)
+	for index := start; index < end; index++ {
 		row := rows[index]
-		marker := "  "
 		title := singleLine(stringValue(row.Data, "title"))
 		if title == "" {
 			title = row.Title
 		}
-		if index == d.index {
-			marker = "› "
-			title = accent().Bold(true).Render(title)
+		state := scheduleStatus(stringValue(row.Data, "status"))
+		if row.Data["executionActive"] == true {
+			state += " · " + tr("Задание в очереди или выполняется в сессии.")
 		}
-		state := "[" + scheduleStatus(stringValue(row.Data, "status")) + "]"
-		hits = append(hits, pluginHit{area{box.x, box.y + len(lines), w, 3}, "select", index}, pluginHit{area{box.x + w - lipgloss.Width(state), box.y + len(lines), lipgloss.Width(state), 1}, "toggle", index})
+		// Use the exact same bounded hint as chooserItem: its visible state is the
+		// toggle target, while the remainder of this one-line row only selects.
+		state = ansi.Truncate(clean(state), max(1, w/2), "…")
+		y := box.y + len(lines)
+		hits = append(hits, pluginHit{area{box.x, y, w, 1}, "select", index}, pluginHit{area{box.x + w - lipgloss.Width(state), y, lipgloss.Width(state), 1}, "toggle", index})
+		lines = append(lines, chooserItem(title, state, index == d.index, true, w))
+	}
+	if len(rows) == 0 {
+		lines = append(lines, muted().Render(tr("Нет задач. Ctrl+N — создать; F2 — сменить фильтр.")))
+	}
+	for len(lines) < 6+count {
+		lines = append(lines, "")
+	}
+	lines = append(lines, "")
+	detail := []string{"", "", ""}
+	if row, ok := d.selected(); ok {
+		detail[0] = chooserGroup(scheduleRule(row.Data))
 		label := tr("Следующий запуск: ")
 		if stringValue(row.Data, "status") != "active" {
 			label = tr("Таймер выключен · ")
 		}
-		lines = append(lines, bar(marker+title, accent().Render(state), w), muted().Render("  "+label+scheduleTime(stringValue(row.Data, "scheduledAt"))), "  "+singleLine(stringValue(row.Data, "prompt")), "")
+		detail[1] = muted().Render(label + scheduleTime(stringValue(row.Data, "scheduledAt")))
+		detail[2] = muted().Render(singleLine(stringValue(row.Data, "prompt")))
 	}
-	for len(lines) < box.height-3 {
-		lines = append(lines, "")
-	}
+	lines = append(lines, detail...)
 	note := d.note
 	if d.busy {
 		note = tr("Запрос dsh…")
 	}
-	lines = append(lines, muted().Render(note), muted().Render(tr("↑/↓ выбор · Enter детали/история · Space пауза · F2 фильтр")), muted().Render(tr("Ctrl+N создать · F3 правка · Ctrl+G запуск · Ctrl+X удалить · Esc назад")))
+	lines = append(lines, muted().Render(singleLine(note)), muted().Render(tr("↑/↓ выбор · Enter детали/история · Space пауза · F2 фильтр")), muted().Render(tr("Ctrl+N создать · F3 правка · Ctrl+G запуск · Ctrl+X удалить · Esc назад")))
 	for i, line := range lines {
 		lines[i] = ansi.Truncate(line, w, "…")
 	}

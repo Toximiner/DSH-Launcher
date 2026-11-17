@@ -1,6 +1,6 @@
 # Go TUI preview — session tabs and explicit deletion
 
-The experimental `0.2.0-preview.40-opencode.11` includes visited session tabs,
+The experimental `0.2.0-preview.40-opencode.12` includes visited session tabs,
 per-session drafts, compact home/conversation composers, optional right context
 and Ctrl+P navigation. Command, session/workspace and model pickers share a flat
 frame, measured hit targets, teal selection and a dimmed backdrop. Tool calls
@@ -22,6 +22,8 @@ login tokens, conversation text and drafts are not saved. A fresh backend catalo
 filters out deleted sessions before restoration. Explicit `--session` or `--new`
 takes priority over the saved active conversation. An unavailable backend leaves
 the saved list intact. `--start` creates a session only when there is no saved list.
+
+Preview `.12` compacts Plugins, Plugin Market and Automation tasks into single-row lists with selected details, measured mouse targets and flat auxiliary forms. Existing backend actions and confirmations are preserved.
 
 Permanent deletion is a separate action: Delete in `/sessions-manager`, or
 `/delete-session` for the current session. Cancel is selected by default. In
@@ -65,7 +67,7 @@ the installed application.
 From the repository root, run the separate local build:
 
 ```sh
-./build/previews/opencode-11/dsh-launcher-tui --start
+./build/previews/opencode-12/dsh-launcher-tui --start
 ```
 
 The binary remains separate from earlier builds. Main entry points:

@@ -279,6 +279,26 @@ Corrupt files are not automatically replaced.
 Next: flat Plugins, Plugin Market and Automation tasks screens with search,
 clear groups and existing operation checks preserved.
 
+## Checkpoint 12: compact auxiliary screens
+
+Intermediate build: `0.2.0-preview.40-opencode.12`.
+
+Plugins, Plugin Market and Automation tasks share OpenCode's picker style:
+compact rows, search, selection and details for the selected item. Descriptions
+no longer repeat beneath every row. States, versions, operation progress and
+errors remain visible; mouse targets follow rendering. Plugin settings panels,
+automation forms and these screens' confirmations use flat surfaces and dimmed
+backdrops. Existing operations, confirmations and revision checks are preserved.
+There are no direct Market or Automation equivalents in our OpenCode references;
+these screens follow its common picker style.
+
+```sh
+./build/previews/opencode-12/dsh-launcher-tui --start
+```
+
+Next: files, terminals, subagents, queue and history; then runtime, updates,
+rollback, diagnostics and overall visual acceptance.
+
 ## Revised implementation order
 
 1. **Screenshot correction, preview `opencode.3` (implemented; user review pending).** Active conversation
@@ -294,9 +314,9 @@ clear groups and existing operation checks preserved.
    editors and confirmations continue in subsequent stages.
 3. **Tools and permissions (implemented in preview5; user review pending).** Compact expandable results/thoughts, clear failures and
    decisions, complete input capture by the topmost modal. Show only information dsh provides.
-4. **Auxiliary pages (in progress; settings and shortcuts in preview8).** Searchable
-   grouped settings, flat help/schema forms and small launcher dialogs are migrated.
-   Plugins/market, automation, files, terminals, subagents, queue/history, runtime
+4. **Auxiliary pages (in progress; settings and shortcuts in preview8, Plugins/Market and automation in preview12).** Searchable
+   grouped settings, flat help/schema forms, plugin lists and automation lists are migrated.
+   Files, terminals, subagents, queue/history, runtime
    install/update/rollback and diagnostics remain. Preserve operations and
    revision/confirmation safeguards throughout.
 
