@@ -405,7 +405,7 @@ func (m *model) sessionRequestVisible() bool {
 func (m *model) sessionInfo() string {
 	width := max(1, m.viewport.Width)
 	m.sessionHits = nil
-	lines := []string{heading().Render(tr("Сессии dsh")), tr("Enter вход · F3 имя · Ctrl+B ветка"), tr("Ctrl+X архив/возврат · a фильтр · r новые")}
+	lines := []string{tr("Enter вход · F3 имя · Ctrl+B ветка"), tr("Ctrl+X архив/возврат · a фильтр · r новые")}
 	query := m.sessionQuery
 	if m.sessionSearching {
 		query = m.sessionSearch.View()

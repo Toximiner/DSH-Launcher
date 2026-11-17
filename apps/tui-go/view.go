@@ -83,6 +83,12 @@ func (m *model) View() string {
 	}
 	header := m.tabRail() + "\n" + statusLine
 	title := tr(pages[m.page])
+	if m.page == sessionsPage {
+		title = tr("Сессии dsh")
+	}
+	if m.page == logPage {
+		title = tr("Журнал клиента · локально")
+	}
 	if m.page == 0 {
 		title = tr("Новый разговор")
 		if m.session != nil {

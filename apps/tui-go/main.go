@@ -204,7 +204,7 @@ func (m *model) rebuild() {
 	case marketPage:
 		content = m.marketView()
 	case logPage:
-		content = heading().Render(tr("Журнал клиента · локально")) + "\n\n" + strings.Join(m.events, "\n")
+		content = strings.Join(m.events, "\n")
 	}
 	m.viewport.SetContent(ansi.Hardwrap(content, max(1, m.viewport.Width), true))
 	if followTail {

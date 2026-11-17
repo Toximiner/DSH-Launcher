@@ -84,9 +84,9 @@ func (m *model) loadSettings() tea.Cmd {
 
 func (m *model) settingsView() string {
 	if m.settingsLogin == "" {
-		return heading().Render(tr("Настройки dsh")) + "\n\n" + muted().Render(tr("Для чтения настроек работающего dsh\nукажите --url или DSH_TUI_URL.\nНужен URL входа с ?token=."))
+		return muted().Render(tr("Для чтения настроек работающего dsh\nукажите --url или DSH_TUI_URL.\nНужен URL входа с ?token=."))
 	}
-	lines := []string{heading().Render(tr("Настройки dsh")), muted().Render(tr("←/→ раздел · Enter правка · F6 провайдеры · F12 модель"))}
+	lines := []string{muted().Render(tr("←/→ раздел · Enter правка · F6 провайдеры · F12 модель"))}
 	if m.settingsLoading {
 		lines = append(lines, "", tr("Загрузка настроек…"))
 	}

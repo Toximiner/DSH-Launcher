@@ -251,7 +251,7 @@ func (m *model) sessionPickerEntries() []sessionPickerEntry {
 }
 func (m *model) sessionPickerSpec() chooserSpec {
 	d := m.sessionPicker
-	detail := tr("Сессии и рабочие области")
+	detail := ""
 	if d.busy {
 		detail = tr("Загрузка…")
 	} else if d.note != "" {

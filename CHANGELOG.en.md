@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- TUI: removed duplicate headings in the session picker and the dsh settings, session manager and log pages. Loading status, errors and workspace context remain visible.
+
 - TUI `preview.40-opencode.8`: compact searchable grouped settings retain all 15 actions in place of two panes; arrows change local preferences. The shortcut reference, dsh schema forms and small launcher dialogs use flat surfaces, retaining explicit saves, revision checks and secret protection. Other auxiliary screens remain in progress; the local build does not replace the installed TUI.
 
 - TUI `preview.40-opencode.7`: successful question/permission replies no longer leave an error-looking delivery confirmation in the conversation. Delivery failures, uncertain replies and unrelated chat errors remain visible.
