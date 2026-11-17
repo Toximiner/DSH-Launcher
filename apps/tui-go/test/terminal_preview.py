@@ -165,6 +165,29 @@ class TerminalPreview(unittest.TestCase):
         self.assertIn(b'\x1b[?1002l', self.app.raw)
         self.assertIn(b'\x1b[?1006l', self.app.raw)
 
+    def test_native_text_selection_releases_mouse_and_preserves_dialog(self):
+        self.app.send('selection draft')
+        self.app.wait('selection draft')
+        self.app.send('\x1bOS')  # F4 settings dialog.
+        self.app.wait('Настройки TUI')
+        offset = len(self.app.raw)
+        self.app.send('\x1b[21~')  # F10: terminal-native selection.
+        self.app.wait('Ctrl+Shift+C')
+        wait_for(lambda: (self.app.pump(), b'\x1b[?1002l' in self.app.raw[offset:])[1])
+        frozen = self.app.text
+        self.app.send('\x1b[200~ignored paste\x1b[201~\r')
+        for _ in range(4):
+            self.app.pump()
+        self.assertEqual(self.app.text, frozen)
+        self.capture('selection-over-settings')
+        offset = len(self.app.raw)
+        self.app.send('\x1b')
+        self.app.wait('Настройки TUI', absent=('Ctrl+Shift+C',))
+        wait_for(lambda: (self.app.pump(), b'\x1b[?1002h' in self.app.raw[offset:])[1])
+        self.app.send('\x1b')
+        self.app.wait('selection draft')
+        self.assertNotIn('ignored paste', self.app.text)
+
     def test_no_mouse_option(self):
         self.app.close(Path(self.temp.name) / 'first.log')
         env = {**os.environ, 'PATH': '/nonexistent', 'TERM': 'xterm-256color', 'HOME': self.temp.name, 'XDG_CONFIG_HOME': self.temp.name + '/config'}

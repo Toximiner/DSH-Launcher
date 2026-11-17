@@ -218,6 +218,33 @@ func (m *model) answerQuestion() tea.Cmd {
 		return approvalAnswerResult{epoch: epoch, generation: generation, id: id, err: reply(id, batch)}
 	}
 }
+
+// Enter confirms the focused choice, then visits the next unanswered question.
+// It sends the batch only when every question has an explicit choice, custom
+// response or skip; free-form Enter continues to insert a newline.
+func (m *model) advanceQuestionAnswer() tea.Cmd {
+	s := m.approvals
+	f, _, current := m.questionCurrent()
+	for step := 1; step <= len(f.drafts); step++ {
+		index := (f.index + step) % len(f.drafts)
+		draft := &f.drafts[index]
+		answered := draft.skipped || strings.TrimSpace(clean(draft.custom.Value())) != ""
+		for option := range s.requests[0].Request.Questions[index].Options {
+			answered = answered || draft.selected[option]
+		}
+		if !answered {
+			current.custom.Blur()
+			f.index = index
+			f.cursor = -1
+			f.reveal = false
+			f.err = ""
+			s.viewport.GotoTop()
+			return nil
+		}
+	}
+	return m.answerQuestion()
+}
+
 func (m *model) questionKey(msg tea.KeyMsg) tea.Cmd {
 	s := m.approvals
 	if !msg.Paste {
@@ -272,8 +299,17 @@ func (m *model) questionKey(msg tea.KeyMsg) tea.Cmd {
 			}
 		case "enter":
 			if !editing {
-				m.chooseQuestionOption(f.cursor)
-				return nil
+				if f.cursor < 0 || f.cursor >= len(q.Options) {
+					return nil
+				}
+				selected := false
+				for option := range q.Options {
+					selected = selected || d.selected[option]
+				}
+				if !q.MultiSelect || !selected {
+					m.chooseQuestionOption(f.cursor)
+				}
+				return m.advanceQuestionAnswer()
 			}
 		}
 	}
@@ -398,7 +434,7 @@ func (m *model) questionView(base string) string {
 	} else if d != nil && d.skipped {
 		note = tr("Вопрос пропущен. F5 — отправить.")
 	}
-	lines := []string{"", decisionTitle(title, inner), muted().Render(ansi.Truncate(progress, inner, "…")), s.viewport.View(), muted().Render(ansi.Truncate(label, inner, "…")), editor, ansi.Truncate(note, inner, "…"), questionButtons(inner), muted().Render(ansi.Truncate(tr("Tab выбор · Enter отметить · F5 ответ"), inner, "…")), ""}
+	lines := []string{"", decisionTitle(title, inner), muted().Render(ansi.Truncate(progress, inner, "…")), s.viewport.View(), muted().Render(ansi.Truncate(label, inner, "…")), editor, ansi.Truncate(note, inner, "…"), questionButtons(inner), muted().Render(ansi.Truncate(tr("Tab выбор · Enter ответ · Space отметить · F5 всё"), inner, "…")), ""}
 	return m.decisionSurface(base, box, lines)
 }
 func (m *model) questionMouse(msg tea.MouseMsg) tea.Cmd {

@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- TUI `preview.40-opencode.6`: removed the persistent warning for a confirmed message leaving the queue. F10 enables native terminal selection with a frozen visible frame; Esc/F10 restores live updates and the prior mouse mode while incoming messages remain processed. Enter confirms a question option and advances or submits a complete batch; Space marks options and custom answers retain multiline input. The existing question dialog appearance is retained by user preference.
+
 - Experimental TUI `preview.40-opencode.5`: compact expandable tool calls with distinct errors, separate reasoning supplied by dsh (Ctrl+O, `/thoughts`, click), and flat dimmed permission/question dialogs. Reply source copying, explicit decisions, scrolling and drafts are preserved; F7 reveals pending requests from the palette/session picker.
 
 - Experimental TUI `preview.40-opencode.4`: shared palette/exact-slash/base-shortcut registry and flat pickers with common geometry/dim backdrop. Adds session/workspace search, explicit creation in a selected workspace and separate full managers. Model selection has provider groups, current-model marks and sticky headings; explicit apply/cancel and write protections are retained.

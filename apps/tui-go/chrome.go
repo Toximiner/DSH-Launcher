@@ -50,7 +50,9 @@ var menuEntries = [][]menuEntry{
 	{{"Горячие клавиши", "help"}, {"Обновления и откат…", "updates"}, {"Журнал клиента", "log"}, {"Диагностика…", "diagnostics"}, {"О программе", "about"}},
 }
 
-func (m *model) mouseEnabled() bool { return m.prefs.Mouse && !m.mouseForcedOff }
+func (m *model) mouseEnabled() bool {
+	return m.prefs.Mouse && !m.mouseForcedOff && m.selectionSnapshot == ""
+}
 
 func (m *model) beginChrome() {
 	if m.chrome.menuOpen || m.chrome.dialog != "" {

@@ -616,11 +616,11 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.command('Review the plan fixture')
         app.wait('Approve this plan', timeout=20)
         app.wait('Workbench plan')
-        app.send('\t\x1b[B\r\x1b[15~')
+        app.send('\t\x1b[B\r')
         app.wait('WORKBENCH_REPLY_3', timeout=20)
         app.command('Review once more')
         app.wait('Approve this plan', timeout=20)
-        app.send('\t\r\x1b[15~')
+        app.send('\t\r')
         app.wait('WORKBENCH_REPLY_5', timeout=20)
         assert len(requests) == 5, f'Unexpected local model request count: {len(requests)}'
         assert any('approved' in str(message) for message in requests[4]['messages'] if message.get('role') == 'tool')

@@ -1,6 +1,6 @@
 # Go TUI preview — OpenCode tools and decisions
 
-The experimental `0.2.0-preview.40-opencode.5` includes visited session tabs,
+The experimental `0.2.0-preview.40-opencode.6` includes visited session tabs,
 per-session drafts, compact home/conversation composers, optional right context
 and Ctrl+P navigation. Command, session/workspace and model pickers share a flat
 frame, measured hit targets, teal selection and a dimmed backdrop. Tool calls
@@ -12,7 +12,7 @@ Ctrl+O also works within history. Copying replies preserves the reply source.
 From the repository root, run the separate local build:
 
 ```sh
-./build/previews/opencode-05/dsh-launcher-tui --start
+./build/previews/opencode-06/dsh-launcher-tui --start
 ```
 
 The binary remains separate from earlier builds. Main entry points:
@@ -301,7 +301,14 @@ remain available. Mouse clicks select sidebar actions and sessions, and focus th
 The wheel scrolls the workspace tree or conversation under the pointer.
 Mouse capture is enabled by default; `--no-mouse` disables it for native terminal
 text selection. Many terminals also allow selection with Shift held down.
-Dragging and positioning the text cursor by click are not implemented.
+F10 (or `/select` / the command palette) temporarily releases mouse reporting
+and freezes the current frame, including open dialogs, for native terminal text
+selection. Drag to select and use the terminal copy shortcut (usually Ctrl+Shift+C).
+Esc/F10 resumes the live display and restores the previous mouse setting. Incoming
+backend messages continue to be processed; selection keys and paste do not answer
+hidden requests or change drafts. F7 returns to a pending request; F8 stops the
+agent. A terminal resize exits selection mode. Positioning the text cursor by
+click is not implemented.
 The minimum terminal size is **80 columns by 24 rows**; **100×30** is recommended.
 At 80×24 the sidebar, composer, and dialogs remain visible, with about 50 columns
 for conversation text. Below either minimum dimension, a size notice replaces the

@@ -18,6 +18,7 @@ func TestDecisionShortcutRevealsPendingRequestWithoutAnswer(t *testing.T) {
 			}
 			requestApproval(m, "incoming", "s")
 			m.approvals.visible = visible
+			m.Update(tea.KeyMsg{Type: tea.KeyF10})
 			answers := 0
 			m.approvals.answer = func(string, string) error { answers++; return nil }
 			m.Update(tea.KeyMsg{Type: tea.KeyF7})

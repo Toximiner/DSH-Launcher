@@ -90,7 +90,7 @@ func TestQueueAbsenceNeverResolvesUncertainSubmission(t *testing.T) {
 	}
 	m.chat.cursor = 6
 	m.reconcileQueuedPrompt()
-	if m.prompts["s"] != nil || !strings.Contains(m.chat.note, "больше не находится") {
+	if m.prompts["s"] != nil || m.chat.note != "" {
 		t.Fatal("confirmed receipt outside recent history blocked subsequent tasks forever")
 	}
 }
@@ -155,5 +155,40 @@ func TestQueueMasksContextAndKeepsStopMouseAligned(t *testing.T) {
 	x := m.composerBox().x + len([]rune(footer[:strings.Index(footer, "[F8 Стоп]")]))
 	if !strings.Contains(strings.Split(clean(m.View()), "\n")[y], "[F8 Стоп]") || m.mouse(tea.MouseMsg{X: x, Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress}) == nil {
 		t.Fatal("queue hint broke the Stop mouse target")
+	}
+}
+
+func TestQueueAcceptedAbsencePreservesExistingNoticesAndOtherReceiptStates(t *testing.T) {
+	for _, note := range []string{"", "Actual delivery or connection error"} {
+		for _, status := range []string{"accepted", "unknown", "rejected", "sending"} {
+			t.Run(status+"/"+note, func(t *testing.T) {
+				m := chatModel(t)
+				now := time.Now()
+				m.chat.ready = true
+				m.chat.cursor = 5
+				m.chat.note = note
+				m.session.QueueKnown = true
+				m.session.Queue = nil
+				m.session.StateCursor = 5
+				m.session.QueueFetchedAt = now.Add(time.Second)
+				m.session.Running = true
+				pending := &pendingPrompt{ID: "receipt", Text: "task", Status: status, AcceptedAt: now}
+				m.prompts["s"] = pending
+				m.reconcileQueuedPrompt()
+				if status == "accepted" {
+					if m.prompts["s"] != nil {
+						t.Fatal("confirmed consumed receipt blocked a later send")
+					}
+				} else if m.prompts["s"] != pending {
+					t.Fatal("queue absence erased an unconfirmed or rejected receipt")
+				}
+				if m.chat.note != note {
+					t.Fatal("receipt cleanup invented a notice or overwrote an existing error")
+				}
+				if !m.session.Running {
+					t.Fatal("queue absence was presented as completed agent execution")
+				}
+			})
+		}
 	}
 }

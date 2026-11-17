@@ -44,6 +44,9 @@ func bar(left, right string, width int) string {
 }
 
 func (m *model) View() string {
+	if m.selectionSnapshot != "" {
+		return m.selectionSnapshot
+	}
 	theme.SetLight(m.prefs.Theme == "light")
 	activeEnglish.Store(m.prefs.Language == "en")
 	if !m.terminalFits() {

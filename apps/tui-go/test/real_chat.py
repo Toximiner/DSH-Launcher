@@ -353,6 +353,8 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         wait_idle(app)
         app.command('A second turn without tools.')
         app.wait('Ответ 2: проверка транспорта настоящего dsh.', timeout=20)
+        wait_idle(app)
+        assert 'Принятое сообщение больше не находится в очереди dsh.' not in app.text, 'Completed reply retained accepted-queue warning'
         app.send('\x1b[5~')
         wait_idle(app)
         app.command('Another brief answer, no tools.')
@@ -517,13 +519,29 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.send('\x1b[18~')
         app.wait('Вопрос агента')
         app.wait('Which language should the agent use?', timeout=10)
-        app.send('\t\r\x1b[C')
+        # Native selection freezes the pending question and captures all keys;
+        # neither hidden answers nor the retained conversation draft may change.
+        before_selection_calls = len(model_calls)
+        app.send('\x1b[21~')
+        app.wait('Выделение: мышь')
+        frozen_question = app.text
+        app.send('\t\r \x1b[C\x1b[15~SHOULD NOT REACH THE DRAFT')
+        app.send('\x1b[200~PASTED HIDDEN ANSWER\x1b[201~')
+        for _ in range(5):
+            app.pump()
+        assert app.text == frozen_question, 'Selection did not freeze the pending-question frame'
+        assert len(model_calls) == before_selection_calls, 'Selection answered a hidden question'
+        if args.capture_question:
+            capture_cells(app, args.capture_question + '-selection.json')
+        app.send('\x1b')
+        app.wait('Which language should the agent use?', absent=('Выделение: мышь',))
+        app.send('\t\r')
         app.wait('Which checks should run?', timeout=10)
-        app.send('\t\r\x1b[B ')
+        app.send('\t \x1b[B ')
         app.wait('[✓] PTY checks')
         if args.capture_question:
             capture_cells(app, str(Path(args.capture_question).with_name('29-question-options-cells.json')))
-        app.send('\x1b[C')
+        app.send('\r')
         app.wait('Add implementation notes.', timeout=10)
         app.send('\tTerminal questions work.\rKeep the chat draft.')
         app.wait('Keep the chat draft.', timeout=10)
@@ -537,6 +555,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.send('\x1b[15~')
         app.wait('Ответ 12: проверка транспорта настоящего dsh.', timeout=20)
         app.wait('> retained chat draft', timeout=10)
+        assert 'SHOULD NOT REACH' not in app.text and 'PASTED HIDDEN ANSWER' not in app.text, 'Selection keys mutated the retained draft'
         tool_results = [message for message in model_calls[11]['messages'] if message.get('role') == 'tool']
         answered = [message for message in tool_results if message.get('tool_call_id') == 'question-11']
         assert len(answered) == 1, 'Question answer was not returned as the tool result'
@@ -562,7 +581,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app = Terminal(str(Path(args.binary).resolve()), ['--session', session_id], {**env, 'DSH_TUI_URL': login})
         app.resize(120, 42)
         app.wait('Can we continue after reconnect?', timeout=20)
-        app.send('\t\r\x1b[15~')
+        app.send('\t\r')
         app.wait('Ответ 15: проверка транспорта настоящего dsh.', timeout=20)
         assert any('answer_to_pending_question' in json.dumps(message) for message in model_calls[14]['messages']), 'Continued reply was not tagged by dsh'
         app.send('\x1b[5~' * 20)
@@ -574,7 +593,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         assert len(model_calls) == 16, 'Unexpected question retry or duplicate reply'
         wait_for(question_deferred)
         if args.through_decisions:
-            print('Actual dsh tools and decisions checkpoint: raw results, expansion, permission grant/reject/cancel, questions, reconnect and no resubmission OK')
+            print('Actual dsh tools and decisions checkpoint: raw results, expansion, permission grant/reject/cancel, Enter question navigation/send, F10 frozen pending question and preserved draft, cleared accepted-queue warning, reconnect and no resubmission OK')
             app.send('\x04')
             app.exited()
             raise SystemExit(0)

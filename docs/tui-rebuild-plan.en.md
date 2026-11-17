@@ -139,6 +139,26 @@ Intermediate build: `0.2.0-preview.40-opencode.5`.
 ./build/previews/opencode-05/dsh-launcher-tui --start
 ```
 
+## Checkpoint 6: selection and answer confirmation
+
+Build `0.2.0-preview.40-opencode.6` retains the current modal question dialog
+by user preference; the OpenCode question dock is not being copied.
+Enter confirms a focused option and advances to the next unanswered question
+or submits a complete batch. Space marks options; Enter in custom text keeps
+its newline behavior and F5 submits the batch.
+
+F10, `/select` and the palette enable temporary native terminal selection:
+the visible frame freezes and mouse reporting is released while backend messages
+continue to be processed. Drag to select and use the terminal's copy shortcut
+(usually Ctrl+Shift+C). Esc/F10 restores the live frame and prior mouse mode;
+resize exits selection. This also works over dialogs without answering requests
+or changing drafts. The persistent consumed-receipt warning has been removed;
+actual errors and uncertain-delivery safeguards remain.
+
+```sh
+./build/previews/opencode-06/dsh-launcher-tui --start
+```
+
 ## Revised implementation order
 
 1. **Screenshot correction, preview `opencode.3` (implemented; user review pending).** Active conversation
@@ -157,14 +177,19 @@ Intermediate build: `0.2.0-preview.40-opencode.5`.
 4. **Auxiliary pages.** Settings, plugins/market, automation, files, terminals,
    subagents, queue/history, install/update/rollback and diagnostics use the same
    visual system while retaining operations and revision/confirmation safeguards.
-   Queue work also covers classifying and clearing the transient accepted-send
-   notice, which can currently remain after a normal reply.
+
 5. **Visual acceptance.** Compare actual captures of the four supplied scenes at a
    wide size and at 100×30/80×24; test Go race/PTY/isolated real dsh. Ask for a specific
    additional screenshot only when the current references leave a necessary state unclear.
    User reviews intermediate builds before any replacement of an installed application.
 
 ## Verification and delivery
+
+Actual OpenCode 2.3.0 questions are reproduced by
+`apps/tui-go/test/opencode_question_reference.py` with a local model:
+a single question submits on Enter; multiple questions advance to the next
+question and a final summary. TXT/JSON/PNG captures cover 80×24, 100×30 and
+160×40; the subsequent model request verifies the actual tool result.
 
 The installed OpenCode 2.3.0 can serve as an executable reference: run it with
 `--standalone` in temporary HOME/XDG directories and a temporary workspace. Capture

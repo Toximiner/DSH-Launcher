@@ -30,6 +30,9 @@ type actionDescriptor struct {
 }
 
 var actionRegistry = []actionDescriptor{
+	{id: "view.text-selection", group: "Навигация", label: "Выделить текст терминалом", hint: "/select · F10", aliases: []string{"/select"}, keys: []string{"f10"}, scope: actionBase,
+		helpContext: "Весь интерфейс", enabled: func(m *model) bool { return m.terminalFits() },
+		run: func(m *model) tea.Cmd { return func() tea.Msg { return textSelectionStart{} } }},
 	// Сессии
 	{id: "session.new", group: "Сессии", label: "Новая сессия", hint: "/new · Ctrl+n", aliases: []string{"/new"}, keys: []string{"ctrl+n"}, scope: actionChat,
 		enabled: paletteHasURL,

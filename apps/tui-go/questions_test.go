@@ -46,10 +46,10 @@ func TestQuestionStructuredBatchAndDraftIsolation(t *testing.T) {
 		t.Fatal("question input changed the chat draft")
 	}
 	questionKey(m, tea.KeyTab)
-	questionKey(m, tea.KeyEnter)
+	questionKey(m, tea.KeySpace)
 	questionKey(m, tea.KeyRight)
 	questionKey(m, tea.KeyTab)
-	questionKey(m, tea.KeyEnter)
+	questionKey(m, tea.KeySpace)
 	questionKey(m, tea.KeyDown)
 	questionKey(m, tea.KeySpace)
 	questionKey(m, tea.KeyRight)
@@ -80,7 +80,7 @@ func TestQuestionCompletenessDeferralAndSingleChoiceCustom(t *testing.T) {
 		t.Fatal("incomplete batch submitted")
 	}
 	questionKey(m, tea.KeyTab)
-	questionKey(m, tea.KeyEnter)
+	questionKey(m, tea.KeySpace)
 	questionKey(m, tea.KeyTab)
 	questionText(m, "custom answer")
 	f, _, d := m.questionCurrent()
@@ -117,7 +117,7 @@ func TestQuestionContinuedProjectionAndDuplicateSuppression(t *testing.T) {
 		t.Fatal("projection created duplicate questions")
 	}
 	questionKey(m, tea.KeyTab)
-	questionKey(m, tea.KeyEnter)
+	questionKey(m, tea.KeySpace)
 	cmd := questionKey(m, tea.KeyF5)
 	m.Update(cmd())
 	m.syncContinuedQuestions()
@@ -241,6 +241,79 @@ func TestQuestionFlatFrameGeometryAndDeferredCustomDraft(t *testing.T) {
 					t.Fatal("reopening flat question lost custom response")
 				}
 			})
+		}
+	}
+}
+
+func TestQuestionEnterSingleChoiceSubmitsExactlyOnce(t *testing.T) {
+	m := questionModel(t, []userQuestion{{ID: "q", Question: "Choose?", Options: []questionOption{{Label: "Yes"}, {Label: "No"}}}})
+	m.input.SetValue("preserved chat draft")
+	calls := 0
+	var batch questionAnswers
+	m.approvals.reply = func(_ string, value any) error { calls++; batch = value.(questionAnswers); return nil }
+	if cmd := questionKey(m, tea.KeyEnter); cmd != nil || m.approvals.busy {
+		t.Fatal("Enter without an explicit focus sent a default answer")
+	}
+	questionKey(m, tea.KeyTab)
+	cmd := questionKey(m, tea.KeyEnter)
+	if cmd == nil || !m.approvals.busy || calls != 0 {
+		t.Fatal("focused single-choice Enter did not prepare explicit batch")
+	}
+	if next := questionKey(m, tea.KeyEnter); next != nil {
+		t.Fatal("repeated Enter prepared another reply")
+	}
+	m.Update(cmd())
+	if calls != 1 || len(batch.Answers) != 1 || len(batch.Answers[0].Selected) != 1 || batch.Answers[0].Selected[0] != "Yes" || m.input.Value() != "preserved chat draft" {
+		t.Fatal("Enter submitted wrong choice, duplicated reply or changed chat draft")
+	}
+}
+
+func TestQuestionEnterAdvancesOnlyToUnansweredAndPreservesOtherDrafts(t *testing.T) {
+	m := questionModel(t, []userQuestion{{ID: "first", Question: "First?", Options: []questionOption{{Label: "A"}}}, {ID: "already", Question: "Already answered?"}, {ID: "last", Question: "Last?", Options: []questionOption{{Label: "B"}}}})
+	var batch questionAnswers
+	m.approvals.reply = func(_ string, value any) error { batch = value.(questionAnswers); return nil }
+	f, _, _ := m.questionCurrent()
+	f.drafts[1].custom.SetValue("retained custom answer")
+	questionKey(m, tea.KeyTab)
+	if cmd := questionKey(m, tea.KeyEnter); cmd != nil || f.index != 2 || f.cursor != -1 || m.approvals.busy {
+		t.Fatal("Enter did not skip answered draft and advance to next unanswered question")
+	}
+	if f.drafts[1].custom.Value() != "retained custom answer" || !f.drafts[0].selected[0] {
+		t.Fatal("advancing lost another answer")
+	}
+	questionKey(m, tea.KeyTab)
+	cmd := questionKey(m, tea.KeyEnter)
+	if cmd == nil {
+		t.Fatal("last complete choice did not submit batch")
+	}
+	m.Update(cmd())
+	if len(batch.Answers) != 3 || batch.Answers[1].Custom != "retained custom answer" || batch.Answers[0].Selected[0] != "A" || batch.Answers[2].Selected[0] != "B" {
+		t.Fatal("completed batch lost or changed an answer")
+	}
+}
+
+func TestQuestionEnterConfirmsMultiSelectionWithoutTogglingItAway(t *testing.T) {
+	for _, preselect := range []bool{false, true} {
+		m := questionModel(t, []userQuestion{{ID: "multi", Question: "Choose checks", MultiSelect: true, Options: []questionOption{{Label: "Unit"}, {Label: "PTY"}}}})
+		var batch questionAnswers
+		m.approvals.reply = func(_ string, value any) error { batch = value.(questionAnswers); return nil }
+		questionKey(m, tea.KeyTab)
+		if preselect {
+			questionKey(m, tea.KeySpace)
+			questionKey(m, tea.KeyDown)
+			questionKey(m, tea.KeySpace)
+		}
+		cmd := questionKey(m, tea.KeyEnter)
+		if cmd == nil {
+			t.Fatal("explicit multiselect Enter did not confirm current choices")
+		}
+		m.Update(cmd())
+		want := 1
+		if preselect {
+			want = 2
+		}
+		if len(batch.Answers) != 1 || len(batch.Answers[0].Selected) != want || batch.Answers[0].Selected[0] != "Unit" {
+			t.Fatal("Enter removed current selection or failed to choose focused option")
 		}
 	}
 }

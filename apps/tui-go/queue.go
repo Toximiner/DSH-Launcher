@@ -61,10 +61,11 @@ func (m *model) reconcileQueuedPrompt() {
 		}
 	}
 	// Absence alone never resolves an uncertain send. A confirmed receipt can
-	// leave the queue via another client while our recent-history window is cold.
+	// leave the queue through normal consumption or another client while the
+	// admission event is still outside the current history window. Cleanup is
+	// bookkeeping, not evidence of an error or of completed agent execution.
 	if p.Status == "accepted" && !p.AcceptedAt.IsZero() && m.session.QueueFetchedAt.After(p.AcceptedAt) && m.chat.ready && m.chat.cursor >= m.session.StateCursor {
 		delete(m.prompts, m.session.ID)
-		m.chat.note = tr("Принятое сообщение больше не находится в очереди dsh.")
 	}
 }
 func (m *model) visibleQueue() []queuedMessage {

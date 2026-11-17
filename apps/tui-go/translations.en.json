@@ -1476,5 +1476,9 @@
   " · вывод обрезан": " · output truncated",
   " · нет связи": " · disconnected",
   "Показать/скрыть размышления": "Show/hide thoughts",
-  "Размышления": "Thoughts"
+  "Размышления": "Thoughts",
+  "Выделить текст терминалом": "Select text with terminal",
+  "Выделение: мышь · Ctrl+Shift+C копия · Esc/F10 назад": "Select: drag mouse · Ctrl+Shift+C copy · Esc/F10 back",
+  "Tab выбор · Enter ответ · Space отметить · F5 всё": "Tab select · Enter confirm · Space mark · F5 all",
+  "Выбор / отметка / подтверждение / отправка": "Select / mark / confirm / submit"
 }

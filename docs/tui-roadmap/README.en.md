@@ -1,6 +1,6 @@
 # TUI development roadmap
 
-The OpenCode-style shell and conversation have separate intermediate builds. Preview `opencode.5` adds compact tool calls, expandable reasoning supplied by dsh and flat permission/question dialogs; next: auxiliary screens. See the [rebuild plan](../tui-rebuild-plan.en.md).
+The OpenCode-style shell and conversation have separate intermediate builds. Preview `opencode.6` adds F10 native text selection and Enter answer confirmation to compact tools, reasoning and decision dialogs, and removes the false queue warning; next: auxiliary screens. See the [rebuild plan](../tui-rebuild-plan.en.md).
 
 Plugin Market and Automation tasks now follow the GUI structure: dedicated pages, cards and status indicators; tasks have status filters and creation/editing forms. Delivery history is readable, with explicit time zones. F2 in a form opens advanced JSON for complex rules. Revision checks and confirmation remain in place.
 
