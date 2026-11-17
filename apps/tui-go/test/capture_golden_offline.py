@@ -25,8 +25,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--binary', required=True)
 parser.add_argument('--out', default=str(Path(__file__).resolve().parent / 'golden' / 'before'))
 args = parser.parse_args()
-BINARY = str(Path(args.binary).resolve())
-OUT = Path(args.out)
 SIZES = [(100, 30), (80, 24)]
 
 
@@ -54,6 +52,14 @@ def close_hotkeys(app):
     app.wait('Настройки TUI', absent=('Найдено: 67',))
 
 root = Path(tempfile.mkdtemp(prefix='dsh-tui-golden-offline-'))
+# The TUI reports the child process cwd as the workspace name in the top bar
+# ("<name> / Чат"). Pin it to a stable directory so dumps are comparable.
+# Resolve user paths before the chdir below changes the working directory.
+BINARY = str(Path(args.binary).resolve())
+OUT = Path(args.out).resolve()
+project = root / 'project'
+project.mkdir()
+os.chdir(project)
 env = {key: value for key, value in os.environ.items()
        if key not in ('DSH_TUI_URL', 'NO_COLOR', 'DISPLAY', 'WAYLAND_DISPLAY')}
 env.update(TERM='xterm-256color', HOME=str(root), XDG_CONFIG_HOME=str(root / 'config'),

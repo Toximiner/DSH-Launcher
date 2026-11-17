@@ -24,7 +24,7 @@ from pathlib import Path
 # ("session-ab12c3d…"). 'x' is excluded from the char classes so an
 # already-normalized row survives a second pass untouched.
 _SESSION_RE = re.compile(r'session-[a-z0-9]{8,}(-[a-z0-9]{3,}){0,4}')
-_SESSION_TRUNC_RE = re.compile(r'session-[a-z0-9]{2,6}…')
+_SESSION_TRUNC_RE = re.compile(r'session-[a-z0-9]{2,7}…')
 _TEMP_RE = re.compile(r'/tmp/dsh-tui-[a-z0-9-]+|/tmp/tui-go-pty-[a-z0-9]+')
 # IP-anchored so HH:MM clocks are never touched; only the port digits change.
 _PORT_RE = re.compile(r'127\.0\.0\.1:(\d{2,5})')
