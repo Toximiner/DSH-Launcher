@@ -239,6 +239,11 @@ Defaults are in `src/env.js` and `src/config.js` (and the Settings window), or e
 | `DSH_LAUNCHER_NO_GPU`   | —                         | `1` — no GPU acceleration (software rendering) |
 | `DSH_LAUNCHER_OZONE`    | auto                      | window on Wayland: `wayland` or `x11` (XWayland) |
 
+The window backend is selected before Electron starts. An explicit
+`dsh-launcher --ozone-platform=x11` (or `wayland`) argument takes precedence
+over `DSH_LAUNCHER_OZONE`, the saved preference and Auto, and survives restarts.
+Without an explicit argument, restarting resolves the current preference again.
+
 The language of the launcher's windows (startup, dsh installation,
 marketplace prompt, updates, errors, dialogs) is chosen in Settings or with
 the **RU|EN** switch in the top-right corner of the launcher's pages; the

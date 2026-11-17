@@ -2,9 +2,8 @@
 // GPU acceleration: detection of a real GPU (/dev/dri), EGL libraries, a Wayland
 // session (ozone-platform), the "GPU driver is broken" marker and a counter of
 // GPU-process crashes. Detection runs at module load (no electron —
-// app is passed into apply/onChildProcessGone); the commandLine/
-// disableHardwareAcceleration decisions — in apply(), which main.js calls before
-// app ready.
+// app is passed into apply/onChildProcessGone). run.sh selects Ozone before
+// Electron starts; apply() reports that selection and configures acceleration.
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -56,18 +55,20 @@ const gpuDisabledByMarker = process.platform === 'linux' &&
 
 const noGpuRequested = CONFIG.noGpu; // DSH_LAUNCHER_NO_GPU=1 or "Settings" → "Off"
 
-// ozone-platform and disableHardwareAcceleration must be applied before app ready
-// (main.js calls this at load, right after starting the log).
+// Ozone is already fixed at process startup. Hardware acceleration can still be
+// disabled here before app ready (main.js calls this after starting the log).
+/* ===== apply (test test/gpu.js) ===== */
 function apply(app) {
-  if (isWaylandSession) {
-    // An error in the DSH_LAUNCHER_OZONE value is not passed to Electron:
-    // an unknown ozone-platform may fail to initialize at all.
+  const startupOzone = app.commandLine.getSwitchValue('ozone-platform');
+  if (isWaylandSession && startupOzone) {
+    // run.sh selected this before native initialization. Never overwrite it:
+    // doing so changes child processes while the main window keeps its backend.
     const ozoneManual = CONFIG.ozone !== 'auto'; // DSH_LAUNCHER_OZONE or "Settings"
-    const ozone = ozoneManual ? CONFIG.ozone : hasGpuRenderNode ? 'wayland' : 'x11';
-    app.commandLine.appendSwitch('ozone-platform', ozone);
+    const ozone = startupOzone;
+    const explicitOzone = process.env.DSH_LAUNCHER_AUTO_OZONE !== ozone;
     console.log(
       `[launcher] Wayland-сессия — ozone-platform=${ozone}` +
-      (ozoneManual
+      (explicitOzone ? ' (аргумент --ozone-platform)' : ozoneManual
         ? (CONFIG.src.ozone === 'env' ? ' (принудительно: DSH_LAUNCHER_OZONE)' : ' (выбрано в «Настройках»)')
         : hasGpuRenderNode
           ? ' (есть реальный GPU — нативный Wayland; X11/XWayland-окно на KWin невидимо)'
@@ -84,6 +85,7 @@ function apply(app) {
     console.log(`[launcher] ${why} — отключаю GPU-ускорение (программный рендер)`);
   }
 }
+/* ===== end apply ===== */
 
 /* ===== onChildProcessGone (test test/gpu.js) =====
    Two or more GPU-process deaths in one session = the driver is broken: we write the marker

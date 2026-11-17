@@ -2,6 +2,7 @@
 // «Настройки» (Settings) window: sections, field saving, launcher restart.
 const { app, dialog } = require('electron');
 const { spawn } = require('child_process');
+const { restartLauncherArgs } = require('./ozone-startup');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -153,14 +154,11 @@ function spawnLauncherAfterExit(cmd, args, stdio) {
 
 function spawnNewInstance() {
   app.releaseSingleInstanceLock();
-  // sandbox — per the setting (as in run.sh): only with the checkbox and a configured SUID helper
-  const sb = path.join(path.dirname(process.execPath), 'chrome-sandbox');
-  let helperOk = false;
-  try { const st = fs.statSync(sb); helperOk = st.uid === 0 && (st.mode & 0o4000) !== 0; } catch { /* no helper */ }
-  const args = process.argv.slice(1).filter((a) => a !== '--no-sandbox');
-  if (!(helperOk && effectiveConfig(process.env, loadSettings(), os.homedir()).sandbox)) args.push('--no-sandbox');
+  // Re-enter the startup wrapper: both sandbox and native backend must be
+  // selected before Electron initializes, including after a settings change.
+  const args = [path.join(__dirname, '..', 'run.sh'), ...restartLauncherArgs(process.argv, process.env.DSH_LAUNCHER_AUTO_OZONE)];
   // stdout/stderr — the same: the new instance's output goes to the same place as the old one's
-  const p = spawnLauncherAfterExit(process.execPath, args, ['ignore', 'inherit', 'inherit']);
+  const p = spawnLauncherAfterExit('/bin/sh', args, ['ignore', 'inherit', 'inherit']);
   p.unref();
   console.log(`[launcher] новый экземпляр (pid ${p.pid}) запустится, когда этот завершится`);
 }

@@ -163,12 +163,12 @@ def _dsh_releases():
 def start():
     """start(*env_sets, **env) → Launcher. At the end of the test the
     remaining launcher instances are SIGKILLed."""
-    def _start(*envs, **kw):
+    def _start(*envs, launcher_args=(), **kw):
         env = {}
         for e in envs:
             env.update(e)
         env.update(kw)
-        return Launcher(env)
+        return Launcher(env, launcher_args)
     yield _start
     for pid in launcher_pids():
         sh(f'kill -KILL {pid}')

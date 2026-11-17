@@ -32,6 +32,17 @@ function makeDeps() {
 }
 
 async function main() {
+  // The native backend is already initialized: CONFIG must never replace an
+  // explicit startup switch, even when Auto would select another backend.
+  const backendLogs = [];
+  const apply = extract('apply', {
+    isWaylandSession: true, CONFIG: { ozone: 'auto', src: {} },
+    hasGpuRenderNode: true, hasEglLibs: true, noGpuRequested: false,
+    gpuDisabledByMarker: false, console: { log: (line) => backendLogs.push(line) },
+  });
+  apply({ commandLine: { getSwitchValue: () => 'x11', appendSwitch: () => assert.fail('must not change the initialized backend') } });
+  assert.ok(backendLogs.some((line) => line.includes('ozone-platform=x11')), 'report the actual startup backend');
+
   // 1) Two GPU process crashes → the marker is written, the text has the reason and the date.
   let d = makeDeps();
   let onGone = extract('onChildProcessGone', d);
