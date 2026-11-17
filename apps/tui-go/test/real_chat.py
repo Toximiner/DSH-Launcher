@@ -489,6 +489,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
             app.resize(120, 42)
         app.send('\t\x1b[C\r')
         app.wait('Ответ 7: проверка транспорта настоящего dsh.', timeout=20)
+        assert 'Ответ на запрос передан dsh' not in app.text, 'Successful permission reply left a transcript warning'
         assert (project / 'grant.marker').read_text() == 'approved\n', 'Approved action did not run'
         app.wait('Разрешено один раз', timeout=10)
         app.send('\x1b[5~' * 20)
@@ -554,6 +555,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
             app.resize(120, 42)
         app.send('\x1b[15~')
         app.wait('Ответ 12: проверка транспорта настоящего dsh.', timeout=20)
+        assert 'Ответы на вопросы переданы dsh' not in app.text, 'Successful question reply left a transcript warning'
         app.wait('> retained chat draft', timeout=10)
         assert 'SHOULD NOT REACH' not in app.text and 'PASTED HIDDEN ANSWER' not in app.text, 'Selection keys mutated the retained draft'
         tool_results = [message for message in model_calls[11]['messages'] if message.get('role') == 'tool']

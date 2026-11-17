@@ -110,6 +110,28 @@ func TestApprovalUnknownAnswerNeverAutomaticallyRetries(t *testing.T) {
 		t.Fatal("uncertain result leaked details or permitted a retry on a stale stream")
 	}
 }
+
+func TestSuccessfulDecisionDeliveryDoesNotAddTranscriptWarning(t *testing.T) {
+	for _, question := range []bool{false, true} {
+		for _, note := range []string{"", "existing transport error"} {
+			m := approvalModel(t)
+			if question {
+				m = questionModel(t, []userQuestion{{ID: "q", Question: "Choose", Options: []questionOption{{Label: "Yes"}}}})
+			} else {
+				requestApproval(m, "decision", "s")
+			}
+			m.chat.note = note
+			id := m.approvals.requests[0].ID
+			m.handleApprovalAnswer(approvalAnswerResult{epoch: 1, generation: 1, id: id})
+			if len(m.approvals.requests) != 0 || m.chat.note != note {
+				t.Fatal("successful delivery left a request or replaced the transcript note")
+			}
+			if strings.Contains(clean(m.View()), "переданы dsh") || strings.Contains(clean(m.View()), "передан dsh") {
+				t.Fatal("successful delivery appeared as a transcript warning")
+			}
+		}
+	}
+}
 func TestApprovalLayoutAndMouseAtMinimumSize(t *testing.T) {
 	for _, width := range []int{100, 80} {
 		m := approvalModel(t)

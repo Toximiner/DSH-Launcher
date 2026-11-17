@@ -208,12 +208,8 @@ func (m *model) handleApprovalAnswer(msg approvalAnswerResult) {
 			s.answeredQuestions[msg.id] = true
 		}
 		m.removeApproval(msg.id)
-		if m.chat != nil {
-			m.chat.note = tr("Ответ на запрос передан dsh; итог отображается в истории разрешений.")
-			if question {
-				m.chat.note = tr("Ответы на вопросы переданы dsh.")
-			}
-		}
+		// Successful delivery is reflected by resolving the request. It is not
+		// a transcript warning and must not overwrite unrelated chat errors.
 	}
 	m.rebuild()
 }

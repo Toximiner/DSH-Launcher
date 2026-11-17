@@ -1,6 +1,6 @@
 # Go TUI preview — OpenCode tools and decisions
 
-The experimental `0.2.0-preview.40-opencode.6` includes visited session tabs,
+The experimental `0.2.0-preview.40-opencode.7` includes visited session tabs,
 per-session drafts, compact home/conversation composers, optional right context
 and Ctrl+P navigation. Command, session/workspace and model pickers share a flat
 frame, measured hit targets, teal selection and a dimmed backdrop. Tool calls
@@ -12,7 +12,7 @@ Ctrl+O also works within history. Copying replies preserves the reply source.
 From the repository root, run the separate local build:
 
 ```sh
-./build/previews/opencode-06/dsh-launcher-tui --start
+./build/previews/opencode-07/dsh-launcher-tui --start
 ```
 
 The binary remains separate from earlier builds. Main entry points:
