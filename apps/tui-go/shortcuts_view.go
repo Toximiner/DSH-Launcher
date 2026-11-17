@@ -7,7 +7,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 type shortcutGroup struct {
 	title    string
@@ -163,7 +164,7 @@ func (m *model) shortcutHelpLayout() (area, []string, []shortcutHelpHit) {
 }
 func (m *model) shortcutHelpView() (area, string) {
 	box, lines, _ := m.shortcutHelpLayout()
-	return box, panel(box.width, box.height, strings.Join(lines, "\n"), "#79c0ff")
+	return box, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Highlight)
 }
 func (m *model) shortcutHelpMouse(msg tea.MouseMsg) tea.Cmd {
 	box, _, hits := m.shortcutHelpLayout()

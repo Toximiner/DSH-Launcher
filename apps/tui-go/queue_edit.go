@@ -11,7 +11,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 const queueEditLimit = 65536
 
@@ -213,7 +214,7 @@ func (m *model) queueEditView(base string) string {
 			lines[i] = ansi.Truncate(line, inner, "…")
 		}
 	}
-	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)
+	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Accent), box.x, box.y, m.width-1)
 }
 func (m *model) queueEditMouse(msg tea.MouseMsg) tea.Cmd {
 	box := m.queueBox()

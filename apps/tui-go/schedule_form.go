@@ -10,7 +10,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 type scheduleForm struct {
 	title, minutes textinput.Model
@@ -171,5 +172,5 @@ func (m *model) scheduleFormView(base string) string {
 	lines = append(lines, "", muted().Render(d.note), accent().Render(note))
 	text := strings.Join(lines, "\n")
 	text = ansi.Hardwrap(text, w, true)
-	return overlay(base, panel(box.width, box.height, text, "#58a6ff"), box.x, box.y, m.width-1)
+	return overlay(base, panel(box.width, box.height, text, theme.Accent), box.x, box.y, m.width-1)
 }

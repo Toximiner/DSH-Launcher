@@ -12,6 +12,7 @@ require (
 	github.com/gorilla/websocket v1.5.3
 	github.com/muesli/termenv v0.16.0
 	github.com/yuin/goldmark v1.7.8
+	golang.org/x/sys v0.36.0
 	golang.org/x/term v0.30.0
 )
 
@@ -30,6 +31,5 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	golang.org/x/sys v0.36.0 // indirect
 	golang.org/x/text v0.3.8 // indirect
 )

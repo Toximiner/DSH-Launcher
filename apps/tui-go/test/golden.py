@@ -28,6 +28,9 @@ _SESSION_TRUNC_RE = re.compile(r'session-[a-z0-9]{2,6}…')
 _TEMP_RE = re.compile(r'/tmp/dsh-tui-[a-z0-9-]+|/tmp/tui-go-pty-[a-z0-9]+')
 # IP-anchored so HH:MM clocks are never touched; only the port digits change.
 _PORT_RE = re.compile(r'127\.0\.0\.1:(\d{2,5})')
+# The transient input-field cursor highlight (lipgloss 8787af on one cell);
+# its presence depends on focus timing between PTY polls.
+_CURSOR_FG = '8787af'
 _TIME_RE = re.compile(
     r'\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?'
     r'|\d{2}[./-]\d{2}[./-]\d{2,4}\s+\d{1,2}:\d{2}(?::\d{2})?'
@@ -41,8 +44,9 @@ _TOK_RE = re.compile(r'\b(\d[\d\s.,]*?)\s*ток\b')
 _COUNT_RE = re.compile(r'\b(\d[\d.,\s]{2,})\s*(?=токенов|токена|токен|tokens?\b)', re.I)
 _CACHE_RE = re.compile(r'кэш (\d+[\d.]*)%')
 _CTX_RE = re.compile(r'контекст ≈(\d+[\d.]*)%')
-# messageClock "15:04" in message headers (HH:MM, 00-23 hours).
-_CLOCK_RE = re.compile(r'\b(?:[01]?\d|2[0-3]):[0-5]\d\b')
+# messageClock "15:04" in message headers and the settings snapshot line
+# "14:05:29" (HH:MM or HH:MM:SS, 00-23 hours).
+_CLOCK_RE = re.compile(r'\b(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?\b')
 
 
 def _xrun(match):
@@ -83,10 +87,19 @@ def normalize(data):
     """Strip run-varying values from a cell dump so diffs are visual-only."""
     lines = _rebuild_lines(data)
     norm_lines = [_norm_row(line) for line in lines]
+    reverse = {(c.get('x', 0), c.get('y', 0)): bool(c.get('reverse'))
+               for c in data.get('cells', ())}
     for cell in data.get('cells', ()):
         x, y = cell.get('x', 0), cell.get('y', 0)
         if len(cell.get('text') or '') == 1 and 0 <= y < len(norm_lines) and 0 <= x < len(norm_lines[y]):
             cell['text'] = norm_lines[y][x]
+        if cell.get('fg') == _CURSOR_FG:
+            cell['fg'] = 'default'
+        # The textinput cursor is a single reverse cell (selection bands
+        # never occur: selection is rendered as bg+fg, not reverse).
+        # Its blink phase depends on PTY poll timing, so clear it when isolated.
+        if cell.get('reverse') and not reverse.get((x - 1, y)) and not reverse.get((x + 1, y)):
+            cell['reverse'] = False
     return data
 
 

@@ -7,7 +7,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 func (m *model) settingsFormKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	d := m.settingsForm
@@ -284,7 +285,7 @@ func (m *model) settingsFormView(base string) string {
 		hint2 = tr("Esc — вернуться к форме")
 	}
 	lines = append(lines, trim(hint), trim(hint2))
-	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)
+	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Accent), box.x, box.y, m.width-1)
 }
 func (m *model) settingsFormMouse(msg tea.MouseMsg) tea.Cmd {
 	d := m.settingsForm

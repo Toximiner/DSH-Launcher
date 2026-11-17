@@ -9,7 +9,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 func key(m *model, kind tea.KeyType) { m.Update(tea.KeyMsg{Type: kind}) }
 
@@ -253,11 +254,11 @@ func TestThemeAndSidebarPreferences(t *testing.T) {
 		t.Fatal("hidden sidebar did not release its width")
 	}
 	m.togglePreference(4)
-	if m.prefs.Theme != "light" || uiColor("#111820") != "#f5f7fa" {
+	if m.prefs.Theme != "light" || theme.Color(theme.Panel) != "#f5f7fa" {
 		t.Fatal("light theme did not apply")
 	}
 	m.togglePreference(4)
-	if m.prefs.Theme != "" || uiColor("#111820") != "#111820" {
+	if m.prefs.Theme != "" || string(theme.Color(theme.Panel)) != "#111820" {
 		t.Fatal("dark theme was not restored")
 	}
 }

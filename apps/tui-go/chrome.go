@@ -8,7 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 type clientPreferences struct {
 	Mouse        bool   `json:"mouse"`
@@ -330,7 +331,7 @@ func (m *model) menuBar(width int) string {
 	for i, label := range menuNames {
 		label = tr(label)
 		if m.chrome.menuOpen && m.chrome.menu == i {
-			label = lipgloss.NewStyle().Bold(true).Foreground(uiColor("#101318")).Background(uiColor("#79c0ff")).Render(label)
+			label = lipgloss.NewStyle().Bold(true).Foreground(theme.Color(theme.Bg)).Background(theme.Color(theme.Highlight)).Render(label)
 		} else {
 			label = heading().Render(tr(label))
 		}
@@ -345,7 +346,7 @@ func selectedRow(text string, selected bool, width int) string {
 	}
 	text = ansi.Truncate(text, width, "…")
 	if selected {
-		return lipgloss.NewStyle().Width(width).Bold(true).Foreground(uiColor("#79c0ff")).Background(uiColor("#233044")).Render(text)
+		return lipgloss.NewStyle().Width(width).Bold(true).Foreground(theme.Color(theme.Highlight)).Background(theme.Color(theme.Active)).Render(text)
 	}
 	return text
 }
@@ -382,7 +383,7 @@ func (m *model) dialogBox() (area, string) {
 	}
 	height := len(lines) + 2
 	box := area{(m.width - 1 - width) / 2, max(2, (m.height-height)/2), width, height}
-	return box, panel(width, height, strings.Join(lines, "\n"), "#79c0ff")
+	return box, panel(width, height, strings.Join(lines, "\n"), theme.Highlight)
 }
 
 // Composite by terminal cells so ANSI styles and wide characters keep hit areas aligned.
@@ -409,7 +410,7 @@ func (m *model) chromeView(base string) string {
 		for i, item := range menuEntries[m.chrome.menu] {
 			lines = append(lines, selectedRow(tr(item.label), m.chrome.item == i, 24))
 		}
-		return overlay(base, panel(28, len(lines)+2, strings.Join(lines, "\n"), "#79c0ff"), min(menuStart(m.chrome.menu), m.width-29), 2, m.width-1)
+		return overlay(base, panel(28, len(lines)+2, strings.Join(lines, "\n"), theme.Highlight), min(menuStart(m.chrome.menu), m.width-29), 2, m.width-1)
 	}
 	return base
 }

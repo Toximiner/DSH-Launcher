@@ -9,7 +9,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 type sessionRename struct {
 	id            string
@@ -161,5 +162,5 @@ func (m *model) renameView(base string) string {
 		hint = tr("Ожидание ответа dsh…")
 	}
 	content := strings.Join([]string{heading().Render(tr("Название сессии")), ansi.Truncate(clean(d.id), inner, "…"), "", d.editor.View(), "", strings.Join(note, "\n"), hint}, "\n")
-	return overlay(base, panel(width, height, content, "#58a6ff"), (m.width-1-width)/2, (m.height-height)/2, m.width-1)
+	return overlay(base, panel(width, height, content, theme.Accent), (m.width-1-width)/2, (m.height-height)/2, m.width-1)
 }

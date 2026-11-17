@@ -10,7 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 type agentContext struct {
 	id        string
@@ -196,9 +197,9 @@ func (m *model) landingView(title string, w, h int) string {
 	if m.session != nil {
 		hint = tr("Enter — отправить · Alt+E редактор")
 	}
-	border := "#58a6ff"
+	border := theme.Accent
 	if m.navFocused {
-		border = "#303d4d"
+		border = theme.Border
 	}
 	composer := input.View() + "\n\n" + tools + "\n" + muted().Render(ansi.Truncate(hint, w-4, "…"))
 	lines := make([]string, start)

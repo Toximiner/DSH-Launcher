@@ -13,7 +13,8 @@ import (
 	extast "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 const markdownInputLimit = 256 << 10
 const markdownCacheLimit = 8 << 20
@@ -123,7 +124,7 @@ func (r *terminalMarkdown) inline(parent ast.Node, depth int) string {
 			if strings.HasPrefix(value, " ") && strings.HasSuffix(value, " ") && strings.TrimSpace(value) != "" {
 				value = value[1 : len(value)-1]
 			}
-			out.WriteString(lipgloss.NewStyle().Foreground(uiColor("#a5d6ff")).Render(value))
+			out.WriteString(lipgloss.NewStyle().Foreground(theme.Color(theme.Code)).Render(value))
 		case *ast.Emphasis:
 			style := lipgloss.NewStyle().Italic(true)
 			if n.Level == 2 {

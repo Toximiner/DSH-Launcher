@@ -12,7 +12,8 @@ import (
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 type promptAttachment struct {
 	Receipt string
@@ -207,7 +208,7 @@ func (m *model) composeView(base string) string {
 		note = tr("Загрузка файла…")
 	}
 	lines = append(lines, shortText(tr("Вложения: ")+strings.Join(names, ", "), w), shortText(note, w), "", shortText(tr("Esc — скрыть с сохранением · /compose — вернуть"), w), shortText(tr("Ctrl+X — убрать последнее вложение · /attach <локальный путь>"), w))
-	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)
+	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Accent), box.x, box.y, m.width-1)
 }
 
 func shortText(s string, width int) string { return ansi.Truncate(clean(s), width, "…") }

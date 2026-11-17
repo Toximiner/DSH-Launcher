@@ -9,7 +9,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 // The native controller owns processes and disk transactions. Only immutable
 // snapshots cross into the Bubble Tea model, including while a dialog is closed.
@@ -298,7 +299,7 @@ func (m *model) runtimeView(base string) string {
 		lines = append(lines, "")
 	}
 	lines = lines[:height-2]
-	return overlay(base, panel(width, height, strings.Join(lines, "\n"), "#79c0ff"), (m.width-1-width)/2, 2, m.width-1)
+	return overlay(base, panel(width, height, strings.Join(lines, "\n"), theme.Highlight), (m.width-1-width)/2, 2, m.width-1)
 }
 
 func (m *model) runtimeNotice(message string) {

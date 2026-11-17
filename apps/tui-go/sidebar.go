@@ -11,7 +11,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 type sidebarWorkspace struct {
 	ID       string   `json:"workspaceId"`
@@ -277,7 +278,7 @@ func (m *model) sidebar(height int) string {
 		selected := m.navFocused && row.key == m.side.selected
 		active := row.action == "schedules" && m.page == schedulesPage || row.action == "plugins" && m.page == pluginsPage || row.action == "market" && m.page == marketPage || row.action == "session" && m.session != nil && m.session.ID == row.value || row.key == "chat" && m.page == chatPage
 		if selected || active {
-			text = lipgloss.NewStyle().Width(inner).Bold(true).Foreground(uiColor("#79c0ff")).Background(uiColor("#233044")).Render(text)
+			text = lipgloss.NewStyle().Width(inner).Bold(true).Foreground(theme.Color(theme.Highlight)).Background(theme.Color(theme.Active)).Render(text)
 		}
 		lines[row.y] = text
 	}
@@ -293,9 +294,9 @@ func (m *model) sidebar(height int) string {
 	}
 	lines[len(lines)-4] = muted().Render(ansi.Truncate(status, inner, "…"))
 	lines[len(lines)-3] = muted().Render("v" + version)
-	border := "#303d4d"
+	border := theme.Border
 	if m.navFocused {
-		border = "#58a6ff"
+		border = theme.Accent
 	}
 	return panel(sidebarWidth, height, strings.Join(lines, "\n"), border)
 }

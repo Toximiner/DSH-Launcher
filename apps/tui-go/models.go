@@ -10,7 +10,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 type modelSelection struct {
 	Provider  string `json:"provider"`
@@ -421,7 +422,7 @@ func (m *model) modelsView(base string) string {
 		notes = append(notes, "")
 	}
 	lines = append(lines, muted().Render(notes[0]), muted().Render(notes[1]), tr("↑/↓ модель · Tab/Shift+Tab рассуждение"), tr("Enter применить · F5 перечитать · Esc назад"))
-	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)
+	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Accent), box.x, box.y, m.width-1)
 }
 func (m *model) modelsMouse(msg tea.MouseMsg) tea.Cmd {
 	d := m.modelPicker

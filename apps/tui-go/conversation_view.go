@@ -9,7 +9,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 const conversationMaxWidth = 100
 
@@ -116,9 +117,9 @@ func (m *model) conversationView(title string, w, h int) string {
 	}
 	_, tools, _ := m.landingControls()
 	label, hint := m.composerText()
-	border := "#58a6ff"
+	border := theme.Accent
 	if m.navFocused {
-		border = "#303d4d"
+		border = theme.Border
 	}
 	composer := heading().Render(tr("Сообщение")) + muted().Render(label) + "\n" + m.input.View() + "\n" + tools + "\n" + muted().Render(ansi.Truncate(hint, column.width-4, "…"))
 	lines = append(lines, panel(column.width, composerHeight, composer, border))
@@ -213,7 +214,7 @@ func (m *model) conversationMessage(message chatMessage, width, row int) string 
 		bubbleMax := max(4, min(width, max(12, width*3/4)))
 		wrapped := ansi.Hardwrap(message.text, bubbleMax-2, true)
 		bubbleWidth := min(bubbleMax, lipgloss.Width(wrapped)+2)
-		bubble := lipgloss.NewStyle().Width(bubbleWidth).Padding(0, 1).Background(uiColor("#233044")).Foreground(uiColor("#e6edf3")).Render(wrapped)
+		bubble := lipgloss.NewStyle().Width(bubbleWidth).Padding(0, 1).Background(theme.Color(theme.Active)).Foreground(theme.Color(theme.Text)).Render(wrapped)
 		part = lipgloss.PlaceHorizontal(width, lipgloss.Right, label) + "\n" + lipgloss.PlaceHorizontal(width, lipgloss.Right, bubble)
 		copyX = max(0, width-lipgloss.Width(meta))
 	} else {

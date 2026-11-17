@@ -15,7 +15,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 type benchRow struct {
 	ID, Title, Body string
@@ -1218,7 +1219,7 @@ func (m *model) benchView(base string) string {
 		}
 		box := m.benchBox()
 		content := m.pluginsContent(area{box.x + 2, box.y + 1, box.width - 4, box.height - 2})
-		return overlay(base, panel(box.width, box.height, content, "#58a6ff"), box.x, box.y, m.width-1)
+		return overlay(base, panel(box.width, box.height, content, theme.Accent), box.x, box.y, m.width-1)
 	}
 	box := m.benchBox()
 	w := box.width - 4
@@ -1320,7 +1321,7 @@ func (m *model) benchView(base string) string {
 		hint2 = tr("Запрос не повторяется автоматически.")
 	}
 	lines = append(lines, trim(hint), trim(hint2))
-	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)
+	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Accent), box.x, box.y, m.width-1)
 }
 
 func (m *model) benchMouse(msg tea.MouseMsg) tea.Cmd {

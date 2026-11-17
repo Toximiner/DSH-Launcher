@@ -10,7 +10,8 @@ import (
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 const clipboardTextLimit = 64 << 10
 
@@ -241,7 +242,7 @@ func (m *model) historyCodeView(base string) string {
 		notes = append(notes, "")
 	}
 	lines = append(lines, muted().Render(notes[0]), muted().Render(notes[1]), tr("↑/↓ — блок · Enter — копировать · Esc — назад"))
-	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)
+	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Accent), box.x, box.y, m.width-1)
 }
 func (m *model) historyCodeMouse(msg tea.MouseMsg) tea.Cmd {
 	h := m.historyReader

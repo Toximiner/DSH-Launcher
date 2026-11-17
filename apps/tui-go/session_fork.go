@@ -9,7 +9,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 type sessionFork struct {
 	atSeq                    *int
@@ -155,5 +156,5 @@ func (m *model) forkView(base string) string {
 		hint = tr("Esc — закрыть и проверить список")
 	}
 	lines = append(lines, hint)
-	return overlay(base, panel(width, height, strings.Join(lines, "\n"), "#58a6ff"), (m.width-1-width)/2, (m.height-height)/2, m.width-1)
+	return overlay(base, panel(width, height, strings.Join(lines, "\n"), theme.Accent), (m.width-1-width)/2, (m.height-height)/2, m.width-1)
 }

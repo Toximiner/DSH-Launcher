@@ -13,7 +13,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 const version = "0.2.0-preview.40"
 const help = "/runtime — установка и процесс dsh\n/updates — обновления и откат dsh/TUI\n/diagnostics — журнал, отчёт, уведомления\n" + "/compose — многострочное сообщение\n/attach <путь> — прикрепить файл до 2 МиБ\n/workspaces · /files · /terminals — рабочая область\n/presets — пресеты · Ctrl+N новая сессия\n/plugins · /commands · /packages — плагины\n/agents · /tasks · /jobs · /schedules — выполнение\n/parent — вернуться от подагента к родителю\nВ списках: F5 обновить · Esc назад\n" + "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/rename — название текущей · F3 в списке\n/archive · /restore — архив и возврат\nВ списке: a — архив · Ctrl+X — перенести\n/fork — новая ветка · Ctrl+B в списке\n/models · F12 — выбор модели сессии\n/providers — настройки провайдеров\nВ настройках: Enter — форма · F6 — провайдеры\n/mode default|plan|goal — режим\n/goal — состояние цели · F3 правка\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/history — история сессии · F11\nCtrl+F в истории — поиск · F3 — ещё\nCtrl+T в поиске — всё / сообщения / инструменты\nTab в истории — выбор · Ctrl+B — ветка\nCtrl+R в истории — Markdown/исходник\nВ истории: Ctrl+Y — копия · Ctrl+K — код\nF6/Shift+F6 — инструмент истории · Enter — детали\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nF10 — верхнее меню · F4 / Alt+T — настройки TUI\nTab — боковая панель · Esc — вернуться в чат\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
@@ -115,15 +116,15 @@ type model struct {
 }
 
 func newModel() *model {
-	activeTheme.Store(false)
+	theme.SetLight(false)
 	activeEnglish.Store(false)
 	input := textinput.New()
 	input.Prompt = "> "
 	input.Placeholder = tr("Сообщение или /help…")
 	input.CharLimit = 65536
-	input.TextStyle = lipgloss.NewStyle().Foreground(uiColor("#e6edf3"))
-	input.PlaceholderStyle = lipgloss.NewStyle().Foreground(uiColor("#8b949e"))
-	input.PromptStyle = lipgloss.NewStyle().Foreground(uiColor("#58a6ff"))
+	input.TextStyle = lipgloss.NewStyle().Foreground(theme.Color(theme.Text))
+	input.PlaceholderStyle = lipgloss.NewStyle().Foreground(theme.Color(theme.Muted))
+	input.PromptStyle = lipgloss.NewStyle().Foreground(theme.Color(theme.Accent))
 	input.Focus()
 	cwd, _ := os.Getwd()
 	m := &model{prefs: defaultClientPreferences(), input: input, viewport: viewport.New(78, 17), width: 80, height: 24, workspace: clean(cwd), events: []string{tr("Открыт интерфейс клиента. Подключение к dsh отсутствует.")}}

@@ -10,7 +10,8 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 const historyPageMessages = 20
 const historyBackLimit = 128
@@ -349,7 +350,7 @@ func (m *model) historyView(base string) string {
 		title += tr(" · исходник")
 	}
 	lines := []string{heading().Render(title), ansi.Truncate(status, width, "…"), toolbar, h.viewport.View(), muted().Render(noteRows[0]), muted().Render(noteRows[1]), muted().Render(hint)}
-	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#58a6ff"), box.x, box.y, m.width-1)
+	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Accent), box.x, box.y, m.width-1)
 }
 
 func (m *model) historyKey(msg tea.KeyMsg) (tea.Cmd, bool) {

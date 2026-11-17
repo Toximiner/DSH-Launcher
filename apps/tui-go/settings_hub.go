@@ -6,7 +6,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 var settingsTabs = []string{"Общие", "Модели", "Встроенные плагины", "Пресеты агента", "Маркет плагинов"}
 
@@ -237,7 +238,7 @@ func (m *model) settingsHubLayout() (area, []string, []settingsHubHit) {
 		label := ansi.Truncate(r.label, max(1, right-lipgloss.Width(value)-3), "…")
 		line := bar(label, accent().Render(value), right)
 		if !c.settingsNav && c.settingsRow == i {
-			line = lipgloss.NewStyle().Width(right).Foreground(uiColor("#79c0ff")).Background(uiColor("#233044")).Render(line)
+			line = lipgloss.NewStyle().Width(right).Foreground(theme.Color(theme.Highlight)).Background(theme.Color(theme.Active)).Render(line)
 		}
 		rightLines = append(rightLines, line, muted().Render(ansi.Truncate(r.description, right, "…")), muted().Render(strings.Repeat("─", right)))
 		hits = append(hits, settingsHubHit{area{x + nav + 3, y + 2 + (i-c.settingsOffset)*3, right, 2}, "row", i})
@@ -270,7 +271,7 @@ func (m *model) settingsHubLayout() (area, []string, []settingsHubHit) {
 }
 func (m *model) settingsHubView() (area, string) {
 	box, lines, _ := m.settingsHubLayout()
-	return box, panel(box.width, box.height, strings.Join(lines, "\n"), "#79c0ff")
+	return box, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Highlight)
 }
 func (m *model) settingsHubMouse(msg tea.MouseMsg) tea.Cmd {
 	box, _, hits := m.settingsHubLayout()

@@ -6,7 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 const minTerminalWidth = 80
 const minTerminalHeight = 24
@@ -29,9 +30,9 @@ func (m *model) terminalSizeNotice() string {
 	return strings.Join(lines, "\n")
 }
 
-func panel(width, height int, content, color string) string {
-	style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(uiColor(color)).
-		Foreground(uiColor("#e6edf3")).Background(uiColor("#111820")).Padding(0, 1)
+func panel(width, height int, content string, color theme.Token) string {
+	style := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(theme.Color(color)).
+		Foreground(theme.Color(theme.Text)).Background(theme.Color(theme.Panel)).Padding(0, 1)
 	return style.Width(max(1, width-style.GetHorizontalBorderSize())).
 		Height(max(1, height-style.GetVerticalFrameSize())).Render(content)
 }
@@ -42,7 +43,7 @@ func bar(left, right string, width int) string {
 }
 
 func (m *model) View() string {
-	activeTheme.Store(m.prefs.Theme == "light")
+	theme.SetLight(m.prefs.Theme == "light")
 	activeEnglish.Store(m.prefs.Language == "en")
 	if !m.terminalFits() {
 		return m.terminalSizeNotice()
@@ -50,7 +51,7 @@ func (m *model) View() string {
 	width := m.width - 1
 	w, bodyHeight := m.contentSize()
 	brand := accent().Bold(true).Render("◆ DSH Launcher")
-	status := lipgloss.NewStyle().Foreground(uiColor("#d29922")).Render(tr("○ Нет подключения"))
+	status := lipgloss.NewStyle().Foreground(theme.Color(theme.Warning)).Render(tr("○ Нет подключения"))
 	if m.settings != nil {
 		status = accent().Render(tr("✓ Снимок настроек dsh"))
 	}
@@ -85,7 +86,7 @@ func (m *model) View() string {
 		}
 	}
 	view := heading().Render(title) + "\n" + muted().Render(strings.Repeat("─", m.viewport.Width)) + "\n" + m.viewport.View()
-	right := panel(w, bodyHeight, view, "#303d4d")
+	right := panel(w, bodyHeight, view, theme.Border)
 	if m.page == pluginsPage && m.workbench != nil && m.workbench.kind == "plugins" {
 		box := m.pluginsPageBox()
 		right = lipgloss.PlaceHorizontal(w, lipgloss.Center, m.pluginsContent(box))
@@ -98,10 +99,10 @@ func (m *model) View() string {
 		right = lipgloss.PlaceHorizontal(w, lipgloss.Center, m.schedulesContent(box))
 	}
 	if m.page == 0 {
-		chat := panel(w, bodyHeight-composerHeight-1, view, "#303d4d")
-		border := "#303d4d"
+		chat := panel(w, bodyHeight-composerHeight-1, view, theme.Border)
+		border := theme.Border
 		if !m.navFocused {
-			border = "#58a6ff"
+			border = theme.Accent
 		}
 		label, hint := m.composerText()
 		composer := heading().Render(tr("Сообщение")) + muted().Render(label) + "\n" + m.modeControls() + "\n" + m.input.View() + "\n" + muted().Render(hint)
@@ -137,7 +138,7 @@ func (m *model) View() string {
 	footer := bar(muted().Render(hints), muted().Render(tr("Ctrl+D выход")), width)
 	view = m.runtimeView(m.approvalView(m.queueDialogView(m.settingsFormView(m.goalView(m.composeView(m.benchView(m.modelsView(m.historyCodeView(m.archiveView(m.forkView(m.renameView(m.chromeView(m.historyView(header + "\n" + body + "\n" + footer))))))))))))))
 	if m.prefs.Theme == "light" {
-		view = lipgloss.NewStyle().Foreground(uiColor("#e6edf3")).Background(uiColor("#111820")).Width(width).Render(view)
+		view = lipgloss.NewStyle().Foreground(theme.Color(theme.Text)).Background(theme.Color(theme.Panel)).Width(width).Render(view)
 	}
 	return view
 }

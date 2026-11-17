@@ -10,7 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-)
+
+"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
 
 type questionOption struct {
 	Label       string `json:"label"`
@@ -386,7 +387,7 @@ func (m *model) questionView(base string) string {
 		note = tr("Вопрос пропущен. F5 — отправить.")
 	}
 	lines := []string{heading().Render(title), muted().Render(ansi.Truncate(progress, inner, "…")), s.viewport.View(), muted().Render(ansi.Truncate(label, inner, "…")), editor, ansi.Truncate(note, inner, "…"), questionButtons(inner), muted().Render(ansi.Truncate(tr("Tab выбор · Enter отметить · F5 ответ"), inner, "…"))}
-	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), "#79c0ff"), box.x, box.y, m.width-1)
+	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Highlight), box.x, box.y, m.width-1)
 }
 func (m *model) questionMouse(msg tea.MouseMsg) tea.Cmd {
 	s := m.approvals
