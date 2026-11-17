@@ -13,3 +13,6 @@ __pycache__/
 coverage/
 
 .live-data/
+
+# generated golden review sheets (regenerable via render_golden.py)
+apps/tui-go/test/golden/review/
