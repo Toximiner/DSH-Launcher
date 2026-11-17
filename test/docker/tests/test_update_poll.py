@@ -5,10 +5,11 @@ the update proceeds without a prompt) / «Later»."""
 import json
 import os
 import re
+import subprocess
 
-from helpers.env import CONF, FAKE, INSTALLED, LATEST, LATEST_PKG, LATEST_RE, NO_PROMPTS, STATE
+from helpers.env import CONF, FAKE, FAKEDSH, INSTALLED, LATEST, LATEST_PKG, LATEST_RE, NO_PROMPTS, STATE
 from helpers.launcher import launcher_pids
-from helpers.procs import dpkg_version, fakedsh_starts, wait_exit, wait_for, wait_port
+from helpers.procs import dpkg_version, dsh_tree_alive, fakedsh_events, fakedsh_starts, wait_exit, wait_for, wait_port
 from helpers.windows import UpdateToast
 
 # the «latest» dsh version on npm — from a file: the test «releases» a new one on the fly
@@ -16,6 +17,34 @@ DSH_LATEST = '/tmp/dsh-latest'
 # the «latest» launcher version on GitHub — also from a file (the notes and
 # the .deb come from the latest release on the fake GitHub)
 LAUNCHER_LATEST = '/tmp/launcher-latest'
+
+
+def test_attached_launcher_update(start, gui, drv):
+    """Attach startup announces an update; Update now installs it without stopping external dsh."""
+    subprocess.Popen(['runuser', '-u', 'tester', '--', 'env', 'FAKE_ROLE=terminal', FAKEDSH,
+                      '--profile', 'web'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     stdin=subprocess.DEVNULL)
+    assert wait_port(15), 'external dsh is running before launcher starts'
+    launcher = start(FAKE, DSH_LAUNCHER_FAKE_DSH_LATEST='0.0.1')
+    gui.wait()
+    assert 'attaching to running dsh' in launcher.log()
+    toast = UpdateToast(drv).wait_shown()
+    assert f'DeepSeek Harness Launcher {LATEST} is available' in toast.text(), 'startup announces the new version without a manual check'
+    toast.details('launcher').update_now()
+    assert launcher.wait_exit(20) is not None, 'old launcher exits'
+    assert launcher.wait_log(f'dsh-launcher {LATEST} установлен', 400), 'requested update actually installs while dsh owns the port'
+    assert dpkg_version() == LATEST_PKG, 'installed package version changed'
+    assert wait_for(lambda: f'DeepSeek Harness Launcher {LATEST},' in _launcher_log(), 60), 'updated launcher starts'
+    gui.wait()
+    assert 'FAKE DSH terminal' in gui.eval('document.body.innerText'), 'updated launcher reattaches to the external server'
+    assert fakedsh_starts() == 1 and dsh_tree_alive(), 'external server is preserved without a duplicate start'
+    for pid in launcher_pids():
+        try:
+            os.kill(pid, 15)
+        except ProcessLookupError:
+            continue  # the updater may finish its process handoff during cleanup
+        assert wait_exit(pid, 15) is not None
+    assert dsh_tree_alive() and 'SIGTERM' not in fakedsh_events(), 'launcher update and exit never stop the external dsh'
 
 
 def test_update_poll(start, gui, drv):
@@ -123,7 +152,10 @@ def test_update_now_launcher(start, gui, drv):
     assert wait_port(60), 'the new version brought up dsh'
     assert fakedsh_starts() == 2, 'dsh was started by the first instance and the new version; the intermediate one — no'
     for pid in launcher_pids():
-        os.kill(pid, 15)
+        try:
+            os.kill(pid, 15)
+        except ProcessLookupError:
+            continue  # the updater may finish its process handoff during cleanup
         wait_exit(pid, 15)
 
 

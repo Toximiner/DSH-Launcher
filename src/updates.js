@@ -14,6 +14,7 @@ const { prefFile, readPref, writePref } = require('./prefs');
 const { compareDebianVer, compareSemVer, tagToPackageVersion, dpkgStatusVersion, notesBetween } = require('./versions');
 const { releaseNotesLang, mdToHtml, dshNotesPart } = require('./notes');
 const { GITHUB_TOKEN, UPDATE_NOW, INSTALL_VERSION, CONFIG } = require('./env');
+const { restartLauncherArgs } = require('./ozone-startup');
 const { probeDsh, findBin, MIN_NODE_MAJOR, npmInstallInfo, pkexecNpmArgs } = require('./dsh-install');
 const { httpGet } = require('./updates-http');
 const { DSH_NPM_PKG, UPDATE_GITHUB_REPO, fetchLauncherLatest, fetchDshLatest } = require('./updates-github');
@@ -381,7 +382,10 @@ function restartLauncher() {
   // the spawn — through bash (spawnLauncherAfterExit): if the program is
   // missing we learn it here, not via 'error' (bash is there)
   try { fs.accessSync(exe, fs.constants.X_OK); } catch (e) { fail(e); return; }
-  const p = settingsWindow.spawnLauncherAfterExit(exe, [], 'ignore');
+  // Keep explicit window/profile/debugging options across a package update;
+  // the wrapper recomputes only its automatically generated backend switch.
+  const p = settingsWindow.spawnLauncherAfterExit(exe,
+    restartLauncherArgs(process.argv, process.env.DSH_LAUNCHER_AUTO_OZONE), 'ignore');
   p.on('spawn', () => { started = true; });
   p.on('error', fail);
   p.unref();

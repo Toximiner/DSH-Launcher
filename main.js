@@ -34,7 +34,7 @@ const { WIN_MIN, keyAction, isAltKey, windowSize } = require('./src/ui');
 
 // Launch parameters and the launcher log — first: env.js removes the CI
 // token from the environment, log.js starts writing launcher.log.
-const { CONFIG, DSH_BIN_DEFAULT, PORT, PLAIN_URL, LANG_FORCED } = require('./src/env');
+const { CONFIG, DSH_BIN_DEFAULT, PORT, PLAIN_URL, LANG_FORCED, UPDATE_NOW } = require('./src/env');
 const { startLauncherLog } = require('./src/log');
 startLauncherLog();
 
@@ -46,9 +46,9 @@ const { killDshNow, installSignalHandlers } = require('./src/signals');
 const { launchDsh } = require('./src/launch');
 const { zoomFile, viewActions, initSpellcheck } = require('./src/view');
 const { buildAppMenu, showContextMenu } = require('./src/menus');
-const { startUpdateChecks, restartLauncher } = require('./src/updates');
+const { startUpdateChecks, restartLauncher, offerLauncherUpdate } = require('./src/updates');
 const { showPage, loadLangPref, showStatus } = require('./src/pages');
-const { setUpdatePolling } = require('./src/updates-live');
+const { setUpdatePolling, refreshAvailableUpdates } = require('./src/updates-live');
 const { spawnNewInstance } = require('./src/settings-window');
 const { dshInstallCheck } = require('./src/dsh-install');
 const { showInstallPage } = require('./src/install-page');
@@ -243,8 +243,7 @@ async function onReady() {
     showPage(() => showStatus(tr('Подключение…', 'Connecting…'), tr(
       `<p><code>dsh</code> уже запущен на порту ${PORT}. Подключаюсь…</p>`,
       `<p><code>dsh</code> is already running on port ${PORT}. Connecting…</p>`)));
-    await openRunningGui('подключение');
-    startWatchdog();
+    await attachRunningDsh();
     return;
   }
 
@@ -264,6 +263,21 @@ async function onReady() {
   }
   await launchDsh();
 }
+
+/* ===== attachRunningDsh (test test/attached-updates.js) ===== */
+async function attachRunningDsh() {
+  // An explicit launcher update must run even when an external dsh already
+  // owns the port. Do not launch, adopt or stop that external process.
+  if (UPDATE_NOW === 'launcher' && await offerLauncherUpdate()) return;
+  if (state.stopping) return;
+  await openRunningGui('подключение');
+  if (state.stopping) return;
+  startWatchdog();
+  // Attaching skips startup update questions, so announce available versions
+  // after the GUI loads instead of silently waiting for the 12-hour poll.
+  void refreshAvailableUpdates(true);
+}
+/* ===== end attachRunningDsh ===== */
 
 /* ---------------- close = stop ---------------- */
 
