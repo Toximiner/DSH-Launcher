@@ -14,6 +14,7 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 ### Fixed
 
 - When attaching to an already running dsh, the launcher announces available updates at startup. Update now installs the launcher update instead of only restarting the window, while preserving the externally started dsh process.
+- Restarting after package installation preserves explicit window backend, user profile and debugging arguments.
 
 ## [1.18.2] — 2026-11-17
 

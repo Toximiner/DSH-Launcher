@@ -39,7 +39,10 @@ def test_attached_launcher_update(start, gui, drv):
     assert 'FAKE DSH terminal' in gui.eval('document.body.innerText'), 'updated launcher reattaches to the external server'
     assert fakedsh_starts() == 1 and dsh_tree_alive(), 'external server is preserved without a duplicate start'
     for pid in launcher_pids():
-        os.kill(pid, 15)
+        try:
+            os.kill(pid, 15)
+        except ProcessLookupError:
+            continue  # the updater may finish its process handoff during cleanup
         assert wait_exit(pid, 15) is not None
     assert dsh_tree_alive() and 'SIGTERM' not in fakedsh_events(), 'launcher update and exit never stop the external dsh'
 
@@ -149,7 +152,10 @@ def test_update_now_launcher(start, gui, drv):
     assert wait_port(60), 'the new version brought up dsh'
     assert fakedsh_starts() == 2, 'dsh was started by the first instance and the new version; the intermediate one — no'
     for pid in launcher_pids():
-        os.kill(pid, 15)
+        try:
+            os.kill(pid, 15)
+        except ProcessLookupError:
+            continue  # the updater may finish its process handoff during cleanup
         wait_exit(pid, 15)
 
 
