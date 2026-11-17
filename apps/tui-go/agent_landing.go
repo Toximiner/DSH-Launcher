@@ -98,14 +98,14 @@ func (m *model) landingVisible() bool {
 	s := m.chat
 	return s != nil && s.id == m.session.ID && s.ready && !s.hasMore && s.clearedThrough < 0 && len(s.messages) == 0 && s.live == nil && s.note == "" && s.streamError == "" && m.prompts[s.id] == nil && len(m.visibleQueue()) == 0
 }
-func (m *model) landingStart() int { _, h := m.contentSize(); return max(0, (h-12)/2) }
+func (m *model) landingStart() int { _, h := m.contentSize(); return max(0, (h-13)/2) }
 
 // landingBox is shared by rendering and mouse routing, including centering within
-// the wider conversation column. Four rows form one continuous composer surface.
+// the wider conversation column. The home composer includes top and bottom padding.
 func (m *model) landingBox() area {
 	box := m.chatColumn()
 	width := min(box.width, 76)
-	return area{box.x + (box.width-width)/2, bodyTop + m.landingStart() + 6, width, 4}
+	return area{box.x + (box.width-width)/2, bodyTop + m.landingStart() + 6, width, landingComposerHeight}
 }
 func (m *model) composerBox() area {
 	box := m.chatColumn()
@@ -179,7 +179,7 @@ func (m *model) landingCompactControls() (string, string, []agentHit) {
 		hints = tr("Режим: ") + m.modeLabel() + " · F2 · " + tr("Ctrl+P команды")
 	}
 	workspace = ansi.Truncate(singleLine(workspace), max(1, box.width-lipgloss.Width(hints)-2), "…")
-	hits = append(hits, agentHit{area{box.x, box.y + 5, lipgloss.Width(workspace), 1}, "workspaces"})
+	hits = append(hits, agentHit{area{box.x, box.y + box.height + 1, lipgloss.Width(workspace), 1}, "workspaces"})
 	contextLine := bar(muted().Render(workspace), muted().Render(hints), box.width)
 	return contextLine, metadata, hits
 }

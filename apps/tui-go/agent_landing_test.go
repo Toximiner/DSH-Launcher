@@ -46,7 +46,7 @@ func TestAgentLandingGeometryAndReadOnlyControls(t *testing.T) {
 				}
 				box := m.composerBox()
 				lines := strings.Split(clean(view), "\n")
-				if !strings.Contains(lines[box.y], "preserved 世界") || !strings.Contains(lines[box.y+3], "PTC mode") || !strings.Contains(lines[box.y+3], "qwen") {
+				if !strings.Contains(lines[box.y+1], "preserved 世界") || !strings.Contains(lines[box.y+3], "PTC mode") || !strings.Contains(lines[box.y+3], "qwen") {
 					t.Fatal("composer/context hit areas are misaligned")
 				}
 				for y := box.y; y < box.y+box.height; y++ {

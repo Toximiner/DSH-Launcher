@@ -65,6 +65,9 @@ Run separately from the repository root:
 
 Intermediate build: `0.2.0-preview.40-opencode.3`.
 
+- Home input has 5 rows with top/bottom padding; active conversation retains
+  4 rows. Height and text placement were checked against installed OpenCode2.3.0
+  running in a separate temporary profile.
 - Removed the 100-column conversation cap. At 120+ columns a 30-column right
   panel shows the title, known context and workspace; the palette includes
   “Show/hide context”. Narrow terminals hide the panel automatically; home keeps
@@ -108,6 +111,12 @@ Intermediate build: `0.2.0-preview.40-opencode.3`.
    User reviews intermediate builds before any replacement of an installed application.
 
 ## Verification and delivery
+
+The installed OpenCode 2.3.0 can serve as an executable reference: run it with
+`--standalone` in temporary HOME/XDG directories and a temporary workspace. Capture
+actual terminal cells at 80×24, 100×30 and 160×40, then compare with dsh at the same
+sizes. Personal configuration, credentials and model providers are excluded;
+conversation reference scenarios use only a local deterministic model fixture.
 
 Each milestone gets a separate binary and actual terminal captures. Tests use
 isolated HOME/DSH_HOME and a local fixture model, never personal profiles or

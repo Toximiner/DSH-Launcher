@@ -484,16 +484,20 @@ class TerminalPreview(unittest.TestCase):
             self.app.wait('DeepSeek Harness')
             for _ in range(5):
                 self.app.pump()
-            y = next(y for y, line in enumerate(self.app.screen.display) if 'Что будем делать?' in line)
-            x = self.app.screen.display[y].index('┃')
+            input_y = next(y for y, line in enumerate(self.app.screen.display) if 'Что будем делать?' in line)
+            y = input_y - 1
+            x = self.app.screen.display[input_y].index('┃')
+            self.assertEqual(self.app.screen.display[y][x:].strip(), '┃')
+            self.assertEqual(self.app.screen.display[y + 4][x:].strip(), '┃')
+            self.assertIn('Агент', self.app.screen.display[y + 3])
             background = self.app.screen.buffer[y][x + 1].bg
             self.assertNotEqual(background, 'default')
-            for yy in range(y, y + 4):
+            for yy in range(y, y + 5):
                 for xx in range(x, x + min(76, columns - 1)):
                     self.assertEqual(self.app.screen.buffer[yy][xx].bg, background,
                                      f'Composer surface gap at {xx},{yy} in {columns}x{rows}')
             outer_background = self.app.screen.buffer[1][0].bg
-            for yy in range(y, y + 4):
+            for yy in range(y, y + 5):
                 self.assertEqual(self.app.screen.buffer[yy][x - 1].bg, outer_background)
                 self.assertEqual(self.app.screen.buffer[yy][x + min(76, columns - 1)].bg, outer_background)
             self.capture('contiguous-surface')

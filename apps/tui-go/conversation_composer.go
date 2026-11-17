@@ -10,6 +10,7 @@ import (
 )
 
 const conversationComposerHeight = 4
+const landingComposerHeight = 5
 
 // compactComposerControls measures the exact metadata cells used by both the
 // home screen and the conversation composer. It exposes no hidden buttons.
@@ -60,7 +61,11 @@ func (m *model) compactComposerSurface(box area, placeholder, metadata string) s
 	}
 	edge := edgeStyle.Render("┃")
 	row := func(content string) string { return edge + panelStyle.Width(box.width-1).Render(" "+content) }
-	return surface(strings.Join([]string{row(input.View()), row(""), row(""), row(metadata)}, "\n"), theme.Panel)
+	rows := []string{row(input.View()), row(""), row(""), row(metadata)}
+	if box.height == landingComposerHeight {
+		rows = []string{row(""), row(input.View()), row(""), row(metadata), row("")}
+	}
+	return surface(strings.Join(rows, "\n"), theme.Panel)
 }
 
 func (m *model) conversationComposerView() string {

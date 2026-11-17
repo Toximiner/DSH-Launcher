@@ -72,7 +72,7 @@ func TestCompactComposerHomeWidthAfterLongDraftAndCursorMove(t *testing.T) {
 		box := m.landingBox()
 		metadata, _ := m.compactComposerControls(box)
 		view := m.compactComposerSurface(box, "", metadata)
-		if lipgloss.Height(view) != 4 || lipgloss.Width(view) != box.width {
+		if lipgloss.Height(view) != landingComposerHeight || lipgloss.Width(view) != box.width {
 			t.Fatalf("narrow composer overflow after cursor move: %dx%d", lipgloss.Width(view), lipgloss.Height(view))
 		}
 		if m.input.Value() != draft || m.input.Position() != cursor {
