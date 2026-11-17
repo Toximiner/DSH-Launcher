@@ -1,6 +1,6 @@
 # Go TUI preview — session tabs and explicit deletion
 
-The experimental `0.2.0-preview.40-opencode.9` includes visited session tabs,
+The experimental `0.2.0-preview.40-opencode.10` includes visited session tabs,
 per-session drafts, compact home/conversation composers, optional right context
 and Ctrl+P navigation. Command, session/workspace and model pickers share a flat
 frame, measured hit targets, teal selection and a dimmed backdrop. Tool calls
@@ -17,14 +17,27 @@ compared with actual installed OpenCode 2.3.0; our close button remains visible
 without requiring mouse hover.
 
 Permanent deletion is a separate action: Delete in `/sessions-manager`, or
-`/delete-session` for the current session. The confirmation selects Cancel by
-default. TUI rereads activity and refuses a running session, queued work or
-pending input; it never stops the agent automatically. Deletion requires an
-enabled Archive Manager and uses its public API. There is no filesystem fallback
-or automatic retry after an unconfirmed result: check the session list first.
-The activity check is a preflight read, not CAS or a transaction; the client does
-not guarantee atomic subagent deletion. Successful deletion forgets the local tab
-and draft. Project files and separate fork sessions are outside this operation.
+`/delete-session` for the current session. Cancel is selected by default. In
+preview `.10`, TUI calls `launcherSessions/deleteSession` from the bundled
+`packages/launcher-backend` module; Archive Manager is no longer required.
+TUI rereads the target and activity; the backend serializes deletion, checks
+activity throughout the subagent tree through native agents, pending input and
+activity providers, and refuses active work. It does not stop agents automatically.
+The backend removes session-owned artifacts and metadata recursively for
+subagents; project files and separate fork sessions remain. Unsupported native
+storage/lifecycle methods refuse deletion. There is no client-side filesystem
+fallback or automatic retry after an unconfirmed result: check the list first.
+Confirmed deletion forgets the local tab and draft. Deletion across multiple
+session artifacts is not a global filesystem transaction.
+
+GUI and Go TUI automatically attach the bundled module with `--patch` when they
+start their own dsh backend. Assets are copied into private launcher-owned cache
+storage; no user profile patch is edited and no npm/plugin installation is needed.
+An already running older or external backend lacks this module: restart it
+through the updated launcher to enable deletion. The launcher does not inject
+code into a running backend or forcibly terminate an external process. GUI
+startup loads the backend capability; this preview adds no native GUI deletion
+button.
 
 Repeated headings in the session picker, dsh settings, session manager and log
 were removed in the preceding header cleanup; loading/error/workspace context
@@ -45,7 +58,7 @@ the installed application.
 From the repository root, run the separate local build:
 
 ```sh
-./build/previews/opencode-09/dsh-launcher-tui --start
+./build/previews/opencode-10/dsh-launcher-tui --start
 ```
 
 The binary remains separate from earlier builds. Main entry points:

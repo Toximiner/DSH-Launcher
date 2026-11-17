@@ -32,6 +32,8 @@ mkdir -p \
 # --- application ---
 cp main.js package.json icon.png "$STAGE/opt/$NAME/"
 cp -a src "$STAGE/opt/$NAME/src"
+mkdir -p "$STAGE/opt/$NAME/packages"
+cp -a packages/launcher-backend "$STAGE/opt/$NAME/packages/launcher-backend"
 cp deb/run.sh "$STAGE/opt/$NAME/run.sh"
 chmod 755 "$STAGE/opt/$NAME/run.sh"
 cp -a node_modules/electron/dist "$STAGE/opt/$NAME/electron"

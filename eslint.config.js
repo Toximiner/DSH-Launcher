@@ -18,7 +18,7 @@ module.exports = [
     },
   },
   {
-    files: ['apps/tui-go/test/*.mjs'],
+    files: ['apps/tui-go/test/*.mjs', 'packages/launcher-backend/*.mjs'],
     languageOptions: { sourceType: 'module', globals: { ...globals.node } },
   },
   {

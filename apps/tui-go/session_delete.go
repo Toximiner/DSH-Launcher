@@ -60,7 +60,7 @@ func (m *model) sessionDeleteKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			api, err := openAPI(ctx, login)
 			if err == nil {
 				defer api.close()
-				err = deleteSessionPermanently(ctx, api, d.id)
+				result.deletedIDs, err = deleteSessionPermanently(ctx, api, d.id)
 			}
 			result.err = err
 			return result
@@ -69,15 +69,15 @@ func (m *model) sessionDeleteKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	return nil, true
 }
 
-// Use the plugin's public API; never remove profile files from the client.
-func deleteSessionPermanently(ctx context.Context, api *dshAPI, id string) error {
+// Use the launcher module API; never remove profile files from the client.
+func deleteSessionPermanently(ctx context.Context, api *dshAPI, id string) ([]string, error) {
 	var catalog struct {
 		Items []struct {
 			ID string `json:"sessionId"`
 		} `json:"items"`
 	}
 	if err := api.rpc(ctx, "session/list", map[string]any{"_request": map[string]any{}}, &catalog); err != nil {
-		return err
+		return nil, err
 	}
 	found := false
 	for _, item := range catalog.Items {
@@ -87,7 +87,7 @@ func deleteSessionPermanently(ctx context.Context, api *dshAPI, id string) error
 		}
 	}
 	if !found {
-		return errors.New(tr("Сессия отсутствует в свежем списке dsh."))
+		return nil, errors.New(tr("Сессия отсутствует в свежем списке dsh."))
 	}
 	var state *struct {
 		Running      *bool            `json:"running"`
@@ -95,42 +95,76 @@ func deleteSessionPermanently(ctx context.Context, api *dshAPI, id string) error
 		PendingInput []string         `json:"pendingInput"`
 	}
 	if err := api.rpc(ctx, "session/state", map[string]any{"request": map[string]any{"sessionId": id}}, &state); err != nil {
-		return err
+		return nil, err
 	}
 	if state == nil || state.Queue == nil || state.Running == nil {
-		return errors.New(tr("Не удалось проверить активность сессии."))
+		return nil, errors.New(tr("Не удалось проверить активность сессии."))
 	}
 	if *state.Running || len(*state.Queue) > 0 || len(state.PendingInput) > 0 {
-		return errors.New(tr("Сначала остановите работу сессии и очистите очередь."))
+		return nil, errors.New(tr("Сначала остановите работу сессии и очистите очередь."))
 	}
 	var receipt struct {
-		Deleted *bool `json:"deleted"`
+		Deleted    *bool    `json:"deleted"`
+		SessionIDs []string `json:"sessionIds"`
+		Reason     string   `json:"reason"`
 	}
-	if err := api.rpc(ctx, "workspaceRegistry/deleteSession", map[string]any{"sessionId": id}, &receipt); err != nil {
-		return err
+	if err := api.rpc(ctx, "launcherSessions/deleteSession", map[string]any{"sessionId": id}, &receipt); err != nil {
+		if strings.Contains(err.Error(), "HTTP 404") {
+			return nil, errors.New(tr("Встроенное удаление недоступно. Перезапустите dsh через обновлённый лаунчер."))
+		}
+		return nil, err
+	}
+	if receipt.Deleted != nil && !*receipt.Deleted {
+		switch receipt.Reason {
+		case "active":
+			return nil, errors.New(tr("Сначала остановите работу сессии и её подагентов и очистите очередь."))
+		case "unsupported":
+			return nil, errors.New(tr("Встроенное удаление недоступно. Перезапустите dsh через обновлённый лаунчер."))
+		case "missing":
+			return nil, errors.New(tr("Сессия отсутствует в свежем списке dsh."))
+		}
 	}
 	if receipt.Deleted == nil || !*receipt.Deleted {
-		return errors.New(tr("dsh не подтвердил удаление сессии."))
+		return nil, errors.New(tr("dsh не подтвердил удаление сессии."))
 	}
-	return nil
+	seen := map[string]bool{}
+	if len(receipt.SessionIDs) == 0 || len(receipt.SessionIDs) > 100000 {
+		return nil, errors.New(tr("dsh не подтвердил список удалённых сессий."))
+	}
+	for _, deletedID := range receipt.SessionIDs {
+		if deletedID == "" || seen[deletedID] {
+			return nil, errors.New(tr("dsh не подтвердил список удалённых сессий."))
+		}
+		seen[deletedID] = true
+	}
+	if !seen[id] {
+		return nil, errors.New(tr("dsh не подтвердил список удалённых сессий."))
+	}
+	return receipt.SessionIDs, nil
 }
 
 func (m *model) handleSessionDelete(result sessionArchiveResult) tea.Cmd {
 	d := m.archiveDialog
 	d.busy = false
 	if result.err != nil {
-		d.note = tr("Удаление не подтверждено. ") + clean(result.err.Error()) + "\n" + tr("Нужен включённый Archive Manager. Проверьте список перед повтором.")
+		d.note = tr("Удаление не подтверждено. ") + clean(result.err.Error()) + "\n" + tr("Проверьте список сессий перед повтором.")
 		return nil
 	}
 	m.archiveDialog = nil
 	if d.login != m.settingsLogin {
 		return nil
 	}
-	m.tabForgetDeletedSession(d.id)
-	delete(m.prompts, d.id)
+	deleted := map[string]bool{d.id: true}
+	for _, id := range result.deletedIDs {
+		deleted[id] = true
+	}
+	for id := range deleted {
+		m.tabForgetDeletedSession(id)
+		delete(m.prompts, id)
+	}
 	kept := m.sessionItems[:0]
 	for _, item := range m.sessionItems {
-		if item.ID != d.id {
+		if !deleted[item.ID] {
 			kept = append(kept, item)
 		}
 	}
@@ -142,7 +176,7 @@ func (m *model) handleSessionDelete(result sessionArchiveResult) tea.Cmd {
 	for i := range m.side.workspaces {
 		ids := m.side.workspaces[i].Sessions[:0]
 		for _, id := range m.side.workspaces[i].Sessions {
-			if id != d.id {
+			if !deleted[id] {
 				ids = append(ids, id)
 			}
 		}
@@ -151,7 +185,7 @@ func (m *model) handleSessionDelete(result sessionArchiveResult) tea.Cmd {
 	ids := map[string]bool{}
 	if m.archive != nil {
 		for id, value := range m.archive.ids {
-			if id != d.id {
+			if !deleted[id] {
 				ids[id] = value
 			}
 		}
@@ -169,7 +203,7 @@ func (m *model) sessionDeleteLayout() (area, []string, []area) {
 	box.y = (m.height - box.height) / 2
 	width := box.width - 4
 	lines := []string{bar(heading().Render(tr("Удалить сессию навсегда?")), muted().Render("esc"), width), ansi.Truncate(clean(d.id), width, "…"), ""}
-	explanation := tr("История и вложения сессии будут удалены без возможности восстановления. Archive Manager также удаляет подагентов. Файлы проекта и отдельные fork-сессии сохраняются.")
+	explanation := tr("История и вложения сессии будут удалены без возможности восстановления. Подагенты также будут удалены. Файлы проекта и отдельные fork-сессии сохраняются.")
 	lines = append(lines, strings.Split(ansi.Wrap(explanation, width, ""), "\n")...)
 	lines = append(lines, "")
 	choices := []area{{box.x + 2, box.y + 1 + len(lines), width, 1}, {box.x + 2, box.y + 2 + len(lines), width, 1}}

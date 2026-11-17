@@ -1,6 +1,7 @@
 'use strict';
 // dsh process: launch (log, capture of the URL with token), exit and self-revival.
 const { spawn } = require('child_process');
+const { backendModuleArgs, prepareBackendModule } = require('./backend-module');
 const fs = require('fs');
 const path = require('path');
 const state = require('./state');
@@ -34,13 +35,21 @@ function spawnClean(cmd, args, opts) {
 }
 
 function startDsh() {
+  let args;
+  try { args = backendModuleArgs(DSH_ARGS, prepareBackendModule()); }
+  catch (error) {
+    state.dshFatal = true;
+    pushErr(tr('Не удалось загрузить встроенный модуль dsh. Переустановите DSH Launcher.', 'Could not load the bundled dsh module. Reinstall DSH Launcher.') + ' ' + error.message);
+    pages.showPage(() => pages.showStatus(tr('Не удалось запустить dsh', 'Failed to start dsh'), pages.stderrBlock(), true));
+    return false;
+  }
   // dsh.log is written only by startDsh (dsh stdout) — rotate before opening the stream.
   const rotated = rotateLog(LOG_FILE);
   if (rotated) console.log(`[launcher] лог прокручен: dsh.log (${rotated} Б) -> dsh.log.1`);
   fs.mkdirSync(LOG_DIR, { recursive: true });
   const logStream = openDshLog(LOG_FILE);
   state.authUrl = null; // token of the previous process is no longer valid — waiting for a new one
-  console.log(`[launcher] starting: ${state.dshBin} ${DSH_ARGS.join(' ')} (cwd=${CWD}, log=${LOG_FILE})`);
+  console.log(`[launcher] starting: ${state.dshBin} ${args.join(' ')} (cwd=${CWD}, log=${LOG_FILE})`);
   // A regular inherited descriptor survives the frontend that launched dsh.
   // Keep the rotating public log, but read the child output from a private spool.
   const spoolDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-backend-'));
@@ -58,7 +67,7 @@ function startDsh() {
   // such a binary (and a bare command from PATH) is launched directly: 'error' as before.
   let direct = false;
   try { fs.accessSync(state.dshBin, fs.constants.X_OK); } catch { direct = true; }
-  state.dshProc = direct || !path.isAbsolute(state.dshBin) ? spawn(state.dshBin, DSH_ARGS, opts) : spawnClean(state.dshBin, DSH_ARGS, opts);
+  state.dshProc = direct || !path.isAbsolute(state.dshBin) ? spawn(state.dshBin, args, opts) : spawnClean(state.dshBin, args, opts);
   state.weStartedDsh = true;
   state.adoptedDsh = false; // our own process again — no "adopted" one left
   state.adoptedOldPgid = null;

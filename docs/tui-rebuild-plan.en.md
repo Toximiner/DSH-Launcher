@@ -197,6 +197,8 @@ the installed application.
 ## Checkpoint 9: closing tabs and deleting sessions
 
 Intermediate build: `0.2.0-preview.40-opencode.9`.
+This checkpoint records the historical plugin-based adapter; checkpoint 10
+replaces its Archive Manager requirement with a bundled backend module.
 
 - A close button closes a visited tab locally: its conversation, running agent
   and draft remain. The active tab selects its left neighbor (or the next tab
@@ -222,6 +224,39 @@ The remaining scope of stage 4 is unchanged. The installed TUI is not replaced.
 
 ```sh
 ./build/previews/opencode-09/dsh-launcher-tui --start
+```
+
+## Checkpoint 10: bundled deletion without Archive Manager
+
+Intermediate build: `0.2.0-preview.40-opencode.10`.
+
+- The canonical `packages/launcher-backend` module ships with the launcher.
+  GUI and Go TUI automatically attach it through `--patch` when starting their
+  own dsh backend. User profile files remain unchanged; no Archive Manager,
+  npm package or other external plugin installation is required.
+- TUI calls `launcherSessions/deleteSession`. Explicit confirmation with Cancel
+  selected, fresh preflight reads and no retry of unconfirmed writes remain.
+  The backend serializes deletion and checks the session tree for native running
+  agents, pending input and activity providers. Active work blocks deletion;
+  agents are not stopped automatically.
+- Session-owned artifacts and metadata are removed recursively for the session
+  and its subagents. Independent fork sessions and project files remain.
+  Storage directory ownership is checked; unsupported native storage/lifecycle
+  methods refuse deletion. This is not a global transaction across all artifacts.
+- An already running older or external dsh does not receive the module
+  automatically. Restart it through the updated launcher. No code is injected
+  into a running process and external backends are not forcibly terminated.
+- GUI startup loads the backend capability, but this build adds no native GUI
+  permanent-deletion button.
+
+The Archive Manager requirement in checkpoint 9 is historical; `.10` replaces
+it with the bundled module. Stage 4 remains in progress: plugins/market,
+automation, files, terminals, subagents, queue/history, runtime management,
+install/update/rollback and diagnostics still await the visual migration.
+The separate local build does not replace the installed TUI.
+
+```sh
+./build/previews/opencode-10/dsh-launcher-tui --start
 ```
 
 ## Revised implementation order

@@ -1,0 +1,10 @@
+{
+  "name": "@dsh-launcher/backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": "./index.mjs",
+  "scripts": {
+    "test": "node --test --test-isolation=none session-delete.test.mjs"
+  }
+}

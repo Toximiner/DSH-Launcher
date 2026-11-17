@@ -1503,5 +1503,12 @@
   "Tab / ← → выбор · Enter подтвердить · Esc отмена": "Tab / ← → select · Enter confirm · Esc cancel",
   "Esc — закрыть и проверить список сессий": "Esc — close and check the session list",
   "Дождитесь подтверждения отправленного сообщения.": "Wait for confirmation of the submitted message.",
-  "Отмена": "Cancel"
+  "Отмена": "Cancel",
+  "Не удалось подготовить встроенный модуль dsh: %s": "Could not prepare the bundled dsh module: %s",
+  "dsh не подтвердил список удалённых сессий.": "dsh did not confirm the deleted session list.",
+  "Для встроенного удаления перезапустите dsh через обновлённый лаунчер. Проверьте список перед повтором.": "For built-in deletion, restart dsh through the updated launcher. Check the list before retrying.",
+  "История и вложения сессии будут удалены без возможности восстановления. Подагенты также будут удалены. Файлы проекта и отдельные fork-сессии сохраняются.": "Session history and attachments will be permanently deleted, including subagents. Project files and separate fork sessions are kept.",
+  "Сначала остановите работу сессии и её подагентов и очистите очередь.": "Stop the session and its subagents, and clear the queue first.",
+  "Встроенное удаление недоступно. Перезапустите dsh через обновлённый лаунчер.": "Built-in deletion is unavailable. Restart dsh through the updated launcher.",
+  "Проверьте список сессий перед повтором.": "Check the session list before retrying."
 }

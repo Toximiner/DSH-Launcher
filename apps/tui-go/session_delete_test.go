@@ -14,7 +14,7 @@ import (
 )
 
 // All data belongs to this test server. A deletion must follow a fresh catalog
-// and activity read, and its direct plugin arguments must contain only the ID.
+// and activity read, and its direct module arguments must contain only the ID.
 func deleteTestServer(t *testing.T, catalog, state, receipt string) (string, *[]string) {
 	t.Helper()
 	calls := []string{}
@@ -47,7 +47,7 @@ func deleteTestServer(t *testing.T, catalog, state, receipt string) (string, *[]
 			if len(request.Payload.Args) != 1 || string(request.Payload.Args["request"]) != `{"sessionId":"target"}` {
 				t.Errorf("wrong state args: %+v", request.Payload.Args)
 			}
-		case "workspaceRegistry/deleteSession":
+		case "launcherSessions/deleteSession":
 			value = receipt
 			if len(request.Payload.Args) != 1 || string(request.Payload.Args["sessionId"]) != `"target"` {
 				t.Errorf("wrong direct delete args: %+v", request.Payload.Args)
@@ -85,7 +85,7 @@ func deleteTestDialog(t *testing.T, login string) *model {
 }
 
 func TestSessionDeleteDefaultCancelAndPasteNeverWrite(t *testing.T) {
-	login, calls := deleteTestServer(t, `{"items":[{"sessionId":"target"}]}`, `{"running":false,"queue":[],"pendingInput":[]}`, `{"deleted":true}`)
+	login, calls := deleteTestServer(t, `{"items":[{"sessionId":"target"}]}`, `{"running":false,"queue":[],"pendingInput":[]}`, `{"deleted":true,"sessionIds":["target"]}`)
 	for _, msg := range []tea.KeyMsg{{Type: tea.KeyEnter, Paste: true}, {Type: tea.KeyTab, Paste: true}, {Type: tea.KeyRunes, Runes: []rune("delete\n"), Paste: true}} {
 		m := deleteTestDialog(t, login)
 		cmd, handled := m.archiveKey(msg)
@@ -108,7 +108,7 @@ func TestSessionDeleteDefaultCancelAndPasteNeverWrite(t *testing.T) {
 }
 
 func TestSessionDeleteConfirmedTransportAndUncertainReceipts(t *testing.T) {
-	for _, receipt := range []string{`{"deleted":true}`, `{}`, `{"deleted":null}`, `{"deleted":false}`, "unknown-method", "uncertain"} {
+	for _, receipt := range []string{`{"deleted":true,"sessionIds":["target"]}`, `{}`, `{"deleted":null}`, `{"deleted":false}`, `{"deleted":true}`, `{"deleted":true,"sessionIds":[]}`, `{"deleted":true,"sessionIds":["other"]}`, `{"deleted":true,"sessionIds":["target","target"]}`, `{"deleted":false,"reason":"active","sessionIds":[]}`, `{"deleted":false,"reason":"unsupported","sessionIds":[]}`, `{"deleted":false,"reason":"missing","sessionIds":[]}`, "unknown-method", "uncertain"} {
 		t.Run(receipt, func(t *testing.T) {
 			login, calls := deleteTestServer(t, `{"items":[{"sessionId":"other"},{"sessionId":"target"}]}`, `{"running":false,"queue":[],"pendingInput":[]}`, receipt)
 			m := deleteTestDialog(t, login)
@@ -122,10 +122,10 @@ func TestSessionDeleteConfirmedTransportAndUncertainReceipts(t *testing.T) {
 				t.Fatal("duplicate submit while busy")
 			}
 			result := cmd().(sessionArchiveResult)
-			if (result.err == nil) != (receipt == `{"deleted":true}`) {
+			if (result.err == nil) != (receipt == `{"deleted":true,"sessionIds":["target"]}`) {
 				t.Fatalf("receipt classification wrong: %v", result.err)
 			}
-			if !reflect.DeepEqual(*calls, []string{"session/list", "session/state", "workspaceRegistry/deleteSession"}) {
+			if !reflect.DeepEqual(*calls, []string{"session/list", "session/state", "launcherSessions/deleteSession"}) {
 				t.Fatalf("wrong request sequence: %v", *calls)
 			}
 			if result.err != nil {
@@ -158,20 +158,20 @@ func TestSessionDeleteRequiresFreshPresenceAndInactiveState(t *testing.T) {
 		{"missing-queue", `{"items":[{"sessionId":"target"}]}`, `{"running":false}`, 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			login, calls := deleteTestServer(t, tc.catalog, tc.state, `{"deleted":true}`)
+			login, calls := deleteTestServer(t, tc.catalog, tc.state, `{"deleted":true,"sessionIds":["target"]}`)
 			api, err := openAPI(context.Background(), login)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer api.close()
-			if err := deleteSessionPermanently(context.Background(), api, "target"); err == nil {
+			if _, err := deleteSessionPermanently(context.Background(), api, "target"); err == nil {
 				t.Fatal("unsafe target accepted")
 			}
 			if len(*calls) != tc.count {
 				t.Fatalf("unsafe target advanced transport: %v", *calls)
 			}
 			for _, method := range *calls {
-				if method == "workspaceRegistry/deleteSession" {
+				if method == "launcherSessions/deleteSession" {
 					t.Fatal("unsafe state was deleted")
 				}
 			}
@@ -322,5 +322,24 @@ func TestSessionDeleteBlocksUnresolvedLocalDelivery(t *testing.T) {
 				t.Fatal("opening delete lost pending message")
 			}
 		})
+	}
+}
+
+func TestBuiltinDeleteReceiptCleansDescendantTabsAndKeepsFork(t *testing.T) {
+	m := deleteTestDialog(t, "http://fixture/?token=local")
+	d := m.archiveDialog
+	m.session = &sessionView{ID: "child"}
+	m.tabState.items = []sessionItem{{ID: "target"}, {ID: "child"}, {ID: "fork"}}
+	m.tabState.drafts = map[string]string{"target": "parent draft", "child": "child draft", "fork": "fork draft"}
+	m.sessionItems = []sessionItem{{ID: "target"}, {ID: "child"}, {ID: "fork"}}
+	m.handleSessionArchive(sessionArchiveResult{dialog: d, deletedIDs: []string{"target", "child"}})
+	if m.session != nil {
+		t.Fatal("deleted child remained attached")
+	}
+	if len(m.tabState.items) != 1 || m.tabState.items[0].ID != "fork" || m.tabState.drafts["fork"] != "fork draft" {
+		t.Fatal("unrelated fork lost")
+	}
+	if len(m.sessionItems) != 1 || m.sessionItems[0].ID != "fork" {
+		t.Fatal("descendants remained in catalog")
 	}
 }

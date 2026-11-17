@@ -11,7 +11,7 @@ Run a private live instance with actual dsh in GitHub Codespaces: [instructions]
 
 ## Terminal version (experimental)
 
-The redesign branch includes a separate `opencode.9` preview: closable session tabs retaining drafts, Ctrl+P palette, a compact conversation and searchable grouped settings. Closing a tab retains the conversation and running agent; permanent deletion is a separate confirmed Archive Manager action. The installed TUI is not replaced. Run `./build/previews/opencode-09/dsh-launcher-tui --start`. See the [rebuild plan](docs/tui-rebuild-plan.en.md) for scope and next milestones.
+The redesign branch includes a separate `opencode.10` preview: closable session tabs retaining drafts, Ctrl+P palette, a compact conversation and searchable grouped settings. Closing a tab retains the conversation and running agent; permanent deletion is a separate confirmed action through a bundled dsh module, without Archive Manager. Updated GUI/TUI launches load that module; a GUI deletion button has not been added. The installed TUI is not replaced. Run `./build/previews/opencode-10/dsh-launcher-tui --start`. See the [rebuild plan](docs/tui-rebuild-plan.en.md) for scope and next milestones.
 
 GUI parity inventory, implementation milestones, and plugin strategy: [TUI roadmap](docs/tui-roadmap/README.en.md).
 

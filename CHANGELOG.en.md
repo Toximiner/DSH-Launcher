@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- TUI `preview.40-opencode.10`: permanent deletion now uses the bundled `packages/launcher-backend` module and `launcherSessions/deleteSession`; Archive Manager is no longer required. GUI/TUI attach it with `--patch` when starting their own dsh, without profile edits or npm installation. The backend serializes deletion, checks activity across the session tree and recursively removes subagent artifacts, preserving forks and project files. An older or external running backend must restart through the updated launcher; there is no forced shutdown or live code injection. No GUI deletion button is added. Stage 4 of the visual redesign remains in progress.
+
 - TUI `preview.40-opencode.9`: a tab's close button only closes that local tab, preserves its draft and leaves the dsh agent running; closing the active tab selects a neighbor, and closing the final tab returns home. Behavior was checked against running OpenCode 2.3.0. Separate permanent deletion is available through Delete in the session manager or `/delete-session` for the current session: Cancel is selected by default, activity is reread, and deletion uses the enabled Archive Manager's public API. TUI does not stop the agent automatically, bypass the plugin with filesystem deletion, or retry an unconfirmed write. The preflight check is not CAS or a transaction; atomic subagent deletion is not guaranteed.
 
 - TUI: removed duplicate headings in the session picker and the dsh settings, session manager and log pages. Loading status, errors and workspace context remain visible.

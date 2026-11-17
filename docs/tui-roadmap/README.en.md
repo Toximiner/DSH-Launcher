@@ -1,6 +1,6 @@
 # TUI development roadmap
 
-The OpenCode-style shell and conversation have separate intermediate builds. Preview `opencode.8` migrates settings: compact grouped search with all 15 actions, arrow changes to local values, and flat shortcut help, dsh forms and small launcher dialogs. Stage 4 remains in progress: plugins/market, automation, files, terminals, subagents, queue/history, runtime, install/update/rollback and diagnostics still await migration. The preview does not replace the installed TUI. See the [rebuild plan](../tui-rebuild-plan.en.md).
+In `opencode.10`, TUI permanent deletion uses a bundled dsh module: GUI/TUI attach it through `--patch` when starting their own backend, without Archive Manager, package installation or profile edits. Session-tree activity is checked; forks and project files remain. An older or external running backend requires a restart through the updated launcher; no GUI deletion button is added yet. Stage 4 of the redesign remains in progress: plugins/market, automation, files, terminals, subagents, queue/history, runtime, install/update/rollback and diagnostics still await migration. The preview does not replace the installed TUI. See the [rebuild plan](../tui-rebuild-plan.en.md).
 
 Plugin Market and Automation tasks now follow the GUI structure: dedicated pages, cards and status indicators; tasks have status filters and creation/editing forms. Delivery history is readable, with explicit time zones. F2 in a form opens advanced JSON for complex rules. Revision checks and confirmation remain in place.
 

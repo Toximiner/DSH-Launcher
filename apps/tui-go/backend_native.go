@@ -229,7 +229,11 @@ func (w *backendLogWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 func startBackendLogged(ctx context.Context, options backendOptions, env []string, out io.Writer) (string, func(), <-chan struct{}, error) {
-	command := exec.Command(options.Bin, "--profile", options.Profile, "--no-open", "--port", fmt.Sprint(options.Port))
+	patch, err := prepareBackendModule()
+	if err != nil {
+		return "", nil, nil, fmt.Errorf(tr("Не удалось подготовить встроенный модуль dsh: %s"), clean(err.Error()))
+	}
+	command := exec.Command(options.Bin, "--profile", options.Profile, "--patch", patch, "--no-open", "--port", fmt.Sprint(options.Port))
 	command.Dir = options.CWD
 	command.Env = env
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

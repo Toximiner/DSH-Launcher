@@ -3,6 +3,7 @@ module github.com/Toximiner/DSH-Launcher/apps/tui-go
 go 1.24.2
 
 require (
+	github.com/Toximiner/DSH-Launcher/packages/launcher-backend v0.0.0
 	github.com/alecthomas/chroma/v2 v2.23.1
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1
 	github.com/charmbracelet/bubbles v0.21.0
@@ -33,3 +34,5 @@ require (
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	golang.org/x/text v0.3.8 // indirect
 )
+
+replace github.com/Toximiner/DSH-Launcher/packages/launcher-backend => ../../packages/launcher-backend

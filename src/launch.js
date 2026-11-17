@@ -48,7 +48,10 @@ async function launchDshInner() {
   pages.showPage(() => pages.showStatus(tr('Запуск DeepSeek Harness…', 'Starting DeepSeek Harness…'), tr(
     `<p>Запускаю <code>${esc(state.dshBin)} ${esc(DSH_ARGS.join(' '))}</code>.<br>Жду, пока сервис поднимется…</p>`,
     `<p>Running <code>${esc(state.dshBin)} ${esc(DSH_ARGS.join(' '))}</code>.<br>Waiting for the service to come up…</p>`)));
-  dshProcess.startDsh();
+  if (dshProcess.startDsh() === false) {
+    launcher.startWatchdog();
+    return;
+  }
 
   const up = await waitForPort();
   if (!up) {

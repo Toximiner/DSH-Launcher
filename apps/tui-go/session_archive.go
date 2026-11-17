@@ -20,9 +20,10 @@ type sessionArchive struct {
 	login                             string
 }
 type sessionArchiveResult struct {
-	dialog *sessionArchive
-	ids    map[string]bool
-	err    error
+	dialog     *sessionArchive
+	ids        map[string]bool
+	deletedIDs []string
+	err        error
 }
 
 func (m *model) openSessionArchive(current, restore bool) tea.Cmd {
