@@ -2,14 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/charmbracelet/lipgloss"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/x/ansi"
-
-	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
 )
 
 const (
@@ -32,13 +28,7 @@ type paletteState struct {
 	note           string
 }
 
-type paletteItem struct {
-	group   string
-	label   string // Stable source key; translate only at search/render time.
-	hint    string
-	enabled func(*model) bool
-	run     func(*model) tea.Cmd
-}
+type paletteItem = actionDescriptor
 
 // Shared enable predicates (gates from docs/tui-palette-catalog.md).
 func paletteHasSession(m *model) bool { return m.session != nil }
@@ -67,209 +57,8 @@ func paletteLastAssistantSeq(m *model) int {
 	return -1
 }
 
-var paletteCatalog = []paletteItem{
-	// Сессии
-	{group: "Сессии", label: "Новая сессия", hint: "/new · Ctrl+N",
-		enabled: paletteHasURL,
-		run:     func(m *model) tea.Cmd { return m.sessionOperation("new", "") }},
-	{group: "Сессии", label: "Список сессий", hint: "/sessions · Alt+S",
-		enabled: paletteHasURL,
-		run: func(m *model) tea.Cmd {
-			m.page = sessionsPage
-			m.resize()
-			return m.sessionOperation("list", "")
-		}},
-	{group: "Сессии", label: "Переименовать текущую", hint: "/rename · F3",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openSessionRename(true) }},
-	{group: "Сессии", label: "Ветвление (fork)", hint: "/fork · Ctrl+B",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openSessionFork(true) }},
-	{group: "Сессии", label: "Архивировать", hint: "/archive · Ctrl+X",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openSessionArchive(true, false) }},
-	{group: "Сессии", label: "Восстановить из архива", hint: "/restore",
-		enabled: paletteHasURL,
-		run:     func(m *model) tea.Cmd { return m.openSessionArchive(true, true) }},
-	{group: "Сессии", label: "К родителю (подагент)", hint: "/parent",
-		enabled: paletteIsSubagent,
-		run:     func(m *model) tea.Cmd { return m.sessionOperation("connect", m.session.Address.ParentID) }},
-	{group: "Сессии", label: "Режим: обычный", hint: "/mode default",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.chooseMode("default") }},
-	{group: "Сессии", label: "Режим: план", hint: "/plan · F2",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.chooseMode("plan") }},
-	{group: "Сессии", label: "Режим: цель", hint: "/mode goal",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.chooseMode("goal") }},
-	// Навигация
-	{group: "Навигация", label: "Чат", hint: "Esc",
-		enabled: func(*model) bool { return true },
-		run:     func(m *model) tea.Cmd { return m.showChat() }},
-	{group: "Навигация", label: "Настройки dsh", hint: "Alt+D",
-		enabled: func(*model) bool { return true },
-		run: func(m *model) tea.Cmd {
-			m.page, m.navFocused = dshSettingsPage, false
-			m.input.Blur()
-			m.marketEditing = false
-			m.marketSearch.Blur()
-			m.resize()
-			m.viewport.GotoTop()
-			return m.loadSettings()
-		}},
-	{group: "Навигация", label: "Настройки TUI", hint: "F4",
-		enabled: func(*model) bool { return true },
-		run:     func(m *model) tea.Cmd { return m.openDialog("settings") }},
-	{group: "Навигация", label: "Журнал", hint: "Alt+L",
-		enabled: func(*model) bool { return true },
-		run: func(m *model) tea.Cmd {
-			m.page, m.navFocused = logPage, false
-			m.input.Blur()
-			m.marketSearch.Blur()
-			m.resize()
-			m.viewport.GotoTop()
-			return nil
-		}},
-	{group: "Навигация", label: "Показать/скрыть контекст", hint: "",
-		enabled: func(m *model) bool { return m.page == chatPage },
-		run: func(m *model) tea.Cmd {
-			m.contextPanelHidden = !m.contextPanelHidden
-			m.resize()
-			return nil
-		}},
-	{group: "Навигация", label: "Установка и dsh", hint: "/runtime",
-		enabled: func(*model) bool { return true },
-		run:     func(m *model) tea.Cmd { return m.openRuntime("runtime") }},
-	{group: "Навигация", label: "Обновления и откат", hint: "/updates",
-		enabled: func(*model) bool { return true },
-		run:     func(m *model) tea.Cmd { return m.openRuntime("updates") }},
-	{group: "Навигация", label: "Диагностика", hint: "/diagnostics",
-		enabled: func(*model) bool { return true },
-		run:     func(m *model) tea.Cmd { return m.openRuntime("diagnostics") }},
-	{group: "Навигация", label: "Горячие клавиши", hint: "F1",
-		enabled: func(*model) bool { return true },
-		run:     func(m *model) tea.Cmd { return m.openDialog("help") }},
-	{group: "Навигация", label: "О программе", hint: "",
-		enabled: func(*model) bool { return true },
-		run:     func(m *model) tea.Cmd { return m.openDialog("about") }},
-	{group: "Навигация", label: "Выход", hint: "Ctrl+D",
-		enabled: func(*model) bool { return true },
-		run:     func(*model) tea.Cmd { return tea.Quit }},
-	// Настройки
-	{group: "Настройки", label: "Доступ по умолчанию", hint: "F5 — сохранить",
-		enabled: paletteWritable,
-		run:     func(m *model) tea.Cmd { return m.settingsHubAction("permission-default") }},
-	{group: "Настройки", label: "Язык интерфейса", hint: "RU / EN",
-		enabled: func(*model) bool { return true },
-		run:     func(m *model) tea.Cmd { return m.togglePreference(6) }},
-	{group: "Настройки", label: "Оформление (тема)", hint: "тёмная / светлая",
-		enabled: func(*model) bool { return true },
-		run:     func(m *model) tea.Cmd { return m.togglePreference(4) }},
-	{group: "Настройки", label: "Размер шрифта", hint: "терминал",
-		enabled: func(*model) bool { return true },
-		run:     func(m *model) tea.Cmd { return m.settingsHubAction("font") }},
-	{group: "Настройки", label: "Мышь в интерфейсе", hint: "вкл / выкл",
-		enabled: func(*model) bool { return true },
-		run:     func(m *model) tea.Cmd { return m.togglePreference(0) }},
-	{group: "Настройки", label: "История ввода", hint: "вкл / выкл",
-		enabled: func(*model) bool { return true },
-		run:     func(m *model) tea.Cmd { return m.togglePreference(1) }},
-	{group: "Настройки", label: "Модель сессии", hint: "/models · F12",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openModels() }},
-	{group: "Настройки", label: "Провайдеры", hint: "/providers",
-		enabled: paletteWritable,
-		run:     func(m *model) tea.Cmd { return m.openSettingsForm(true) }},
-	{group: "Настройки", label: "Команды агента", hint: "/commands",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openWorkbench("commands") }},
-	// Плагины и маркет
-	{group: "Плагины и маркет", label: "Плагины dsh (страница)", hint: "/plugins · F2 · Ctrl+O",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openWorkbench("plugins") }},
-	{group: "Плагины и маркет", label: "Маркет (страница)", hint: "/market · i/u/d · r",
-		enabled: paletteHasURL,
-		run: func(m *model) tea.Cmd {
-			m.page, m.navFocused = marketPage, false
-			m.input.Blur()
-			m.resize()
-			return m.loadMarket()
-		}},
-	{group: "Плагины и маркет", label: "Пакеты dsh", hint: "/packages · F6 — версии",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openWorkbench("packages") }},
-	// Автоматизация
-	{group: "Автоматизация", label: "Расписания", hint: "/schedules",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openWorkbench("schedules") }},
-	{group: "Автоматизация", label: "Задачи команды", hint: "/tasks",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openWorkbench("tasks") }},
-	{group: "Автоматизация", label: "Фоновые задания", hint: "/jobs · Ctrl+X — остановить",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openWorkbench("jobs") }},
-	{group: "Автоматизация", label: "Подагенты", hint: "/agents · F3 — сообщение",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openWorkbench("agents") }},
-	{group: "Автоматизация", label: "Терминалы", hint: "/terminals · Ctrl+N — оболочка",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openWorkbench("terminals") }},
-	{group: "Автоматизация", label: "Рабочие области", hint: "/workspaces · Ctrl+F поиск",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openWorkbench("workspaces") }},
-	{group: "Автоматизация", label: "Аккаунт DeepSeek", hint: "/account · Ctrl+N — войти",
-		enabled: paletteHasURL,
-		run:     func(m *model) tea.Cmd { return m.openWorkbench("account") }},
-	{group: "Автоматизация", label: "Журнал операций пакетов", hint: "/operations",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openWorkbench("operations") }},
-	{group: "Автоматизация", label: "Файлы рабочей области", hint: "/files",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openWorkbench("files") }},
-	// Действия
-	{group: "Действия", label: "Остановить агента", hint: "F8",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.cancelChat() }},
-	{group: "Действия", label: "Повторить неопределённую отправку", hint: "/retry-send",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.retryPrompt() }},
-	{group: "Действия", label: "Очередь сообщений", hint: "F9 · F3 правка · Ctrl+G уточнить",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openQueue() }},
-	{group: "Действия", label: "Многострочный редактор", hint: "/compose · F5 отправить",
-		enabled: paletteCompose,
-		run:     func(m *model) tea.Cmd { return m.openCompose() }},
-	{group: "Действия", label: "Очистить экран", hint: "/clear",
-		enabled: func(*model) bool { return true },
-		run: func(m *model) tea.Cmd {
-			m.lines = nil
-			if m.chat != nil {
-				m.chat.clearedThrough = m.chat.cursor
-			}
-			m.rebuild()
-			return nil
-		}},
-	{group: "Действия", label: "История сессии", hint: "F11 · Ctrl+F поиск · F3 ещё",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openHistory() }},
-	{group: "Действия", label: "Копировать последний ответ", hint: "Ctrl+Y",
-		enabled: func(m *model) bool { return m.conversationVisible() && paletteLastAssistantSeq(m) >= 0 },
-		run:     func(m *model) tea.Cmd { return m.copyConversation(paletteLastAssistantSeq(m)) }},
-	{group: "Действия", label: "Цель", hint: "/goal · F3 правка · F5 сохранить",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openGoal() }},
-	{group: "Действия", label: "Пресеты агента", hint: "Alt+A · Ctrl+N новая сессия",
-		enabled: paletteHasSession,
-		run:     func(m *model) tea.Cmd { return m.openWorkbench("presets") }},
-	{group: "Действия", label: "Вопросы и разрешения", hint: "F7",
-		enabled: paletteHasApprovals,
-		run: func(m *model) tea.Cmd {
-			m.approvals.visible = true
-			m.rebuild()
-			return nil
-		}},
-}
+// Palette rows are a projection of the shared action registry.
+var paletteCatalog = paletteActions()
 
 // paletteRow is one row of the flat list: a muted group heading or an item.
 type paletteRow struct {
@@ -290,7 +79,7 @@ func (m *model) paletteFiltered() []paletteRow {
 		if p.groupFilter != "" && item.group != p.groupFilter {
 			continue
 		}
-		if query != "" && !strings.Contains(strings.ToLower(clean(tr(item.label)+" "+tr(item.hint)+" "+tr(item.group))), query) {
+		if query != "" && !strings.Contains(strings.ToLower(clean(tr(item.label)+" "+actionPaletteHint(*item)+" "+tr(item.group)+" "+strings.Join(item.aliases, " ")+" "+strings.Join(item.keys, " "))), query) {
 			continue
 		}
 		if item.group != lastGroup {
@@ -391,8 +180,8 @@ func (m *model) paletteMayOpen() bool {
 		!m.queueDialog.visible && m.settingsForm == nil && (m.composer == nil || !m.composer.visible) &&
 		m.goalDialog == nil && m.modelPicker == nil && m.historyReader == nil &&
 		m.archiveDialog == nil && m.renameDialog == nil && m.forkDialog == nil &&
-		m.chrome.dialog == "" && !m.chrome.menuOpen && m.marketConfirm == nil &&
-		(m.workbench == nil || (m.workbench.pageView && !m.workbench.editing && !m.workbench.confirm))
+		m.chrome.dialog == "" && !m.chrome.menuOpen && m.marketConfirm == nil && m.sessionPicker == nil &&
+		(m.workbench == nil || (m.workbench.pageView && !m.workbench.editing && !m.workbench.confirm && !m.workbench.busy && !m.workbench.writing && m.workbench.pluginPanel == nil))
 }
 
 func (m *model) paletteClose() {
@@ -426,7 +215,7 @@ func (m *model) paletteExecute() tea.Cmd {
 	}
 	item := paletteCatalog[rows[p.offset].index]
 	if item.enabled != nil && !item.enabled(m) {
-		p.note = tr("Действие сейчас недоступно.")
+		p.note = actionDisabledReason(m, item)
 		return nil
 	}
 	m.paletteClose()
@@ -517,14 +306,27 @@ func (m *model) paletteKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	return nil, true
 }
 
-func (m *model) paletteBox() area {
-	w, h := min(62, m.width-4), min(20, m.height-4)
-	return area{(m.width - 1 - w) / 2, max(1, (m.height-h)/3), w, h}
+func (m *model) paletteSpec() chooserSpec {
+	detail := ""
+	search := ""
+	footer := tr("↑↓ выбрать · Enter открыть · Tab группа")
+	if m.palette != nil {
+		detail = fmt.Sprintf(tr("Найдено: %d"), len(paletteItemRows(m.paletteFiltered())))
+		if m.palette.groupFilter != "" {
+			detail += " · " + tr(m.palette.groupFilter)
+		}
+		search = m.palette.search.View()
+		if m.palette.note != "" {
+			footer = m.palette.note
+		}
+	}
+	return chooserSpec{Title: tr("Команды"), Search: search, Detail: detail, Footer: footer}
 }
+func (m *model) paletteBox() area { return m.chooserLayout(chooserSpec{}).Box }
 
 // The same row window is used for rendering and mouse hit testing.
 func (m *model) paletteWindow() (int, int) {
-	count := max(1, m.paletteBox().height-7)
+	count := m.chooserLayout(chooserSpec{}).List.height
 	rows := m.paletteFiltered()
 	first := max(0, m.palette.offset-count+1)
 	first = min(first, max(0, len(rows)-count))
@@ -553,12 +355,12 @@ func (m *model) paletteMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 	if !box.contains(msg.X, msg.Y) {
 		return nil, true
 	}
-	if msg.Y == box.y+1 && msg.X >= box.x+box.width-6 {
+	if m.chooserLayout(chooserSpec{}).Close.contains(msg.X, msg.Y) {
 		m.paletteClose()
 		return nil, true
 	}
 	first, count := m.paletteWindow()
-	line := msg.Y - box.y - 5
+	line := msg.Y - m.chooserLayout(chooserSpec{}).List.y
 	rows := m.paletteFiltered()
 	if line >= 0 && line < count && first+line < len(rows) && rows[first+line].kind == "item" {
 		m.palette.offset = first + line
@@ -572,45 +374,23 @@ func (m *model) paletteView(base string) string {
 		return base
 	}
 	p := m.palette
-	box := m.paletteBox()
-	inner := box.width - 4
+	inner := m.chooserLayout(chooserSpec{}).InnerWidth
 	p.search.Width = inner
 	p.search.Placeholder = tr("Найти команду…")
 	rows := m.paletteFiltered()
-	title := bar(heading().Render(tr("Команды")), muted().Render("esc"), inner)
-	subtitle := fmt.Sprintf(tr("Найдено: %d"), len(paletteItemRows(rows)))
-	if p.groupFilter != "" {
-		subtitle += " · " + tr(p.groupFilter)
-	}
-	lines := []string{"", title, p.search.View(), muted().Render(subtitle), ""}
+	lines := []string{}
 	first, count := m.paletteWindow()
 	for i := first; i < min(len(rows), first+count); i++ {
 		row := rows[i]
 		if row.kind == "heading" {
-			lines = append(lines, lipgloss.NewStyle().Foreground(theme.Color(theme.Secondary)).Render(tr(row.group)))
+			lines = append(lines, chooserGroup(tr(row.group)))
 			continue
 		}
 		item := paletteCatalog[row.index]
-		text := muted().Render(bar(tr(item.label), tr(item.hint), inner))
-		if item.enabled != nil && !item.enabled(m) {
-			text = muted().Render(bar(tr(item.label), "—", inner))
-		}
-		if i == p.offset {
-			text = lipgloss.NewStyle().Width(inner).Foreground(theme.Color(theme.SelectionText)).Background(theme.Color(theme.Selection)).Render(ansi.Strip(text))
-		}
-		lines = append(lines, text)
+		lines = append(lines, chooserItem(tr(item.label), actionPaletteHint(item), i == p.offset, actionEnabled(m, item), inner))
 	}
-	for len(lines) < box.height-2 {
-		lines = append(lines, "")
+	if len(rows) == 0 {
+		lines = append(lines, muted().Render(tr("Совпадений нет.")))
 	}
-	footer := tr("↑↓ выбрать · Enter открыть · Tab группа")
-	if p.note != "" {
-		footer = p.note
-	}
-	lines = append(lines, muted().Render(footer), "")
-	for i := range lines {
-		lines[i] = ansi.Truncate(lines[i], inner, "…")
-	}
-	front := lipgloss.NewStyle().Width(box.width).Height(box.height).Padding(0, 2).Foreground(theme.Color(theme.Text)).Background(theme.Color(theme.Panel)).Render(strings.Join(lines, "\n"))
-	return overlay(dimBackdrop(base), surface(front, theme.Panel), box.x, box.y, m.width-1)
+	return m.chooserView(base, m.paletteSpec(), lines)
 }

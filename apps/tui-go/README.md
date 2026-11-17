@@ -1,20 +1,31 @@
-# Go TUI preview — OpenCode shell milestone 1
+# Go TUI preview — OpenCode actions and pickers
 
-The experimental `0.2.0-preview.40-opencode.1` build uses visited session tabs,
-per-session drafts, a compact home composer and Ctrl+P navigation. It removes
-permanent menus/tree; model, permission and backend operations still use dsh.
-Conversation and auxiliary screens retain their previous styling in this first
-milestone. See the [approved rebuild plan](../../docs/tui-rebuild-plan.en.md).
+The experimental `0.2.0-preview.40-opencode.4` includes visited session tabs,
+per-session drafts, compact home/conversation composers, optional right context
+and Ctrl+P navigation. Command, session/workspace and model pickers share a flat
+frame, measured hit targets, teal selection and a dimmed backdrop.
 
 From the repository root, run the separate local build:
 
 ```sh
-./build/previews/opencode-01/dsh-launcher-tui --start
+./build/previews/opencode-04/dsh-launcher-tui --start
 ```
 
-The installed TUI is not replaced. F1/F4/F11/F12 and Alt page shortcuts remain
-compatible during migration. Older interface descriptions below are retained
-while their screens migrate; Ctrl+P is the current navigation entry point.
+The binary remains separate from earlier builds. Main entry points:
+
+- Ctrl+P: actions; F4: TUI settings; F11: history; F12: models.
+- Alt+S or `/sessions`: search sessions and workspaces. Enter on a workspace
+  filters sessions; Ctrl+N on it explicitly creates a session in that workspace.
+- F2 or `/sessions-manager`: full session management. F3 or
+  `/workspaces-manager`: full workspace management from the picker.
+- F2/Tab in models changes reasoning; Enter applies; Esc cancels. The shared
+  default side effect and next-step behavior are disclosed in the model dialog.
+
+`actions.go` defines palette actions, exact no-argument command aliases,
+base-screen keys and generated help rows. Argumentful commands and local
+editor/list keys remain context-specific handlers. See the
+[rebuild plan](../../docs/tui-rebuild-plan.en.md) for completed scope and next stages.
+Older interface descriptions below record screens still being migrated.
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)

@@ -206,7 +206,7 @@ func (m *model) sessionTabLayout() sessionTabLayout {
 func (m *model) tabRail() string { return m.sessionTabLayout().view }
 
 func (m *model) tabHasModal() bool {
-	return (m.palette != nil && m.palette.open) || m.runtimeDialog != nil || (m.workbench != nil && (!m.workbench.pageView || m.workbench.busy || m.workbench.editing || m.workbench.confirm || m.workbench.pluginPanel != nil)) || m.goalDialog != nil || m.settingsForm != nil || m.modelPicker != nil || m.archiveDialog != nil || m.forkDialog != nil || m.renameDialog != nil || m.historyReader != nil || m.queueDialog.visible || m.chrome.dialog != "" || m.chrome.menuOpen || (m.composer != nil && m.composer.visible) || (m.approvals != nil && m.approvals.visible)
+	return m.sessionPicker != nil || (m.palette != nil && m.palette.open) || m.runtimeDialog != nil || (m.workbench != nil && (!m.workbench.pageView || m.workbench.busy || m.workbench.editing || m.workbench.confirm || m.workbench.pluginPanel != nil)) || m.goalDialog != nil || m.settingsForm != nil || m.modelPicker != nil || m.archiveDialog != nil || m.forkDialog != nil || m.renameDialog != nil || m.historyReader != nil || m.queueDialog.visible || m.chrome.dialog != "" || m.chrome.menuOpen || (m.composer != nil && m.composer.visible) || (m.approvals != nil && m.approvals.visible)
 }
 
 func (m *model) tabRailMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
@@ -254,8 +254,6 @@ func (m *model) tabKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			delta = -1
 		}
 		return m.switchTab(tabs[(index+delta+len(tabs))%len(tabs)].ID), true
-	case "ctrl+n":
-		return m.sessionOperation("new", m.sidebarNewWorkspace()), true
 	}
 	return nil, false
 }

@@ -211,6 +211,8 @@ func (m *model) agentControl(action string) tea.Cmd {
 		return m.openSessionArchive(true, false)
 	case "conversation":
 		return m.openDialog("conversation")
+	case "workspaces":
+		return m.openWorkspacePicker()
 	case "models":
 		return m.openModels()
 	case "compose":

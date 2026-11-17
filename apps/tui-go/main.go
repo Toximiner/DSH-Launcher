@@ -17,8 +17,8 @@ import (
 	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
 )
 
-const version = "0.2.0-preview.40-opencode.3"
-const help = "Ctrl+P — палитра команд: все страницы, настройки и действия\n" + "/runtime — установка и процесс dsh\n/updates — обновления и откат dsh/TUI\n/diagnostics — журнал, отчёт, уведомления\n" + "/compose — многострочное сообщение\n/attach <путь> — прикрепить файл до 2 МиБ\n/workspaces · /files · /terminals — рабочая область\n/presets — пресеты · Ctrl+N новая сессия\n/plugins · /commands · /packages — плагины\n/agents · /tasks · /jobs · /schedules — выполнение\n/parent — вернуться от подагента к родителю\nВ списках: F5 обновить · Esc назад\n" + "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/rename — название текущей · F3 в списке\n/archive · /restore — архив и возврат\nВ списке: a — архив · Ctrl+X — перенести\n/fork — новая ветка · Ctrl+B в списке\n/models — выбор модели сессии\n/providers — настройки провайдеров\nВ настройках: Enter — форма · F6 — провайдеры\n/mode default|plan|goal — режим\n/goal — состояние цели · F3 правка\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/history — история сессии\nCtrl+F в истории — поиск · F3 — ещё\nCtrl+T в поиске — всё / сообщения / инструменты\nTab в истории — выбор · Ctrl+B — ветка\nCtrl+R в истории — Markdown/исходник\nВ истории: Ctrl+Y — копия · Ctrl+K — код\nF6/Shift+F6 — инструмент истории · Enter — детали\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nCtrl+Tab / Shift+Tab — сессии · Ctrl+N — новая сессия\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
+const version = "0.2.0-preview.40-opencode.4"
+const help = "Ctrl+P — палитра команд: все страницы, настройки и действия\n" + "/runtime — установка и процесс dsh\n/updates — обновления и откат dsh/TUI\n/diagnostics — журнал, отчёт, уведомления\n" + "/compose — многострочное сообщение\n/attach <путь> — прикрепить файл до 2 МиБ\n/workspaces · /files · /terminals — рабочая область\n/presets — пресеты · Ctrl+N новая сессия\n/plugins · /commands · /packages — плагины\n/agents · /tasks · /jobs · /schedules — выполнение\n/parent — вернуться от подагента к родителю\nВ списках: F5 обновить · Esc назад\n" + "/market — маркет плагинов\n/new — новая сессия · /sessions — быстрый выбор\n/sessions-manager — управление сессиями\n/workspaces-manager — управление областями\n/session <id> — подключить сессию\n/rename — название текущей · F3 в списке\n/archive · /restore — архив и возврат\nВ списке: a — архив · Ctrl+X — перенести\n/fork — новая ветка · Ctrl+B в списке\n/models — выбор модели сессии\n/providers — настройки провайдеров\nВ настройках: Enter — форма · F6 — провайдеры\n/mode default|plan|goal — режим\n/goal — состояние цели · F3 правка\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/history — история сессии\nCtrl+F в истории — поиск · F3 — ещё\nCtrl+T в поиске — всё / сообщения / инструменты\nTab в истории — выбор · Ctrl+B — ветка\nCtrl+R в истории — Markdown/исходник\nВ истории: Ctrl+Y — копия · Ctrl+K — код\nF6/Shift+F6 — инструмент истории · Enter — детали\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nCtrl+Tab / Shift+Tab — сессии · Ctrl+N — новая сессия\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
 	chatPage = iota
@@ -36,6 +36,7 @@ var pages = []string{"Чат", "Сессии", "Настройки dsh", "Нас
 type quitMsg struct{}
 
 type model struct {
+	sessionPicker       *sessionPicker
 	contextPanelHidden  bool
 	modelRevision       int
 	agentInfo           *agentContext
@@ -304,6 +305,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case settingsFormResult:
 		m.handleSettingsForm(msg)
 		return m, nil
+	case sessionPickerResult:
+		return m, m.handleSessionPickerResult(msg)
 	case modelPickerResult:
 		m.handleModelPicker(msg)
 		return m, nil
@@ -534,6 +537,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		if cmd, handled := m.sessionPickerKey(msg); handled {
+			return m, cmd
+		}
 		if cmd, handled := m.paletteKey(msg); handled {
 			return m, cmd
 		}
@@ -574,6 +580,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		if cmd, handled := m.renameKey(msg); handled {
+			return m, cmd
+		}
+		if cmd, handled := m.dispatchKeyAction(msg); handled {
 			return m, cmd
 		}
 		if cmd, handled := m.chromeKey(msg); handled {
@@ -620,22 +629,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		if page, ok := map[string]int{"alt+c": chatPage, "alt+s": sessionsPage, "alt+d": dshSettingsPage, "alt+l": logPage, "alt+m": marketPage}[msg.String()]; ok && msg.Alt {
-			m.page = page
-			m.toolFocused, m.navFocused, m.marketEditing = false, false, false
-			m.marketConfirm = nil
-			m.marketSearch.Blur()
-			m.input.Blur()
-			m.resize()
-			m.viewport.GotoTop()
-			if page == chatPage {
-				return m, m.input.Focus()
-			}
-			if page == marketPage {
-				return m, m.loadMarket()
-			}
-			return m, nil
-		}
+
 		if cmd, handled := m.tabKey(msg); handled {
 			return m, cmd
 		}
@@ -663,11 +657,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.page == dshSettingsPage {
 				return m, m.loadSettings()
 			}
-		case "f2":
-			if m.session != nil && m.session.Plan != nil && m.session.Plan.Active {
-				return m, m.chooseMode("default")
-			}
-			return m, m.chooseMode("plan")
 		case "ctrl+c", "ctrl+d":
 			return m, tea.Quit
 		case "esc":
@@ -703,71 +692,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.history = m.history[len(m.history)-50:]
 			}
 			m.historyIndex = len(m.history)
+			if cmd, handled := m.dispatchSlashAction(line); handled {
+				return m, cmd
+			}
 			switch line {
-			case "/runtime", "/updates", "/diagnostics":
-				return m, m.openRuntime(strings.TrimPrefix(line, "/"))
-			case "/market":
-				m.page = marketPage
-				m.navFocused = false
-				m.input.Blur()
-				m.resize()
-				return m, m.loadMarket()
-			case "/new":
-				return m, m.sessionOperation("new", "")
-			case "/sessions":
-				m.page = sessionsPage
-				m.resize()
-				return m, m.sessionOperation("list", "")
-			case "/plan":
-				return m, m.chooseMode("plan")
 			case "/plan off":
 				return m, m.chooseMode("default")
-			case "/exit", "/quit":
-				return m, tea.Quit
-			case "/clear":
-				m.lines = nil
-				if m.chat != nil {
-					m.chat.clearedThrough = m.chat.cursor
-				}
-				m.rebuild()
-			case "/queue":
-				return m, m.openQueue()
-			case "/archive":
-				return m, m.openSessionArchive(true, false)
-			case "/restore":
-				return m, m.openSessionArchive(true, true)
-			case "/fork":
-				return m, m.openSessionFork(true)
-			case "/rename":
-				return m, m.openSessionRename(true)
-			case "/providers":
-				return m, m.openSettingsForm(true)
-			case "/models":
-				return m, m.openModels()
-			case "/parent":
-				if m.session != nil && m.session.Address.Kind == "subagent" {
-					return m, m.sessionOperation("connect", m.session.Address.ParentID)
-				}
-				m.append(tr("У текущей сессии нет адреса родителя."))
-				return m, nil
-			case "/compose":
-				return m, m.openCompose()
-			case "/operations", "/account", "/workspaces", "/packages", "/presets", "/files", "/commands", "/plugins", "/jobs", "/schedules", "/agents", "/tasks", "/terminals":
-				return m, m.openWorkbench(strings.TrimPrefix(line, "/"))
-			case "/goal":
-				return m, m.openGoal()
-			case "/history":
-				return m, m.openHistory()
-			case "/stop":
-				return m, m.cancelChat()
-			case "/settings":
-				return m, m.openDialog("settings")
-			case "/about":
-				return m, m.openDialog("about")
-			case "/retry-send":
-				return m, m.retryPrompt()
-			case "/help":
-				m.append(help)
 			default:
 				if strings.HasPrefix(line, "/session ") {
 					return m, m.sessionOperation("connect", strings.TrimSpace(strings.TrimPrefix(line, "/session ")))

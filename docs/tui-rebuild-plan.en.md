@@ -87,6 +87,35 @@ Intermediate build: `0.2.0-preview.40-opencode.3`.
 ./build/previews/opencode-03/dsh-launcher-tui --start
 ```
 
+## Milestone 4: actions and pickers
+
+Intermediate build: `0.2.0-preview.40-opencode.4`.
+
+- Palette, exact no-argument commands and base shortcuts share a registry of stable
+  IDs, labels and availability checks. Their keyboard reference is generated from
+  it. Argumentful `/session`, `/mode`, `/attach`, `/goal` and `/plan off`, plus local
+  editor/list keys, deliberately retain their existing handlers.
+- Commands, sessions/workspaces and models share a flat frame: search, groups,
+  teal selection, top-right Esc, dim backdrop and measured mouse geometry.
+  Position/height are compared with running OpenCode; frames use about half the
+  terminal height, with room for model disclosures at 80×24.
+- `/sessions` and Alt+S open a session/workspace picker. Enter on a workspace
+  filters its sessions without creating one; Ctrl+N explicitly creates there.
+  Search includes title, ID and path; Tab changes groups. Partial catalog failures
+  retain usable sections; canceled/stale results cannot reopen a modal or cross profiles.
+- `/sessions-manager`/F2 and `/workspaces-manager`/F3 retain complete session and
+  workspace management, including archive, deletion, rename and fork.
+- Models are grouped by provider, with the actual current model marked. The provider
+  heading stays visible when scrolling a short window. F2/Tab changes reasoning;
+  Enter applies. Cancel and row clicks do not write. Shared-default, next-step and
+  unconfirmed-write disclosures and protections are preserved.
+- Paste and the topmost modal capture input; drafts, visible rows and mouse targets
+  are checked together. Navigation from plugin pages preserves the first typed key.
+
+```sh
+./build/previews/opencode-04/dsh-launcher-tui --start
+```
+
 ## Revised implementation order
 
 1. **Screenshot correction, preview `opencode.3` (implemented; user review pending).** Active conversation
@@ -96,10 +125,10 @@ Intermediate build: `0.2.0-preview.40-opencode.3`.
    Ordinary messages have no permanent copy button or clock; source copying remains
    through Ctrl+Y/palette/history. Preserve semantic question/approval/service labels.
    Context shows actual dsh data only; absent historical model/MCP data is omitted.
-2. **Shared actions and pickers.** One action registry for palette, slash and shortcuts;
+2. **Shared actions and pickers (implemented in preview4; user review pending).** One action registry for palette, slash and shortcuts;
    flat searchable grouped command/model/session/project pickers, Esc at top right,
-   teal selection and dimmed backdrop. Palette colors/backdrop start in preview3;
-   unifying remaining dialogs follows afterwards.
+   teal selection and dimmed backdrop. Core pickers are unified in preview4;
+   editors and confirmations continue in subsequent stages.
 3. **Tools and permissions.** Compact expandable results/thoughts, clear failures and
    decisions, complete input capture by the topmost modal. Show only information dsh provides.
 4. **Auxiliary pages.** Settings, plugins/market, automation, files, terminals,

@@ -53,8 +53,8 @@ func TestModelsPickerSearchReasoningMouseAndGeometry(t *testing.T) {
 		if !strings.Contains(view, "общую модель") || strings.Contains(view, "secret backend detail") {
 			t.Fatal("shared-default side effect absent or private provider error exposed")
 		}
-		box := m.modelsBox()
-		m.modelsMouse(tea.MouseMsg{X: box.x + 3, Y: box.y + 7, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+		layout := m.modelsLayout()
+		m.modelsMouse(tea.MouseMsg{X: layout.geometry.List.x + 1, Y: layout.geometry.List.y + 1, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
 		if d.index != 0 {
 			t.Fatal("model row mouse region is incorrect")
 		}

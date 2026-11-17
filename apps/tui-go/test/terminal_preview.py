@@ -241,6 +241,16 @@ class TerminalPreview(unittest.TestCase):
                           absent=('[F8 Стоп]', '◌ Ожидание ответа…', '◌ Отправка…'))
             self.app.send('Черновик для проверки')
             self.app.wait('Черновик для проверки')
+            self.app.send('\x1bs')  # Alt+S opens the searchable quick picker.
+            self.app.wait('Сессии и рабочие области')
+            # This fixture intentionally lacks workspace/follow: sessions must
+            # remain selectable after a partial catalog failure.
+            self.app.wait('Рабочие области недоступны')
+            self.capture('session-picker-partial')
+            self.app.send('\x1b[18~')  # F7 stays inside this modal.
+            self.app.wait('Сессии и рабочие области')
+            self.app.send('\r')  # Select the current session without reattaching.
+            self.app.wait('Черновик для проверки', absent=('Сессии и рабочие области',))
             for columns, rows in ((80, 24), (100, 30), (160, 40)):
                 self.app.resize(columns, rows)
                 self.app.wait('Черновик для проверки')
@@ -315,29 +325,35 @@ class TerminalPreview(unittest.TestCase):
                    'DSH_TUI_URL': f'http://127.0.0.1:{server.server_port}/?token=not-for-display'}
             self.app = Terminal(BINARY, [], env)
             self.app.wait('DeepSeek Harness')
+            # Init preloads the settings snapshot. Let it settle before an
+            # explicit navigation action, whose contract includes a refresh.
+            wait_for(lambda: state['reads'] == 1)
+            for _ in range(5):
+                self.app.pump()
             self.app.send('\x1bd')
-            self.app.wait('loaded-model-1')
+            self.app.wait('loaded-model-2')
             self.app.send('\x1bOS')
             self.app.wait('Настройки TUI')
             self.app.send('r')
             self.close_preferences()
-            self.app.send('\x1bd')
-            self.app.wait('loaded-model-1')
+            # Closing preferences reveals the existing settings page. Alt+D
+            # explicitly reopens/refreshes it through the shared action registry.
+            self.app.wait('loaded-model-2')
             self.app.send('\x1b[C')
             self.app.wait('limit = 42')
             self.app.send('\x1b[D')
-            self.app.wait('loaded-model-1')
-            self.app.send('r')
             self.app.wait('loaded-model-2')
+            self.app.send('r')
+            self.app.wait('loaded-model-3')
             state['fail'] = True
             self.app.send('r')
             # The previous snapshot is also shown while loading; wait for the
             # failed response before inspecting the server request count.
             self.app.wait('Ошибка:')
             self.app.wait('Показан предыдущий снимок.')
-            self.assertIn('loaded-model-2', self.app.text)
+            self.assertIn('loaded-model-3', self.app.text)
             self.assertNotIn('not-for-display', self.app.text)
-            self.assertEqual(state['reads'], 3)
+            self.assertEqual(state['reads'], 4)
             self.assertEqual(set(state['paths']), {'/connect', '/api/settings/describe', '/api/session/list', '/api/remote.mux'})
         finally:
             server.shutdown()
@@ -381,7 +397,7 @@ class TerminalPreview(unittest.TestCase):
         self.app.command('/mode default')
         self.app.wait('Режим: обычный')
         self.app.command('/goal clear')
-        self.app.command('/sessions')
+        self.app.command('/sessions-manager')
         self.app.wait('› session-pty')
         self.app.send('\r')
         self.app.wait('DeepSeek Harness')

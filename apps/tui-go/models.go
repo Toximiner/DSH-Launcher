@@ -10,8 +10,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
 )
 
 type modelSelection struct {
@@ -212,7 +210,7 @@ func (m *model) applyModel() tea.Cmd {
 		return nil
 	}
 	options := d.options()
-	if d.index >= len(options) {
+	if d.index < 0 || d.index >= len(options) {
 		return nil
 	}
 	option := options[d.index]
@@ -307,9 +305,6 @@ func (m *model) handleModelPicker(result modelPickerResult) {
 func (m *model) modelsKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	d := m.modelPicker
 	if d == nil {
-		if msg.Type == tea.KeyF12 && !msg.Paste && (m.page == chatPage || m.page == dshSettingsPage) && m.historyReader == nil && m.archiveDialog == nil && m.renameDialog == nil && m.forkDialog == nil && m.chrome.dialog == "" && !m.chrome.menuOpen {
-			return m.openModels(), true
-		}
 		return nil, false
 	}
 	if !msg.Paste {
@@ -342,7 +337,14 @@ func (m *model) modelsKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			d.choose((d.index + delta + len(options)) % len(options))
 		}
 		return nil, true
-	case tea.KeyTab, tea.KeyShiftTab:
+	case tea.KeyPgUp, tea.KeyPgDown:
+		delta := max(1, m.modelsLayout().geometry.List.height-1)
+		if msg.Type == tea.KeyPgUp {
+			delta = -delta
+		}
+		d.choose(d.index + delta)
+		return nil, true
+	case tea.KeyTab, tea.KeyShiftTab, tea.KeyF2:
 		options := d.options()
 		if d.index < len(options) && options[d.index].model.Reasoning != nil {
 			efforts := append([]modelEffort{{ID: "", Name: tr("По умолчанию")}}, options[d.index].model.Reasoning.Efforts...)
@@ -369,77 +371,165 @@ func (m *model) modelsKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 	return cmd, true
 }
-func (m *model) modelsBox() area {
-	width, height := min(94, m.width-3), min(28, m.height-2)
-	return area{(m.width - 1 - width) / 2, (m.height - height) / 2, width, height}
+
+// Heading rows are presentation only; model indices retain their catalog identity.
+type modelPickerRow struct {
+	heading bool
+	label   string
+	index   int
 }
+
+type modelPickerLayout struct {
+	spec       chooserSpec
+	geometry   chooserGeometry
+	rows       []modelPickerRow
+	first, end int
+}
+
+func (d *modelPicker) groupedRows() ([]modelPickerRow, int) {
+	rows := []modelPickerRow{}
+	selected := 0
+	previous := ""
+	for i, option := range d.options() {
+		if i == 0 || option.provider != previous {
+			label := option.name
+			if label == "" {
+				label = option.provider
+			}
+			rows = append(rows, modelPickerRow{heading: true, label: singleLine(label), index: -1})
+			previous = option.provider
+		}
+		label := option.model.Name
+		if label == "" {
+			label = option.model.ID
+		}
+		if i == d.index {
+			selected = len(rows)
+		}
+		rows = append(rows, modelPickerRow{label: singleLine(label), index: i})
+	}
+	return rows, selected
+}
+
+func (m *model) modelsLayout() modelPickerLayout {
+	d := m.modelPicker
+	spec := chooserSpec{Title: tr("Модель сессии"), Width: 76, Height: 22}
+	if d == nil {
+		return modelPickerLayout{spec: spec, geometry: m.chooserLayout(spec)}
+	}
+	current := d.current.Provider + "/" + d.current.Model
+	if d.current.Provider == "" && d.current.Model == "" {
+		current = "—"
+	}
+	if d.current.Reasoning != "" {
+		current += " · " + d.current.Reasoning
+	}
+	spec.Detail = tr("Текущая: ") + singleLine(current)
+	effort := ""
+	options := d.options()
+	if d.index >= 0 && d.index < len(options) {
+		effort = tr("Рассуждение: ") + "—"
+		if reasoning := options[d.index].model.Reasoning; reasoning != nil && len(reasoning.Efforts) > 0 {
+			value := tr("По умолчанию")
+			selected := d.effort
+			if selected == "" {
+				selected = reasoning.Default
+			}
+			for _, e := range reasoning.Efforts {
+				if e.ID == selected {
+					name := e.Name
+					if name == "" {
+						name = e.ID
+					}
+					if d.effort == "" {
+						value += " · " + singleLine(name)
+					} else {
+						value = singleLine(name)
+					}
+					break
+				}
+			}
+			effort = tr("Рассуждение: ") + value
+		}
+	}
+	spec.Footer = strings.Join([]string{muted().Render(effort), muted().Render(tr("dsh также сохраняет общую модель по умолчанию.")), muted().Render(tr("Текущий запрос продолжится; выбор — для следующего шага.")), muted().Render(singleLine(d.note)), muted().Render(tr("↑↓ модель · F2/Tab рассуждение · Enter применить · F5 обновить"))}, "\n")
+	geometry := m.chooserLayout(spec)
+	d.search.Width = max(1, geometry.InnerWidth-ansi.StringWidth(d.search.Prompt))
+	search := d.search
+	cursor := search.Position()
+	search.CursorEnd()
+	search.SetCursor(cursor)
+	spec.Search = search.View()
+	rows, selected := d.groupedRows()
+	first, end := chooserWindow(selected, len(rows), geometry.List.height)
+	// Keep the selected provider visible when its long model list scrolls past
+	// the original heading. The synthetic header has no model identity or hit.
+	heading := selected
+	for heading > 0 && !rows[heading].heading {
+		heading--
+	}
+	if len(rows) > 0 && heading < first && geometry.List.height > 1 {
+		count := geometry.List.height - 1
+		first = max(heading+1, min(selected-count/2, max(0, len(rows)-count)))
+		end = min(len(rows), first+count)
+		visible := append([]modelPickerRow{rows[heading]}, rows[first:end]...)
+		rows = visible
+		first, end = 0, len(rows)
+	}
+	return modelPickerLayout{spec: spec, geometry: geometry, rows: rows, first: first, end: end}
+}
+
+func (m *model) modelsBox() area { return m.modelsLayout().geometry.Box }
+
 func (m *model) modelsView(base string) string {
 	d := m.modelPicker
 	if d == nil {
 		return base
 	}
-	box := m.modelsBox()
-	width := box.width - 4
-	d.search.Width = max(1, width-7)
-	current := d.current.Provider + "/" + d.current.Model
-	if d.current.Reasoning != "" {
-		current += " · " + d.current.Reasoning
-	}
-	lines := []string{heading().Render(tr("Модель сессии")), ansi.Truncate(clean(d.id), width, "…"), ansi.Truncate(tr("Текущая: ")+clean(current), width, "…"), tr("Каталог подключённых провайдеров"), d.search.View(), ""}
+	layout := m.modelsLayout()
 	options := d.options()
-	start := max(0, min(d.index-2, len(options)-5))
-	for i := 0; i < 5; i++ {
-		label := ""
-		index := start + i
-		if index < len(options) {
-			option := options[index]
-			prefix := "  "
-			if index == d.index {
-				prefix = "› "
-			}
-			label = prefix + option.provider + " / " + option.model.ID
-			if index == d.index {
-				label = heading().Render(ansi.Truncate(clean(label), width, "…"))
-			} else {
-				label = ansi.Truncate(clean(label), width, "…")
-			}
+	rows := []string{}
+	for _, row := range layout.rows[layout.first:layout.end] {
+		if row.heading {
+			rows = append(rows, chooserGroup(row.label))
+			continue
 		}
-		lines = append(lines, label)
-	}
-	if len(options) == 0 {
-		lines[6] = tr("Нет доступных моделей по этому запросу.")
-	}
-	selection, effort := tr("Выберите модель."), tr("Рассуждение: по умолчанию")
-	if d.index < len(options) {
-		option := options[d.index]
-		selection = tr("Выбор: ") + option.provider + "/" + option.model.ID
-		if d.effort != "" {
-			effort = tr("Рассуждение: ") + d.effort
+		option := options[row.index]
+		hint := ""
+		if row.label != option.model.ID {
+			hint = ansi.Truncate(singleLine(option.model.ID), max(1, layout.geometry.InnerWidth/2), "…")
 		}
+		if option.provider == d.current.Provider && option.model.ID == d.current.Model {
+			hint = "✓"
+		}
+		rows = append(rows, chooserItem(row.label, hint, row.index == d.index, !d.busy && !d.uncertain, layout.geometry.InnerWidth))
 	}
-	lines = append(lines, "", ansi.Truncate(clean(selection), width, "…"), ansi.Truncate(clean(effort), width, "…"), ansi.Truncate(tr("dsh также сохраняет общую модель по умолчанию."), width, "…"), ansi.Truncate(tr("Текущий запрос продолжится; выбор — для следующего шага."), width, "…"))
-	notes := strings.Split(ansi.Hardwrap(clean(d.note), width, true), "\n")
-	for len(notes) < 2 {
-		notes = append(notes, "")
+	if len(rows) == 0 && !d.busy {
+		rows = append(rows, muted().Render(tr("Нет доступных моделей по этому запросу.")))
 	}
-	lines = append(lines, muted().Render(notes[0]), muted().Render(notes[1]), tr("↑/↓ модель · Tab/Shift+Tab рассуждение"), tr("Enter применить · F5 перечитать · Esc назад"))
-	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Accent), box.x, box.y, m.width-1)
+	return m.chooserView(base, layout.spec, rows)
 }
+
 func (m *model) modelsMouse(msg tea.MouseMsg) tea.Cmd {
 	d := m.modelPicker
-	if d == nil || d.busy {
+	if d == nil || msg.Action != tea.MouseActionPress {
 		return nil
 	}
-	box := m.modelsBox()
-	options := d.options()
-	start := max(0, min(d.index-2, len(options)-5))
-	if msg.Button == tea.MouseButtonLeft && (area{box.x + 2, box.y + 7, box.width - 4, 5}).contains(msg.X, msg.Y) {
-		index := start + msg.Y - (box.y + 7)
-		if index < len(options) {
-			d.choose(index)
+	layout := m.modelsLayout()
+	g := layout.geometry
+	if msg.Button == tea.MouseButtonLeft && g.Close.contains(msg.X, msg.Y) && !d.writing {
+		return m.closeModels()
+	}
+	if d.busy {
+		return nil
+	}
+	if msg.Button == tea.MouseButtonLeft && g.List.contains(msg.X, msg.Y) {
+		index := layout.first + msg.Y - g.List.y
+		if index >= layout.first && index < layout.end && !layout.rows[index].heading {
+			d.choose(layout.rows[index].index)
 		}
 	}
-	if (msg.Button == tea.MouseButtonWheelDown || msg.Button == tea.MouseButtonWheelUp) && box.contains(msg.X, msg.Y) {
+	if (msg.Button == tea.MouseButtonWheelDown || msg.Button == tea.MouseButtonWheelUp) && g.List.contains(msg.X, msg.Y) {
 		delta := 1
 		if msg.Button == tea.MouseButtonWheelUp {
 			delta = -1

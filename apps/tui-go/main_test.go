@@ -60,16 +60,27 @@ func TestPasteCannotExecuteCommand(t *testing.T) {
 
 func TestPageShortcutsPreserveDraft(t *testing.T) {
 	m := newModel()
+	m.settingsLogin = "http://127.0.0.1:1"
 	m.input.SetValue("unfinished draft")
 	for _, key := range []struct {
 		key  rune
 		page int
-	}{{'s', sessionsPage}, {'d', dshSettingsPage}, {'l', logPage}, {'m', marketPage}, {'c', chatPage}} {
+	}{{'d', dshSettingsPage}, {'l', logPage}, {'m', marketPage}, {'c', chatPage}} {
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{key.key}, Alt: true})
 		if m.page != key.page || m.input.Value() != "unfinished draft" {
 			t.Fatalf("page shortcut %c lost draft or selected wrong page", key.key)
 		}
 	}
+	m.settingsLogin = "http://127.0.0.1:1"
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}, Alt: true})
+	if m.sessionPicker == nil || m.page != chatPage || m.input.Value() != "unfinished draft" {
+		t.Fatal("session shortcut did not open picker with draft intact")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if !m.input.Focused() || m.input.Value() != "unfinished draft" {
+		t.Fatal("closing session picker did not restore composer")
+	}
+
 }
 
 func TestSanitizationAndResize(t *testing.T) {

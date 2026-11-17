@@ -144,21 +144,21 @@ func TestSessionTabsBootstrapRetainsActiveWithoutCatalog(t *testing.T) {
 	}
 }
 
-func TestSessionTabsShortcutsRespectEditorsAndPages(t *testing.T) {
+func TestSessionCreationShortcutRespectsEditorsAndPages(t *testing.T) {
 	m := tabFixture(2)
 	key := tea.KeyMsg{Type: tea.KeyCtrlN}
 	m.page = sessionsPage
-	if _, handled := m.tabKey(key); handled {
+	if _, handled := m.dispatchKeyAction(key); handled {
 		t.Fatal("list CtrlN intercepted")
 	}
 	m.page = chatPage
 	m.composer = &composeDialog{visible: true}
-	if _, handled := m.tabKey(key); handled {
+	if _, handled := m.dispatchKeyAction(key); handled {
 		t.Fatal("editor CtrlN intercepted")
 	}
 	m.composer = nil
 	m.palette = &paletteState{open: true}
-	if _, handled := m.tabKey(key); handled {
+	if _, handled := m.dispatchKeyAction(key); handled {
 		t.Fatal("palette CtrlN intercepted")
 	}
 	if _, handled := m.tabRailMouse(tea.MouseMsg{X: 1, Y: sessionTabRow, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress}); handled {
@@ -166,12 +166,12 @@ func TestSessionTabsShortcutsRespectEditorsAndPages(t *testing.T) {
 	}
 	m.palette = nil
 	m.approvals = &approvalState{visible: true}
-	if _, handled := m.tabKey(key); handled {
+	if _, handled := m.dispatchKeyAction(key); handled {
 		t.Fatal("approval CtrlN intercepted")
 	}
 	m.approvals = nil
 	m.settingsLogin = "http://127.0.0.1:1"
-	cmd, handled := m.tabKey(key)
+	cmd, handled := m.dispatchKeyAction(key)
 	if !handled || cmd == nil || m.sessionAction != "new" {
 		t.Fatal("base chat CtrlN unavailable")
 	}

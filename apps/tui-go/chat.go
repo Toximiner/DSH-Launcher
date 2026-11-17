@@ -175,6 +175,7 @@ func (m *model) startChat(id string) tea.Cmd {
 }
 
 func (m *model) stopChat() {
+	m.closeSessionPicker()
 	m.composer = nil
 	for m.workbench != nil {
 		m.closeWorkbench()

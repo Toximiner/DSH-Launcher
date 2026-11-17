@@ -117,6 +117,7 @@ func (m *model) View() string {
 		footer = m.conversationFooter()
 	}
 	view = m.paletteView(m.runtimeView(m.approvalView(m.queueDialogView(m.settingsFormView(m.goalView(m.composeView(m.benchView(m.modelsView(m.historyCodeView(m.archiveView(m.forkView(m.renameView(m.chromeView(m.historyView(header + "\n" + body + "\n" + footer)))))))))))))))
+	view = m.sessionPickerView(view)
 	view = lipgloss.NewStyle().Foreground(theme.Color(theme.Text)).Background(theme.Color(theme.Bg)).Width(width).Height(m.height).Render(view)
 	return surface(view, theme.Bg)
 }

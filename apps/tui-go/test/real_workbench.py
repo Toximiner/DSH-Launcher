@@ -18,7 +18,7 @@ import uuid
 from terminal import Terminal, wait_for
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--binary', default='build/previews/opencode-01/dsh-launcher-tui')
+parser.add_argument('--binary', default='build/previews/opencode-04/dsh-launcher-tui')
 parser.add_argument('--dsh', required=True)
 parser.add_argument('--capture', help='Prefix for actual workbench terminal-cell captures')
 args = parser.parse_args()
@@ -72,8 +72,13 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
                     {'id': 'tui-counter-example', 'name': str(sdk_examples / 'counter.mjs')}]},
         {'id': 'llm-pi-ai', 'config': {'providers': {'settings-fixture': {
             'apiKeyEnv': 'SETTINGS_TEST_KEY', 'api': 'openai-completions', 'baseURL': endpoint,
-            'models': [{'id': 'fixture', 'contextWindow': 131072, 'maxTokens': 256, 'reasoningEfforts': False, 'input': ['text']}],
-            'retryPolicy': {'mode': 'normal', 'maxRetries': 0}}}}},
+            'models': [{'id': 'fixture', 'name': 'fixture baseline', 'contextWindow': 131072, 'maxTokens': 256, 'reasoningEfforts': False, 'input': ['text']}],
+            'retryPolicy': {'mode': 'normal', 'maxRetries': 0}},
+            'secondary-fixture': {
+                'apiKeyEnv': 'SETTINGS_TEST_KEY', 'api': 'openai-completions', 'baseURL': endpoint,
+                'models': [{'id': 'fixture-long', 'name': 'Fixture model with a very long readable name 世界 for grouped picker geometry',
+                            'contextWindow': 131072, 'maxTokens': 256, 'reasoningEfforts': False, 'input': ['text']}],
+                'retryPolicy': {'mode': 'normal', 'maxRetries': 0}}}}},
         {'id': 'agent-default-model', 'config': {'provider': 'settings-fixture', 'model': 'fixture'}},
         {'id': 'session-title-llm', 'disabled': True},
         {'id': 'goal-round-driver', 'disabled': True}]))
@@ -162,6 +167,12 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
             app.resize(100, 30)
             app.wait(kind)
         capture.index = 0
+        def wait_tab(title):
+            def selected():
+                app.pump()
+                column = app.screen.display[0].find(title)
+                return column >= 0 and app.screen.buffer[0][column].bold and 'DeepSeek Harness' in app.text
+            wait_for(selected)
         # Open tabs represent visited sessions; browsing the palette is read-only.
         capture(landing_marker, sizes=((160, 40), (100, 30), (80, 24)))
         before_sessions = {item['sessionId'] for item in rpc('session/list', {'_request': {}})['value']['items']}
@@ -170,8 +181,12 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.wait('Команды')
         capture('Команды', sizes=((160, 40), (100, 30), (80, 24)))
         app.send('Рабочие области\r')
-        app.wait('Рабочие области')
-        app.wait('Снимок dsh')
+        app.wait('Сессии и рабочие области')
+        app.wait('Sidebar Fixture')
+        capture('Сессии и рабочие области', sizes=((160, 40), (100, 30), (80, 24)))
+        app.send('Sidebar Fixture\r')
+        app.wait('Sidebar chat')
+        assert {item['sessionId'] for item in rpc('session/list', {'_request': {}})['value']['items']} == before_sessions, 'Workspace filtering created a session'
         app.send('\x1b')
         app.wait('preserved navigation draft')
         app.send('\x15')
@@ -182,24 +197,62 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         assert rpc('session/rename', {'request': {'sessionId': second_id, 'title': 'Second tab fixture'}})['ok']
         app.command('/session ' + second_id)
         app.wait('Second tab fixture')
-        app.wait(landing_marker)
+        wait_tab('Second tab fixture')
         app.send('second tab draft')
         # Switch via the actual rendered tab and verify the destination draft.
         app.pump()
         first_column = app.screen.display[0].index('Sidebar chat')
         app.send(f'\x1b[<0;{first_column + 2};1M\x1b[<0;{first_column + 2};1m')
-        app.wait(landing_marker)
+        wait_tab('Sidebar chat')
         app.send('first tab draft')
         app.pump()
         second_column = app.screen.display[0].index('Second tab')
         app.send(f'\x1b[<0;{second_column + 2};1M\x1b[<0;{second_column + 2};1m')
+        wait_tab('Second tab fixture')
         app.wait('second tab draft')
         app.send('\x15')
         app.command('/session ' + session_id)
+        wait_tab('Sidebar chat')
         app.wait('first tab draft')
         app.send('\x15')
         capture(landing_marker, sizes=((160, 40), (100, 30), (80, 24)))
         assert not requests, 'Tab or palette navigation invoked a model'
+        # The shared quick picker filters sessions without creating or running one.
+        app.command('/sessions')
+        app.wait('Сессии и рабочие области')
+        app.wait('Sidebar chat')
+        capture('Сессии и рабочие области', sizes=((160, 40), (100, 30), (80, 24)))
+        app.send('Second tab fixture')
+        app.wait('Second tab fixture')
+        app.pump()
+        picker_row, picker_line = next((y, line) for y, line in enumerate(app.screen.display)
+            if 'Second tab fixture' in line and 'Sidebar Fixture' in line)
+        picker_column = picker_line.index('Second tab fixture')
+        app.send(f'\x1b[<0;{picker_column + 2};{picker_row + 1}M\x1b[<0;{picker_column + 2};{picker_row + 1}m')
+        wait_tab('Second tab fixture')
+        app.send('picker preserved draft')
+        app.send('\x10')
+        app.wait('Команды')
+        app.send('Список сессий\r')
+        app.wait('Сессии и рабочие области')
+        app.send('filter never submitted')
+        app.send('\x1b')
+        app.wait('picker preserved draft')
+        app.send('\x15')
+        app.command('/session ' + session_id)
+        wait_tab('Sidebar chat')
+        app.command('/workspaces')
+        app.wait('Сессии и рабочие области')
+        app.wait('Sidebar Fixture')
+        app.send('Sidebar Fixture\r')
+        app.wait('Sidebar chat')
+        app.send('\x1bOR')  # F3 opens the existing explicit workspace manager.
+        app.wait('Рабочие области')
+        app.wait('Снимок dsh')
+        app.send('\x1b')
+        app.wait(landing_marker)
+        assert {item['sessionId'] for item in rpc('session/list', {'_request': {}})['value']['items']} == before_sessions | {second_id}, 'Quick picker navigation created or removed sessions'
+        assert not requests, 'Quick picker navigation invoked the model'
 
         def panel(command, title):
             app.command(command)
@@ -214,11 +267,43 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.wait('Пресеты агента')
         app.wait('Текущий пресет:')
         back()
+        def current_model():
+            values = rpc('session/projections', {'request': {'sessionId': session_id}})['value']['values']
+            selected = (values.get('modelSelection') or {}).get('next')
+            return selected or rpc('session/modelCatalog', {})['value']['default']
+        initial_model = current_model()
+        app.send('model chooser draft')
         app.send('\x1b[24~')
         app.wait('Модель сессии')
-        app.wait('fixture')
+        app.wait('fixture baseline')
+        app.wait('secondary-fixture')
+        capture('Модель сессии', sizes=((160, 40), (100, 30), (80, 24)))
+        app.send('fixture-long')
+        app.wait('Fixture model')
+        app.pump()
+        model_row, model_line = next((y, line) for y, line in enumerate(app.screen.display)
+            if 'Fixture model' in line)
+        model_column = model_line.index('Fixture model')
+        app.send(f'\x1b[<0;{model_column + 2};{model_row + 1}M\x1b[<0;{model_column + 2};{model_row + 1}m')
+        assert current_model() == initial_model, 'Model-row mouse selection performed a hidden write'
+        app.send('\x1b')
+        app.wait('model chooser draft')
+        assert current_model() == initial_model, 'Cancelling model chooser changed the selection'
+        app.send('\x15')
+        app.send('\x1b[24~')
+        app.wait('fixture baseline')
+        app.send('fixture-long')
+        app.wait('Fixture model')
+        app.send('\r')
+        app.wait('Сессия: выбор подтверждён.')
+        assert current_model()['provider'] == 'secondary-fixture' and current_model()['model'] == 'fixture-long'
+        capture('Модель сессии', sizes=((160, 40), (100, 30), (80, 24)))
+        app.send('\x15baseline\r')
+        app.wait('Сессия: выбор подтверждён.')
+        wait_for(lambda: current_model() == initial_model)
         app.send('\x1b')
         app.wait(landing_marker)
+        assert not requests, 'Model picker reads and explicit selection invoked the model'
         initial_permission = rpc('session/projections', {'request': {'sessionId': session_id}})['value']['values']['permissions']['currentValue']
         assert initial_permission == 'workspace-write', initial_permission
         def permission_panel():
@@ -257,7 +342,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         capture('Настройки TUI', sizes=((160, 40), (100, 30), (80, 24)))
         app.send('\x1b[B\r\r')
         app.wait('Модель сессии')
-        app.wait('Поиск:')
+        app.wait('Текущая:')
         app.send('\x1b')
         app.wait('Конфигурация dsh')
         app.send('\x1b[D\x1b[B\r\r')
@@ -291,7 +376,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.send('\x1b')
         app.wait(landing_marker)
         assert not requests, 'Settings navigation unexpectedly invoked a model'
-        for command, title in [('/workspaces', 'Рабочие области'), ('/packages', 'Управление пакетами'),
+        for command, title in [('/workspaces-manager', 'Рабочие области'), ('/packages', 'Управление пакетами'),
                 ('/plugins', 'Плагины dsh'), ('/account', 'Аккаунт DeepSeek'), ('/commands', 'Команды плагинов'),
                 ('/jobs', 'Фоновые задания'), ('/agents', 'Подагенты сессии'), ('/tasks', 'Задачи команды')]:
             panel(command, title)
@@ -506,10 +591,11 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.wait('Approve this plan', timeout=20)
         app.send('\t\r\x1b[15~')
         app.wait('WORKBENCH_REPLY_5', timeout=20)
+        assert len(requests) == 5, f'Unexpected local model request count: {len(requests)}'
         assert any('approved' in str(message) for message in requests[4]['messages'] if message.get('role') == 'tool')
         app.send('\x04')
         app.exited()
-        print('Actual dsh workbench: OpenCode shell landing/palette/tab mouse navigation and per-session drafts, agent landing, conversation layout/stats/source copy/history, model/preset controls, permission confirmation/cancellation/restore, GUI-shaped plugins page/settings/components/toggle cancellation/enable/restore, inventories, workspace files/pages, explicit schedule create/pause/delete, terminal bridge/detach/close, multiline draft/upload/send, schedule CAS conflict and both plan-review choices OK')
+        print('Actual dsh workbench: OpenCode shell landing/palette/tab mouse navigation and per-session drafts, shared session/workspace picker filtering/mouse/cancellation/F3 management, grouped long-model chooser mouse selection without hidden writes and explicit selection/readback/restore, agent landing, conversation layout/stats/source copy/history, model/preset controls, permission confirmation/cancellation/restore, GUI-shaped plugins page/settings/components/toggle cancellation/enable/restore, inventories, workspace files/pages, explicit schedule create/pause/delete, terminal bridge/detach/close, multiline draft/upload/send, schedule CAS conflict, both plan-review choices and exactly five local model requests OK')
     except Exception:
         if app:
             print(app.text, flush=True)
