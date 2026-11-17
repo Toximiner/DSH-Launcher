@@ -93,7 +93,7 @@ func (m *model) conversationHeader(title string) (string, string, []agentHit) {
 	left := heading().Render(name) + " " + accent().Render(preset)
 	top := bar(left, accent().Render(more), inner)
 	tab := "[" + tr("Чат") + "]"
-	trajectory := "[" + tr("Траектория · F11") + "]"
+	trajectory := "[" + tr("Траектория") + "]"
 	tabs := accent().Bold(true).Render(tab) + "  " + muted().Render(trajectory)
 	hits := []agentHit{
 		{area{box.x + 2 + lipgloss.Width(name) + 1, box.y, lipgloss.Width(preset), 1}, "presets"},

@@ -11,7 +11,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+)
 
 type agentContext struct {
 	id        string
@@ -99,12 +100,20 @@ func (m *model) landingVisible() bool {
 	s := m.chat
 	return s != nil && s.id == m.session.ID && s.ready && !s.hasMore && s.clearedThrough < 0 && len(s.messages) == 0 && s.live == nil && s.note == "" && s.streamError == "" && m.prompts[s.id] == nil && len(m.visibleQueue()) == 0
 }
-func (m *model) landingStart() int { _, h := m.contentSize(); return max(1, (h-12)/3) }
+func (m *model) landingStart() int { _, h := m.contentSize(); return max(0, (h-12)/2) }
+
+// landingBox is shared by rendering and mouse routing, including centering within
+// the wider conversation column. Four rows form one continuous composer surface.
+func (m *model) landingBox() area {
+	box := m.chatColumn()
+	width := min(box.width, 76)
+	return area{box.x + (box.width-width)/2, bodyTop + m.landingStart() + 6, width, 4}
+}
 func (m *model) composerBox() area {
 	box := m.chatColumn()
 	y := bodyTop + box.height - composerHeight - 1
 	if m.landingVisible() {
-		y = bodyTop + m.landingStart() + 4
+		return m.landingBox()
 	}
 	return area{box.x, y, box.width, composerHeight}
 }
@@ -117,7 +126,7 @@ func (m *model) modelButton() string {
 		selected = *m.session.Model
 	}
 	if selected.Model == "" {
-		return tr("Модель · F12")
+		return tr("Модель")
 	}
 	name := singleLine(selected.Model)
 	if m.agentInfo != nil && m.agentInfo.catalog != nil {
@@ -144,6 +153,9 @@ func (m *model) permissionButton() string {
 	return permissionLabel(m.session.Permission)
 }
 func (m *model) landingControls() (string, string, []agentHit) {
+	if m.landingVisible() {
+		return m.landingCompactControls()
+	}
 	box := m.composerBox()
 	inner := box.width - 4
 	hits := []agentHit{}
@@ -170,9 +182,11 @@ func (m *model) landingControls() (string, string, []agentHit) {
 		}
 	}
 	half := (inner - 1) / 2
-	folder := button("▸ "+workspace, "workspaces", box.x+2, box.y-1, half)
-	agent := button(preset, "presets", box.x+2+lipgloss.Width(folder)+1, box.y-1, inner-lipgloss.Width(folder)-1)
-	contextLine := folder + " " + agent
+	contextY := box.y + 4
+	folder := button("▸ "+workspace, "workspaces", box.x+2, contextY, half)
+	agent := button(preset, "presets", box.x+2+lipgloss.Width(folder)+1, contextY, half)
+	modeChip := muted().Render("[" + m.modeLabel() + "]")
+	contextLine := folder + " " + agent + " " + modeChip
 	toolY := box.y + 3
 	plus := button("+", "compose", box.x+2, toolY, 3)
 	left := plus
@@ -188,34 +202,77 @@ func (m *model) landingControls() (string, string, []agentHit) {
 	tools := bar(left, accent().Render(modelLabel), inner)
 	return contextLine, tools, hits
 }
+
+// landingCompactControls returns both visible controls and their exact cell areas.
+// The metadata row shares the input background; the context row stays outside it.
+func (m *model) landingCompactControls() (string, string, []agentHit) {
+	box := m.landingBox()
+	inner := max(1, box.width-4)
+	panelStyle := lipgloss.NewStyle().Background(theme.Color(theme.Panel))
+	fg := panelStyle.Foreground(theme.Color(theme.Accent))
+	soft := panelStyle.Foreground(theme.Color(theme.Muted))
+	hits := []agentHit{}
+	permission := ansi.Truncate(singleLine(m.permissionButton()), max(1, inner/3), "…")
+	available := inner
+	if permission != "" {
+		available -= lipgloss.Width(permission) + 2
+	}
+	preset := ansi.Truncate(m.agentPresetLabel(), max(1, available/3), "…")
+	modelLabel := strings.TrimSuffix(m.modelButton(), " · "+tr("По умолчанию"))
+	modelLabel = ansi.Truncate(singleLine(modelLabel), max(1, available-lipgloss.Width(preset)-3), "…")
+	left := fg.Render(preset + " · " + modelLabel)
+	metadata := bar(left, soft.Render(permission), inner)
+	y := box.y + 3
+	hits = append(hits, agentHit{area{box.x + 2, y, lipgloss.Width(preset), 1}, "presets"})
+	hits = append(hits, agentHit{area{box.x + 2 + lipgloss.Width(preset) + 3, y, lipgloss.Width(modelLabel), 1}, "models"})
+	if permission != "" {
+		hits = append(hits, agentHit{area{box.x + box.width - 2 - lipgloss.Width(permission), y, lipgloss.Width(permission), 1}, "permissions"})
+	}
+	workspace := filepath.Base(m.workspace)
+	for _, w := range m.side.workspaces {
+		if m.session == nil {
+			continue
+		}
+		for _, id := range w.Sessions {
+			if id == m.session.ID && w.Title != "" {
+				workspace = w.Title
+			}
+		}
+	}
+	hints := tr("F2 режим") + " · " + tr("Ctrl+P команды")
+	if m.session != nil {
+		hints = tr("Режим: ") + m.modeLabel() + " · F2 · " + tr("Ctrl+P команды")
+	}
+	workspace = ansi.Truncate(singleLine(workspace), max(1, box.width-lipgloss.Width(hints)-2), "…")
+	hits = append(hits, agentHit{area{box.x, box.y + 5, lipgloss.Width(workspace), 1}, "workspaces"})
+	contextLine := bar(muted().Render(workspace), muted().Render(hints), box.width)
+	return contextLine, metadata, hits
+}
+
 func (m *model) landingView(title string, w, h int) string {
-	start := m.landingStart()
+	_ = title
+	box := m.landingBox()
 	contextLine, tools, _ := m.landingControls()
 	input := m.input
-	input.Placeholder = tr("Опишите задачу или /help…")
-	_, hint := m.composerText()
-	if m.session != nil {
-		hint = tr("Enter — отправить · Alt+E редактор")
+	input.Placeholder = tr("Что будем делать? / команды · @ файлы")
+	input.Width = max(1, box.width-4)
+	panelStyle := lipgloss.NewStyle().Background(theme.Color(theme.Panel)).Foreground(theme.Color(theme.Text))
+	input.TextStyle = input.TextStyle.Background(theme.Color(theme.Panel))
+	input.PlaceholderStyle = input.PlaceholderStyle.Background(theme.Color(theme.Panel))
+	input.Cursor.Style = input.Cursor.Style.Background(theme.Color(theme.Panel))
+	input.PromptStyle = input.PromptStyle.Background(theme.Color(theme.Panel))
+	edge := panelStyle.Foreground(theme.Color(theme.Accent)).Render("┃")
+	row := func(content string) string {
+		return edge + panelStyle.Width(box.width-1).Render(" "+content)
 	}
-	border := theme.Accent
-	if m.navFocused {
-		border = theme.Border
+	composer := surface(strings.Join([]string{row(input.View()), row(""), row(""), row(tools)}, "\n"), theme.Panel)
+	lines := make([]string, m.landingStart())
+	for _, line := range []string{"█▀▄ █▀▀ █ █", "█ █ ▀▀█ █▀█", "▀▀  ▀▀▀ ▀ ▀"} {
+		lines = append(lines, lipgloss.PlaceHorizontal(w, lipgloss.Center, heading().Render(line)))
 	}
-	composer := input.View() + "\n\n" + tools + "\n" + muted().Render(ansi.Truncate(hint, w-4, "…"))
-	lines := make([]string, start)
-	lines = append(lines, lipgloss.PlaceHorizontal(w, lipgloss.Center, heading().Render("◆ "+tr("С чего начнём?"))))
-	lines = append(lines, lipgloss.PlaceHorizontal(w, lipgloss.Center, muted().Render(ansi.Truncate(title, w, "…"))), "")
-	lines = append(lines, "  "+contextLine, panel(w, composerHeight, composer, border))
-	modeHint := tr("Введите сообщение.") + " " + tr("F2 режим · Alt+A агент · Alt+P доступ · F12 модель")
-	if m.session == nil {
-		modeHint = tr("Нет подключения к dsh.")
-	}
-	if m.session != nil {
-		lines = append(lines, muted().Render(ansi.Truncate(tr("Режим: ")+m.modeLabel()+" · F2", w, "…")))
-	}
-	lines = append(lines, muted().Render(ansi.Truncate(modeHint, w, "…")))
-	content := strings.Join(lines, "\n")
-	return lipgloss.NewStyle().Width(w).Height(h).Render(content)
+	lines = append(lines, "", lipgloss.PlaceHorizontal(w, lipgloss.Center, muted().Render("DeepSeek Harness")), "")
+	lines = append(lines, lipgloss.PlaceHorizontal(w, lipgloss.Center, composer), "", lipgloss.PlaceHorizontal(w, lipgloss.Center, contextLine))
+	return lipgloss.NewStyle().Width(w).Height(h).Render(strings.Join(lines, "\n"))
 }
 func (m *model) agentControl(action string) tea.Cmd {
 	switch action {
@@ -243,11 +300,10 @@ func (m *model) agentKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if msg.Paste || !msg.Alt || m.page != chatPage || m.navFocused {
 		return nil, false
 	}
-	action := map[string]string{"alt+w": "workspaces", "alt+a": "presets", "alt+p": "permissions", "alt+e": "compose"}[msg.String()]
-	if action == "" {
-		return nil, false
+	if msg.String() == "alt+e" {
+		return m.agentControl("compose"), true
 	}
-	return m.agentControl(action), true
+	return nil, false
 }
 func (m *model) landingMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 	if !m.landingVisible() {

@@ -31,33 +31,29 @@ const (
 type palette map[Token]string
 
 var dark = palette{
-	Bg:        "#101318",
-	Panel:     "#111820",
-	Active:    "#233044",
-	Border:    "#303d4d",
-	Text:      "#e6edf3",
-	Muted:     "#8b949e",
-	Accent:    "#58a6ff",
-	Highlight: "#79c0ff",
-	Code:      "#a5d6ff",
-	Warning:   "#d29922",
+	Bg:        "#1a1a1a",
+	Panel:     "#242424",
+	Active:    "#303030",
+	Border:    "#484848",
+	Text:      "#eeeeee",
+	Muted:     "#9a9a9a",
+	Accent:    "#fab283",
+	Highlight: "#fab283",
+	Code:      "#a8c7fa",
+	Warning:   "#f5c76b",
 }
 
-// light mirrors the previous inline lightPalette. Code intentionally keeps
-// the dark value: light blue on white is the existing (low-contrast)
-// behavior, and fixing contrast belongs to a later visual phase, not to the
-// mechanical token migration.
 var light = palette{
-	Bg:        "#ffffff",
-	Panel:     "#f5f7fa",
-	Active:    "#d9eaff",
-	Border:    "#8294a8",
-	Text:      "#17212b",
-	Muted:     "#526171",
-	Accent:    "#005fb8",
-	Highlight: "#005fb8",
-	Code:      "#a5d6ff",
-	Warning:   "#805300",
+	Bg:        "#faf9f6",
+	Panel:     "#f0eeea",
+	Active:    "#e4dfd8",
+	Border:    "#9b9690",
+	Text:      "#25231f",
+	Muted:     "#6c665e",
+	Accent:    "#955027",
+	Highlight: "#955027",
+	Code:      "#245c94",
+	Warning:   "#865b08",
 }
 
 var lightMode atomic.Bool

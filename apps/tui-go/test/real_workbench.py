@@ -18,7 +18,7 @@ import uuid
 from terminal import Terminal, wait_for
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--binary', required=True)
+parser.add_argument('--binary', default='build/previews/opencode-01/dsh-launcher-tui')
 parser.add_argument('--dsh', required=True)
 parser.add_argument('--capture', help='Prefix for actual workbench terminal-cell captures')
 args = parser.parse_args()
@@ -141,38 +141,8 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
             return struct.pack('!I', len(data)) + kind + data + struct.pack('!I', zlib.crc32(kind + data))
         (project / 'pixel.png').write_bytes(b'\x89PNG\r\n\x1a\n' + png_chunk(b'IHDR', struct.pack('!IIBBBBB', 1, 1, 8, 2, 0, 0, 0)) + png_chunk(b'IDAT', zlib.compress(b'\x00\xff\x00\x00')) + png_chunk(b'IEND', b''))
         app = Terminal(str(Path(args.binary).resolve()), ['--session', session_id], {**env, 'DSH_TUI_URL': login[0]}, columns=100, rows=30)
-        app.wait('Введите сообщение.', timeout=20)
-        app.wait('Sidebar Fixture', timeout=20)
-        # Collapsing and expanding the authoritative workspace tree must be read-only.
-        before_sessions = rpc('session/list', {'_request': {}})['value']['items']
-        app.send('sidebar preserved draft')
-        app.send('\t')
-        app.send('\x1b[B' * 5 + '\r')
-        app.wait('Рабочие области')
-        # The workspace heading opens the existing searchable inventory.
-        app.wait('Снимок dsh')
-        app.send('\x1b')
-        app.send('\x1b')
-        app.wait('> sidebar preserved draft')
-        app.send('\x15')
-        # Exercise the actual folder hit area at both supported terminal sizes.
-        for columns, rows in [(100, 30), (80, 24)]:
-            app.resize(columns, rows)
-            app.wait('Sidebar Fixture')
-            for _ in range(2):
-                app.pump()
-                y = next(y for y, line in enumerate(app.screen.display) if 'Sidebar Fixture' in line[:24])
-                expanded = '▾' in app.screen.display[y][:24]
-                app.send(f'\x1b[<0;4;{y + 1}M\x1b[<0;4;{y + 1}m')
-                def toggled():
-                    app.pump()
-                    return ('▾' in app.screen.display[y][:24]) != expanded
-                wait_for(toggled)
-        assert rpc('session/list', {'_request': {}})['value']['items'] == before_sessions, 'Sidebar navigation created or changed sessions'
-        assert not requests, 'Sidebar metadata browsing invoked a model'
-        app.send('\x1b')
-        app.resize(100, 30)
-        app.wait('Введите сообщение.')
+        landing_marker = 'Что будем делать?'
+        app.wait(landing_marker, timeout=20)
         def capture(kind, sizes=((100, 30), (80, 24))):
             if not args.capture:
                 return
@@ -192,6 +162,45 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
             app.resize(100, 30)
             app.wait(kind)
         capture.index = 0
+        # Open tabs represent visited sessions; browsing the palette is read-only.
+        capture(landing_marker, sizes=((160, 40), (100, 30), (80, 24)))
+        before_sessions = {item['sessionId'] for item in rpc('session/list', {'_request': {}})['value']['items']}
+        app.send('preserved navigation draft')
+        app.send('\x10')
+        app.wait('Команды')
+        capture('Команды', sizes=((160, 40), (100, 30), (80, 24)))
+        app.send('Рабочие области\r')
+        app.wait('Рабочие области')
+        app.wait('Снимок dsh')
+        app.send('\x1b')
+        app.wait('preserved navigation draft')
+        app.send('\x15')
+        assert {item['sessionId'] for item in rpc('session/list', {'_request': {}})['value']['items']} == before_sessions, 'Palette browsing created sessions'
+        second = rpc('session/create', {'request': {'workspaceId': workspace_id}})
+        assert second['ok'], second
+        second_id = second['value']['sessionId']
+        assert rpc('session/rename', {'request': {'sessionId': second_id, 'title': 'Second tab fixture'}})['ok']
+        app.command('/session ' + second_id)
+        app.wait('Second tab fixture')
+        app.wait(landing_marker)
+        app.send('second tab draft')
+        # Switch via the actual rendered tab and verify the destination draft.
+        app.pump()
+        first_column = app.screen.display[0].index('Sidebar chat')
+        app.send(f'\x1b[<0;{first_column + 2};1M\x1b[<0;{first_column + 2};1m')
+        app.wait(landing_marker)
+        app.send('first tab draft')
+        app.pump()
+        second_column = app.screen.display[0].index('Second tab')
+        app.send(f'\x1b[<0;{second_column + 2};1M\x1b[<0;{second_column + 2};1m')
+        app.wait('second tab draft')
+        app.send('\x15')
+        app.command('/session ' + session_id)
+        app.wait('first tab draft')
+        app.send('\x15')
+        capture(landing_marker, sizes=((160, 40), (100, 30), (80, 24)))
+        assert not requests, 'Tab or palette navigation invoked a model'
+
         def panel(command, title):
             app.command(command)
             app.wait(title)
@@ -199,9 +208,9 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
             capture(title, sizes=((160, 40), (100, 30), (80, 24)) if command in ('/plugins', '/schedules') else ((100, 30), (80, 24)))
         def back():
             app.send('\x1b')
-            app.wait('Введите сообщение.')
-        capture('Введите сообщение.')
-        app.send('\x1ba')
+            app.wait(landing_marker)
+        capture(landing_marker)
+        app.command('/presets')
         app.wait('Пресеты агента')
         app.wait('Текущий пресет:')
         back()
@@ -209,11 +218,15 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.wait('Модель сессии')
         app.wait('fixture')
         app.send('\x1b')
-        app.wait('Введите сообщение.')
+        app.wait(landing_marker)
         initial_permission = rpc('session/projections', {'request': {'sessionId': session_id}})['value']['values']['permissions']['currentValue']
         assert initial_permission == 'workspace-write', initial_permission
         def permission_panel():
-            app.send('\x1bp')
+            app.pump()
+            row, line = next((y, line) for y, line in enumerate(app.screen.display) if 'Запись в рабочую область' in line or 'Только чтение' in line)
+            label = 'Запись в рабочую область' if 'Запись в рабочую область' in line else 'Только чтение'
+            column = line.index(label)
+            app.send(f'\x1b[<0;{column + 2};{row + 1}M\x1b[<0;{column + 2};{row + 1}m')
             app.wait('Доступ к файлам и подтверждения')
             app.wait('Снимок dsh')
         permission_panel()
@@ -276,7 +289,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.send('\x1b')
         app.wait('Конфигурация dsh')
         app.send('\x1b')
-        app.wait('Введите сообщение.')
+        app.wait(landing_marker)
         assert not requests, 'Settings navigation unexpectedly invoked a model'
         for command, title in [('/workspaces', 'Рабочие области'), ('/packages', 'Управление пакетами'),
                 ('/plugins', 'Плагины dsh'), ('/account', 'Аккаунт DeepSeek'), ('/commands', 'Команды плагинов'),
@@ -454,15 +467,15 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
             app.pump()
             return 'WORKBENCH_REPLY_1' in app.text and 'АГЕНТ · ПОТОКОВЫЙ ОТВЕТ' not in app.text
         wait_for(committed_reply)
-        app.wait('Траектория · F11')
+        app.wait('[Траектория]')
         app.wait('1 ход · 1 шаг', timeout=20)
         capture('WORKBENCH_REPLY_1', sizes=((160, 40), (100, 30), (80, 24)))
-        model_row, model_line = next((y, line) for y, line in enumerate(app.screen.display) if '[fixture ·' in line)
-        model_column = model_line.index('[fixture ·')
+        model_row, model_line = next((y, line) for y, line in enumerate(app.screen.display) if 'fixture' in line and 'Запись' in line)
+        model_column = model_line.index('fixture')
         app.send(f'\x1b[<0;{model_column + 2};{model_row + 1}M\x1b[<0;{model_column + 2};{model_row + 1}m')
         app.wait('Модель сессии')
         app.send('\x1b')
-        app.wait('Траектория · F11')
+        app.wait('[Траектория]')
         # Ctrl+Y copies the committed source through PTY-only OSC 52.
         import base64
         import re
@@ -472,13 +485,13 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.wait('запрос OSC 52 отправлен')
         copied = re.findall(rb'\x1b\]52;c;([^\x07\x1b]*)', app.raw[copy_start:])
         assert copied and base64.b64decode(copied[-1]).decode() == 'WORKBENCH_REPLY_1', 'Conversation copy changed the source'
-        assert '> conversation draft' in app.text, 'Conversation copy lost the composer draft'
+        assert 'conversation draft' in app.text, 'Conversation copy lost the composer draft'
         app.send('\x15')
         app.send('\x1b[23~')
         app.wait('История сессии')
         app.wait('WORKBENCH_REPLY_1')
         app.send('\x1b')
-        app.wait('Траектория · F11')
+        app.wait('[Траектория]')
         user = [message for message in requests[0]['messages'] if message.get('role') == 'user']
         assert 'first line\nsecond line привет' in json.dumps(user, ensure_ascii=False).replace('\\n', '\n'), user
         assert 'sample.txt' in json.dumps(requests[0]['messages'], ensure_ascii=False), 'Uploaded file reference did not reach the model'
@@ -496,7 +509,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         assert any('approved' in str(message) for message in requests[4]['messages'] if message.get('role') == 'tool')
         app.send('\x04')
         app.exited()
-        print('Actual dsh workbench: agent landing, conversation layout/stats/source copy/trajectory, model/preset controls, permission confirmation/cancellation/restore, GUI-shaped plugins page/settings/components/toggle cancellation/enable/restore, inventories, workspace files/pages, explicit schedule create/pause/delete, terminal bridge/detach/close, multiline draft/upload/send, schedule CAS conflict and both plan-review choices OK')
+        print('Actual dsh workbench: OpenCode shell landing/palette/tab mouse navigation and per-session drafts, agent landing, conversation layout/stats/source copy/trajectory, model/preset controls, permission confirmation/cancellation/restore, GUI-shaped plugins page/settings/components/toggle cancellation/enable/restore, inventories, workspace files/pages, explicit schedule create/pause/delete, terminal bridge/detach/close, multiline draft/upload/send, schedule CAS conflict and both plan-review choices OK')
     except Exception:
         if app:
             print(app.text, flush=True)

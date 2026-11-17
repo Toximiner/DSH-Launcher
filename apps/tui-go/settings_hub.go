@@ -7,7 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+)
 
 var settingsTabs = []string{"Общие", "Модели", "Встроенные плагины", "Пресеты агента", "Маркет плагинов"}
 
@@ -77,7 +78,6 @@ func (m *model) settingsHubRows() []settingsHubRow {
 		{tr("Горячие клавиши"), open, tr("Поиск сочетаний клавиш и действий интерфейса"), "shortcuts"},
 		{tr("Мышь в интерфейсе"), mouse, tr("Выбор, кнопки и прокрутка мышью"), "mouse"},
 		{tr("История ввода"), mark(m.prefs.InputHistory), tr("Повтор предыдущих сообщений стрелками ↑/↓"), "input-history"},
-		{tr("Боковая панель"), mark(!m.prefs.HideSidebar), tr("Рабочие области, сессии и инструменты"), "sidebar"},
 	}
 }
 

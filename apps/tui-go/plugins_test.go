@@ -112,11 +112,11 @@ func TestPluginPageTechnicalViewAndNavigation(t *testing.T) {
 	}
 	key(m, tea.KeyEsc)
 	key(m, tea.KeyF2)
-	key(m, tea.KeyTab)
-	if !m.navFocused {
-		t.Fatal("plugin page trapped sidebar focus")
+	key(m, tea.KeyCtrlP)
+	if m.palette == nil || !m.palette.open {
+		t.Fatal("plugin page trapped command palette navigation")
 	}
-	key(m, tea.KeyTab)
+	key(m, tea.KeyEsc)
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}, Alt: true})
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'!'}})
 	if m.page != chatPage || m.workbench != nil || m.input.Value() != "preserved draft!" {

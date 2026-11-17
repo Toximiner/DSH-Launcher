@@ -25,6 +25,12 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if !m.mouseEnabled() {
 		return nil
 	}
+	if cmd, handled := m.paletteMouse(msg); handled {
+		return cmd
+	}
+	if cmd, handled := m.tabRailMouse(msg); handled {
+		return cmd
+	}
 	if m.runtimeDialog != nil {
 		return nil
 	}
@@ -205,7 +211,7 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 		return cmd
 	}
 	composer := m.composerBox()
-	if !m.landingVisible() && m.page == chatPage && m.session != nil && msg.Y == composer.y+4 {
+	if !m.landingVisible() && m.page == chatPage && m.session != nil && msg.Y == composer.y+3 {
 		_, hint := m.composerText()
 		index := strings.Index(hint, tr("[F8 Стоп]"))
 		if index < 0 {
@@ -216,7 +222,7 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 			return m.cancelChat()
 		}
 	}
-	if !m.conversationVisible() && !m.landingVisible() && m.page == chatPage && msg.Y == composer.y+2 && (m.session == nil || m.session.Address.Kind != "subagent") {
+	if !m.conversationVisible() && !m.landingVisible() && m.page == chatPage && msg.Y == composer.y+3 && (m.session == nil || m.session.Address.Kind != "subagent") {
 		x := mainX + 2 + len([]rune(tr("Режим: ")))
 		for i, name := range []string{tr("Обычный"), tr("План"), tr("Цель")} {
 			width := len([]rune(name)) + 2

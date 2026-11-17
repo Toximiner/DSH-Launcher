@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestAgentLandingGeometryAndReadOnlyControls(t *testing.T) {
@@ -45,13 +46,25 @@ func TestAgentLandingGeometryAndReadOnlyControls(t *testing.T) {
 				}
 				box := m.composerBox()
 				lines := strings.Split(clean(view), "\n")
-				if !strings.Contains(lines[box.y+1], "preserved 世界") || !strings.Contains(lines[box.y-1], "PTC mode") {
+				if !strings.Contains(lines[box.y], "preserved 世界") || !strings.Contains(lines[box.y+3], "PTC mode") || !strings.Contains(lines[box.y+3], "qwen") {
 					t.Fatal("composer/context hit areas are misaligned")
+				}
+				for y := box.y; y < box.y+box.height; y++ {
+					cells := ansi.Cut(lines[y], box.x, box.x+box.width)
+					if !strings.HasPrefix(cells, "┃") || lipgloss.Width(cells) != box.width {
+						t.Fatalf("composer row %d does not occupy its shared hit geometry: %q", y, cells)
+					}
 				}
 				_, _, hits := m.landingControls()
 				for _, hit := range hits {
 					if hit.x < box.x || hit.x+hit.width > box.x+box.width || hit.y < 2 || hit.y >= size.Height {
 						t.Fatal("landing control lies outside its visible area")
+					}
+					if strings.TrimSpace(ansi.Cut(lines[hit.y], hit.x, hit.x+hit.width)) == "" {
+						t.Fatalf("control %q points at blank cells", hit.action)
+					}
+					if hit.action != "workspaces" && hit.y != box.y+3 {
+						t.Fatalf("control %q is outside the composer metadata row", hit.action)
 					}
 				}
 				for _, hit := range hits {

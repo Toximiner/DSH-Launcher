@@ -25,9 +25,12 @@ class TerminalPreview(unittest.TestCase):
         env.pop('DSH_TUI_URL', None)
         env.pop('DISPLAY', None)
         env.pop('WAYLAND_DISPLAY', None)
+        env.pop('NO_COLOR', None)
+        env['COLORTERM'] = 'truecolor'
         self.env = env
         self.app = Terminal(BINARY, [], env)
-        self.app.wait('Новый разговор')
+        self.app.wait('DeepSeek Harness')
+        self.capture('landing')
 
     def tearDown(self):
         self.app.close(Path(self.temp.name) / 'terminal.log')
@@ -36,6 +39,42 @@ class TerminalPreview(unittest.TestCase):
     def mouse(self, button, x, y, release=False):
         suffix = 'm' if release else 'M'
         self.app.send(f'\x1b[<{button};{x + 1};{y + 1}{suffix}')
+
+    def capture(self, name):
+        """Optionally save the actual PTY cells for visual review, never a mockup."""
+        directory = os.environ.get('DSH_TUI_CAPTURE_DIR')
+        if not directory:
+            return
+        self.app.pump()
+        screen = self.app.screen
+        cells = []
+        for y in range(screen.lines):
+            for x in range(screen.columns):
+                cell = screen.buffer[y][x]
+                cells.append({'x': x, 'y': y, 'text': cell.data,
+                              'fg': cell.fg, 'bg': cell.bg,
+                              'bold': cell.bold, 'reverse': cell.reverse})
+        output = Path(directory)
+        output.mkdir(parents=True, exist_ok=True)
+        path = output / f'{self._testMethodName}-{name}-{screen.columns}x{screen.lines}.json'
+        path.write_text(json.dumps({'columns': screen.columns, 'rows': screen.lines, 'cells': cells}))
+
+    def palette(self, query, execute=True):
+        self.app.send('\x10')
+        self.app.wait('Найти команду…')
+        self.app.send(query)
+        self.app.wait(query)
+        self.capture('palette')
+        if execute:
+            self.app.send('\r')
+
+    def click_text(self, text):
+        self.app.wait(text)
+        for y, line in reversed(list(enumerate(self.app.screen.display))):
+            if text in line:
+                self.mouse(0, line.index(text), y)
+                return
+        self.fail(f'No visible click target: {text!r}')
 
     def close_preferences(self):
         self.app.send('\x1b')
@@ -66,7 +105,7 @@ class TerminalPreview(unittest.TestCase):
         self.app.send('\x04')
         self.app.exited()
         self.app = Terminal(BINARY, [], self.env)
-        self.app.wait('New conversation')
+        self.app.wait('DeepSeek Harness')
         self.app.send('\x1bOS')
         self.app.wait('TUI Settings')
         self.app.wait('[light]')
@@ -75,22 +114,17 @@ class TerminalPreview(unittest.TestCase):
         self.assertIn(b'\x1b[?1002h', self.app.raw)
         self.assertIn(b'\x1b[?1006h', self.app.raw)
         self.app.send('Черновик мыши')
-        self.mouse(0, 5, 9)
-        self.app.wait('Инструменты')
-        self.app.send('\r')
-        self.app.wait('Сессии dsh недоступны')
-        self.app.send('\x1bd')
+        self.palette('Настройки dsh', execute=False)
+        self.click_text('Настройки dsh')
         self.app.wait('Для чтения настроек работающего dsh')
-        self.mouse(0, 2, 1)
-        self.mouse(0, 3, 3)
+        self.palette('Настройки TUI', execute=False)
+        self.click_text('Настройки TUI')
         self.app.wait('Настройки TUI')
         self.close_preferences()
-        self.mouse(0, 5, 13)
-        self.app.wait('> Черновик мыши')
-        self.app.send('\t')
-        self.app.pump()
-        composer_y = next(y for y, line in enumerate(self.app.screen.display) if '> Черновик мыши' in line)
-        self.mouse(0, 30, composer_y)
+        self.app.wait('Для чтения настроек работающего dsh')
+        self.app.send('\x1b')
+        self.app.wait('Черновик мыши')
+        self.click_text('Черновик мыши')
         self.app.command(' — продолжение')
         self.app.wait('Черновик мыши — продолжение')
         for i in range(20):
@@ -98,13 +132,16 @@ class TerminalPreview(unittest.TestCase):
         self.app.wait('message-19')
         for _ in range(30):
             self.mouse(64, 40, 10)
+            self.app.pump()
         self.app.wait('Черновик мыши — продолжение')
         for _ in range(30):
             self.mouse(65, 40, 10)
+            self.app.pump()
         self.app.wait('message-19')
         self.app.resize(80, 24)
-        self.app.wait('Новый разговор')
-        self.mouse(0, 30, 18)
+        self.app.wait('message-19')
+        self.capture('chat-resized')
+        self.click_text('Сообщение')
         self.app.command('narrow-click')
         self.app.wait('narrow-click')
         self.app.send('\x04')
@@ -117,7 +154,7 @@ class TerminalPreview(unittest.TestCase):
         env = {**os.environ, 'PATH': '/nonexistent', 'TERM': 'xterm-256color', 'HOME': self.temp.name, 'XDG_CONFIG_HOME': self.temp.name + '/config'}
         env.pop('DSH_TUI_URL', None)
         self.app = Terminal(BINARY, ['--no-mouse'], env)
-        self.app.wait('Новый разговор')
+        self.app.wait('DeepSeek Harness')
         self.assertNotIn(b'\x1b[?1002h', self.app.raw)
         self.app.command('keyboard-only')
         self.app.wait('keyboard-only')
@@ -126,10 +163,11 @@ class TerminalPreview(unittest.TestCase):
         self.app.command('history entry')
         self.app.wait('history entry')
         self.app.send('unsent draft')
-        self.app.send('\x1b[21~')
-        self.app.send('\r')
+        self.palette('Настройки TUI')
         self.app.wait('Настройки TUI')
-        self.app.send('\x1b[C\x1b[F\x1b[A\r\x1b[A\r')
+        for key in ('\x1b[C', '\x1b[F', '\r', '\x1b[A', '\r'):
+            self.app.send(key)
+            self.app.pump()
         path = Path(self.env['XDG_CONFIG_HOME']) / 'dsh-launcher-tui/preferences.json'
 
         def saved(mouse, history):
@@ -147,11 +185,13 @@ class TerminalPreview(unittest.TestCase):
         self.app.exited()
         self.app.close(Path(self.temp.name) / 'before-restart.log')
         self.app = Terminal(BINARY, [], self.env)
-        self.app.wait('Новый разговор')
+        self.app.wait('DeepSeek Harness')
         self.assertNotIn(b'\x1b[?1002h', self.app.raw)
         self.app.send('\x1bOS')
         self.app.wait('Настройки TUI')
-        self.app.send('\x1b[C\x1b[F\x1b[A\x1b[A\r')
+        for key in ('\x1b[C', '\x1b[F', '\x1b[A', '\r'):
+            self.app.send(key)
+            self.app.pump()
         wait_for(lambda: saved(True, False))
         # Persisting the preference and emitting the terminal command are
         # separate events; the file write alone does not acknowledge mouse mode.
@@ -174,15 +214,16 @@ class TerminalPreview(unittest.TestCase):
             self.assertTrue(select.select([server.stdout], [], [], 5)[0], 'Fixture did not start')
             login = server.stdout.readline().strip().split('dsh web: ')[1]
             self.app = Terminal(BINARY, ['--url', login, '--new'], self.env)
-            self.app.wait('Введите сообщение.')
+            self.app.wait('DeepSeek Harness')
             self.app.command('enter')
             self.app.wait('Потоковый ')
             self.assertNotIn('из тестового dsh', self.app.text)
             self.app.wait('Потоковый ответ из тестового dsh')
+            self.capture('dialog')
             self.app.wait('Enter — отправить')
             self.app.command('cancel test')
             self.app.wait('Частичный ответ до отмены')
-            self.mouse(0, 48, 26)
+            self.app.send('\x1b[19~')  # F8
             self.app.wait('Выполнение остановлено.')
             self.app.command('reconnect test')
             self.app.wait('соединение с чатом потеряно')
@@ -245,7 +286,7 @@ class TerminalPreview(unittest.TestCase):
                    'HOME': self.temp.name, 'XDG_CONFIG_HOME': self.temp.name + '/config',
                    'DSH_TUI_URL': f'http://127.0.0.1:{server.server_port}/?token=not-for-display'}
             self.app = Terminal(BINARY, [], env)
-            self.app.wait('Новый разговор')
+            self.app.wait('DeepSeek Harness')
             self.app.send('\x1bd')
             self.app.wait('loaded-model-1')
             self.app.send('\x1bOS')
@@ -302,9 +343,9 @@ class TerminalPreview(unittest.TestCase):
         self.assertIn('dshmarket', manifest.read_text())
         self.app.command('/mode plan')
         self.app.wait('Режим: планирование')
-        self.app.send('\x1b1')
+        self.app.send('\x1bOQ')  # F2 toggles planning off
         self.app.wait('Режим: обычный')
-        self.app.send('\x1b3')
+        self.app.command('/mode goal')
         self.app.wait('> /goal ')
         self.app.command('Test objective')
         self.app.wait('Режим: цель')
@@ -315,7 +356,8 @@ class TerminalPreview(unittest.TestCase):
         self.app.command('/sessions')
         self.app.wait('› session-pty')
         self.app.send('\r')
-        self.app.wait('Сессия · session-pty')
+        self.app.wait('DeepSeek Harness')
+        self.assertIn('session-pty', self.app.screen.display[0])
         self.app.command('/market')
         self.app.wait('Alpha plugin')
         self.app.send('/Beta\r')
@@ -341,7 +383,8 @@ class TerminalPreview(unittest.TestCase):
         self.assertEqual([json.loads(line)['operation'] for line in writes.read_text().splitlines()],
                          ['install', 'update', 'uninstall'])
         self.app.send('\x1b')
-        self.app.wait('Сессия · session-pty')
+        self.app.wait('DeepSeek Harness')
+        self.assertIn('session-pty', self.app.screen.display[0])
         self.app.command('/exit')
         self.app.exited()
         with socket.socket() as sock:
@@ -374,10 +417,10 @@ class TerminalPreview(unittest.TestCase):
         self.app.resize(80, 24)
         def resized():
             self.app.pump()
-            return any('Ctrl+D выход' in row for row in self.app.screen.display[-2:])
+            return self.app.screen.columns == 80 and any('Ctrl+P команды' in row for row in self.app.screen.display[-2:])
         wait_for(resized)
         self.app.command('/help')
-        self.app.wait('Esc — вернуться в чат')
+        self.app.wait('Ctrl+Tab / Shift+Tab — сессии')
         self.app.send('\x04')
         self.app.exited()
 
@@ -407,11 +450,29 @@ class TerminalPreview(unittest.TestCase):
         self.assertIn(b'\x1b[?1002l', self.app.raw)
         self.assertIn(b'\x1b[?1006l', self.app.raw)
 
+    def test_landing_composer_has_contiguous_background(self):
+        for columns, rows in [(100, 30), (80, 24)]:
+            self.app.resize(columns, rows)
+            self.app.wait('DeepSeek Harness')
+            for _ in range(5):
+                self.app.pump()
+            y = next(y for y, line in enumerate(self.app.screen.display) if 'Что будем делать?' in line)
+            x = self.app.screen.display[y].index('┃')
+            background = self.app.screen.buffer[y][x + 1].bg
+            self.assertNotEqual(background, 'default')
+            for yy in range(y, y + 4):
+                for xx in range(x, x + min(76, columns - 1)):
+                    self.assertEqual(self.app.screen.buffer[yy][xx].bg, background,
+                                     f'Composer surface gap at {xx},{yy} in {columns}x{rows}')
+            outer_background = self.app.screen.buffer[1][0].bg
+            for yy in range(y, y + 4):
+                self.assertEqual(self.app.screen.buffer[yy][x - 1].bg, outer_background)
+                self.assertEqual(self.app.screen.buffer[yy][x + min(76, columns - 1)].bg, outer_background)
+            self.capture('contiguous-surface')
+
     def test_navigation_preserves_draft(self):
         self.app.send('Несохранённый черновик')
-        self.app.send('\t\x1b[F\r')
-        self.app.wait('Ещё')
-        self.app.send('\x1b[B\r')
+        self.palette('Настройки dsh')
         self.app.wait('Для чтения настроек работающего dsh')
         self.app.send('\x1bOS')
         self.app.wait('Настройки TUI')

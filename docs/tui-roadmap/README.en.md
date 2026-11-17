@@ -1,5 +1,7 @@
 # TUI development roadmap
 
+The first OpenCode-style shell has a separate intermediate build. See the [rebuild plan](../tui-rebuild-plan.en.md) for current scope and remaining milestones.
+
 Plugin Market and Automation tasks now follow the GUI structure: dedicated pages, cards and status indicators; tasks have status filters and creation/editing forms. Delivery history is readable, with explicit time zones. F2 in a form opens advanced JSON for complex rules. Revision checks and confirmation remain in place.
 
 Preview.40 Plugins is a GUI-shaped page with built-in settings, experimental and installed packages, dsh metadata, More, Market and Add. Components remain a separate read-only view. Confirmed toggles recheck the observed baseline and reread their result; existing operation/editor safeguards remain in use. Actual-dsh tests cover cancellation, enablement and fixture restoration without model calls.

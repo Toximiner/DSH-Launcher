@@ -16,26 +16,15 @@ func TestMouseNavigationAndComposer(t *testing.T) {
 		m := newModel()
 		m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 		m.input.SetValue("draft 世界")
-		// The lower More menu opens settings without exposing them in the tree.
-		_, height := m.contentSize()
-		moreY := bodyTop + 1 + height - 3
-		mouse(m, 5, moreY, tea.MouseButtonLeft, tea.MouseActionPress)
-		if m.chrome.dialog != "more" {
-			t.Fatal("bottom More did not open")
+		paletteTestSelect(t, m, "Настройки dsh")
+		if m.page != dshSettingsPage || m.input.Value() != "draft 世界" {
+			t.Fatal("palette destination lost draft")
 		}
-		box, _ := m.dialogBox()
-		mouse(m, box.x+3, box.y+4, tea.MouseButtonLeft, tea.MouseActionPress)
-		if m.page != dshSettingsPage || m.chrome.dialog != "" {
-			t.Fatal("More did not open dsh settings")
-		}
-		mouse(m, 5, 13, tea.MouseButtonLeft, tea.MouseActionPress)
-		if m.page != chatPage || !m.input.Focused() || m.input.Value() != "draft 世界" {
-			t.Fatal("clicking the local draft lost input or failed to focus chat")
-		}
-		key(m, tea.KeyTab)
-		mouse(m, m.composerBox().x+3, m.composerBox().y+1, tea.MouseButtonLeft, tea.MouseActionPress)
+		key(m, tea.KeyEsc)
+		m.input.Blur()
+		mouse(m, m.composerBox().x+3, m.composerBox().y, tea.MouseButtonLeft, tea.MouseActionPress)
 		if m.navFocused || !m.input.Focused() || m.input.Value() != "draft 世界" {
-			t.Fatal("composer click did not restore input focus")
+			t.Fatal("composer click did not restore draft focus")
 		}
 	}
 }
@@ -46,10 +35,7 @@ func TestMouseScrollAndIgnoredEvents(t *testing.T) {
 		m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
 		m.append(strings.Repeat("scrollable content\n", 100))
 		bottom := m.viewport.YOffset
-		mainX := 0
-		if width >= 80 {
-			mainX = 25
-		}
+		mainX := m.conversationArea().x
 		mouse(m, mainX+3, 6, tea.MouseButtonWheelUp, tea.MouseActionPress)
 		if m.viewport.YOffset >= bottom {
 			t.Fatal("wheel over content did not scroll up")
@@ -70,12 +56,7 @@ func TestMouseScrollAndIgnoredEvents(t *testing.T) {
 		if m.page != 0 || m.navFocused || m.viewport.YOffset != bottom {
 			t.Fatal("an unrelated mouse event changed navigation or scroll")
 		}
-		if width >= 80 {
-			mouse(m, 5, 8, tea.MouseButtonWheelUp, tea.MouseActionPress)
-			if m.viewport.YOffset != bottom {
-				t.Fatal("wheel over sidebar scrolled content")
-			}
-		}
+
 		m.input.Blur()
 		mouse(m, m.composerBox().x+3, m.composerBox().y+1, tea.MouseButtonLeft, tea.MouseActionPress)
 		if !m.input.Focused() {

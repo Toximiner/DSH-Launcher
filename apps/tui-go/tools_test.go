@@ -170,9 +170,8 @@ func TestToolAbortOutcomeAndBoundedExpansion(t *testing.T) {
 	}
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.focusTool("a")
-	m.side.workspaces = []sidebarWorkspace{{ID: "w", Title: "Workspace"}}
-	m.mouse(tea.MouseMsg{X: 5, Y: 12, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
-	if m.toolFocused || !m.navFocused {
-		t.Fatal("sidebar click retained tool keyboard focus")
+	paletteTestSelect(t, m, "Настройки dsh")
+	if m.toolFocused || m.page != dshSettingsPage {
+		t.Fatal("page navigation retained tool keyboard focus")
 	}
 }

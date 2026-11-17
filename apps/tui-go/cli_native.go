@@ -50,7 +50,7 @@ func run(args []string, out io.Writer) error {
 		return fmt.Errorf("unexpected positional arguments")
 	}
 	if *helpFlag {
-		fmt.Fprintln(out, tr("dsh-launcher-tui-go [--help] [--version] [--no-mouse] [--url URL]\nGo-прототип: F10 — меню, F4 — настройки TUI, Tab — разделы, Esc — чат. /help, /clear, /exit.\nНастройки dsh доступны через --url или DSH_TUI_URL.\nПодключение: --session ID или --new. Режимы: /mode default|plan|goal.\nЛокальный запуск: --start [--dsh PATH] [--profile web] [--port 3080] [--market ask|install|skip].\nС сессией dsh: Enter — отправить, F8 — остановить. Без подключения — локальный черновик.\n/runtime — установка/процесс · /updates — обновление/откат · /diagnostics — отчёт.\nNode.js нужен только бэкенду dsh."))
+		fmt.Fprintln(out, tr("dsh-launcher-tui-go [--help] [--version] [--no-mouse] [--url URL]\nTUI dsh: Ctrl+P — команды, F4 — настройки, Ctrl+N — новая сессия, Esc — чат. /help, /clear, /exit.\nНастройки dsh доступны через --url или DSH_TUI_URL.\nПодключение: --session ID или --new. Режимы: /mode default|plan|goal.\nЛокальный запуск: --start [--dsh PATH] [--profile web] [--port 3080] [--market ask|install|skip].\nС сессией dsh: Enter — отправить, F8 — остановить. Без подключения — локальный черновик.\n/runtime — установка/процесс · /updates — обновление/откат · /diagnostics — отчёт.\nNode.js нужен только бэкенду dsh."))
 		return nil
 	}
 	if *versionFlag {

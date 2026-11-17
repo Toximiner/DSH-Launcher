@@ -7,7 +7,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+)
 
 const minTerminalWidth = 80
 const minTerminalHeight = 24
@@ -50,7 +51,7 @@ func (m *model) View() string {
 	}
 	width := m.width - 1
 	w, bodyHeight := m.contentSize()
-	brand := accent().Bold(true).Render("◆ DSH Launcher")
+
 	status := lipgloss.NewStyle().Foreground(theme.Color(theme.Warning)).Render(tr("○ Нет подключения"))
 	if m.settings != nil {
 		status = accent().Render(tr("✓ Снимок настроек dsh"))
@@ -73,7 +74,11 @@ func (m *model) View() string {
 			status = muted().Render(tr("! Чат: нет связи"))
 		}
 	}
-	header := bar(brand, status, width) + "\n" + m.menuBar(width)
+	statusLine := ""
+	if m.sessionRequestVisible() || m.sessionError != "" || m.settingsError != "" || m.chat != nil && (!m.chat.ready || m.chat.streamError != "") {
+		statusLine = ansi.Truncate(status, width, "…")
+	}
+	header := m.tabRail() + "\n" + statusLine
 	title := tr(pages[m.page])
 	if m.page == 0 {
 		title = tr("Новый разговор")
@@ -116,31 +121,51 @@ func (m *model) View() string {
 		}
 	}
 	body := right
-	if m.sidebarVisible() {
-		body = lipgloss.JoinHorizontal(lipgloss.Top, m.sidebar(bodyHeight), " ", right)
+	hints := m.footerHints()
+	footer := bar(muted().Render(hints), muted().Render(tr("Ctrl+P команды")), width)
+	view = m.paletteView(m.runtimeView(m.approvalView(m.queueDialogView(m.settingsFormView(m.goalView(m.composeView(m.benchView(m.modelsView(m.historyCodeView(m.archiveView(m.forkView(m.renameView(m.chromeView(m.historyView(header + "\n" + body + "\n" + footer)))))))))))))))
+	view = lipgloss.NewStyle().Foreground(theme.Color(theme.Text)).Background(theme.Color(theme.Bg)).Width(width).Height(m.height).Render(view)
+	return surface(view, theme.Bg)
+}
+
+// footerContextUsage returns opencode-style context usage, e.g. "8.7K (4%)".
+func (m *model) footerContextUsage() string {
+	if m.session == nil {
+		return ""
 	}
-	hints := tr("F10 меню · Tab разделы · Esc чат")
-	if m.page == chatPage && m.session != nil {
-		hints = tr("F11 история · F10 меню · Tab разделы")
+	p := m.session.Pressure
+	if p == nil || p.Capacity == nil || *p.Capacity <= 0 || !validStat(*p.Capacity) {
+		return ""
 	}
-	if m.page == dshSettingsPage && m.settingsLogin != "" {
-		hints = tr("←/→ раздел · Enter правка · F6 провайдеры")
+	value := p.Projected
+	if value == nil {
+		value = p.Pressure
 	}
-	if m.page == chatPage && len(m.toolIDs()) > 0 {
-		hints = tr("F11 история · F6 инструменты · Enter детали")
+	if value == nil || !validStat(*value) {
+		return ""
 	}
-	if m.approvals != nil && len(m.approvals.requests) > 0 {
-		hints = tr("F7 запросы · F8 остановить агента")
+	return fmt.Sprintf("%s (%.0f%%)", countLabel(*value), 100*float64(*value)/float64(*p.Capacity))
+}
+
+// footerHints builds the compact status line shown in the footer bar.
+func (m *model) footerHints() string {
+	hint := tr("Ctrl+N сессия · Esc чат")
+	switch {
+	case m.approvals != nil && len(m.approvals.requests) > 0:
+		hint = tr("F7 запросы · F8 остановить")
+	case m.page == chatPage && len(m.visibleQueue()) > 0:
+		hint = tr("F9 очередь · F8 остановить")
+	case m.page == chatPage && m.session != nil:
+		hint = tr("F6 инструменты · F8 стоп")
+	case m.page == dshSettingsPage && m.settingsLogin != "":
+		hint = tr("←/→ раздел · Enter правка")
+	case m.page != chatPage:
+		hint = tr("Esc чат · F5 обновить")
 	}
-	if m.page == chatPage && len(m.visibleQueue()) > 0 {
-		hints = tr("F9 очередь · F8 остановить задачу")
+	if usage := m.footerContextUsage(); usage != "" {
+		return usage + " · " + hint
 	}
-	footer := bar(muted().Render(hints), muted().Render(tr("Ctrl+D выход")), width)
-	view = m.runtimeView(m.approvalView(m.queueDialogView(m.settingsFormView(m.goalView(m.composeView(m.benchView(m.modelsView(m.historyCodeView(m.archiveView(m.forkView(m.renameView(m.chromeView(m.historyView(header + "\n" + body + "\n" + footer))))))))))))))
-	if m.prefs.Theme == "light" {
-		view = lipgloss.NewStyle().Foreground(theme.Color(theme.Text)).Background(theme.Color(theme.Panel)).Width(width).Render(view)
-	}
-	return view
+	return hint
 }
 
 func (m *model) modeControls() string {

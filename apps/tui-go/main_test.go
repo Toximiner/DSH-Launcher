@@ -103,24 +103,13 @@ func TestNavigationPreservesDraft(t *testing.T) {
 	m := newModel()
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.input.SetValue("Мой черновик")
-	m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if m.page != chatPage || m.side.selected != "plugins" {
-		t.Fatal("sidebar selection activated before Enter")
-	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEnd})
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.chrome.dialog != "more" {
-		t.Fatal("sidebar did not open lower More menu")
-	}
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if m.page != dshSettingsPage {
-		t.Fatal("More did not open backend settings")
+	paletteTestSelect(t, m, "Настройки dsh")
+	if m.page != dshSettingsPage || m.input.Value() != "Мой черновик" {
+		t.Fatal("palette navigation lost draft")
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if m.page != 0 || m.navFocused || m.input.Value() != "Мой черновик" {
-		t.Fatal("navigation lost the draft or input focus")
+	if m.page != chatPage || m.navFocused || !m.input.Focused() || m.input.Value() != "Мой черновик" {
+		t.Fatal("return to chat lost draft or focus")
 	}
 }
 

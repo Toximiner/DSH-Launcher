@@ -10,7 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+)
 
 func key(m *model, kind tea.KeyType) { m.Update(tea.KeyMsg{Type: kind}) }
 
@@ -42,10 +43,9 @@ func TestSettingsDialogPreservesContext(t *testing.T) {
 		m.append(strings.Repeat("scrollable\n", 60))
 		m.viewport.GotoTop()
 		offset := m.viewport.YOffset
-		key(m, tea.KeyF10)
-		key(m, tea.KeyEnter)
+		key(m, tea.KeyF4)
 		if m.chrome.dialog != "settings" || m.input.Focused() {
-			t.Fatal("menu did not open a modal settings dialog")
+			t.Fatal("shortcut did not open a modal settings dialog")
 		}
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/goal unsafe\r"), Paste: true})
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}, Alt: true})
@@ -166,8 +166,7 @@ func TestMenuAndDialogMouseTargets(t *testing.T) {
 		m := newModel()
 		m.Update(size)
 		m.input.SetValue("draft")
-		mouse(m, 2, 1, tea.MouseButtonLeft, tea.MouseActionPress)
-		mouse(m, 3, 3, tea.MouseButtonLeft, tea.MouseActionPress)
+		key(m, tea.KeyF4)
 		if m.chrome.dialog != "settings" {
 			t.Fatal("mouse did not open settings")
 		}
@@ -193,19 +192,13 @@ func TestMenuAndDialogMouseTargets(t *testing.T) {
 		if m.chrome.dialog != "" || !m.input.Focused() || m.input.Value() != "draft" {
 			t.Fatal("close button failed to restore draft focus")
 		}
-		key(m, tea.KeyF10)
-		key(m, tea.KeyRight)
-		key(m, tea.KeyEnter)
+		paletteTestSelect(t, m, "Настройки dsh")
 		if m.page != dshSettingsPage || m.chrome.menuOpen {
-			t.Fatal("View menu failed to open backend settings")
+			t.Fatal("palette failed to open backend settings")
 		}
-		key(m, tea.KeyF10)
-		key(m, tea.KeyRight)
-		key(m, tea.KeyRight)
-		key(m, tea.KeyUp)
-		key(m, tea.KeyEnter)
+		paletteTestSelect(t, m, "О программе")
 		if m.chrome.dialog != "about" || !strings.Contains(clean(m.View()), version) {
-			t.Fatal("Help menu failed to open About")
+			t.Fatal("palette did not open About")
 		}
 		key(m, tea.KeyEsc)
 		if m.page != dshSettingsPage || m.input.Focused() {
@@ -250,81 +243,28 @@ func TestThemeAndSidebarPreferences(t *testing.T) {
 	before, _ := m.contentSize()
 	m.togglePreference(5)
 	after, _ := m.contentSize()
-	if m.sidebarVisible() || after-before != sidebarWidth+sidebarGap {
-		t.Fatal("hidden sidebar did not release its width")
+	if m.sidebarVisible() || after != before {
+		t.Fatal("legacy sidebar preference changed the new shell geometry")
 	}
 	m.togglePreference(4)
-	if m.prefs.Theme != "light" || theme.Color(theme.Panel) != "#f5f7fa" {
+	if m.prefs.Theme != "light" || theme.Color(theme.Panel) != "#f0eeea" {
 		t.Fatal("light theme did not apply")
 	}
 	m.togglePreference(4)
-	if m.prefs.Theme != "" || string(theme.Color(theme.Panel)) != "#111820" {
+	if m.prefs.Theme != "" || string(theme.Color(theme.Panel)) != "#242424" {
 		t.Fatal("dark theme was not restored")
 	}
 }
 
-func TestMenuNavigationAfterRegrouping(t *testing.T) {
-	defer activeEnglish.Store(false)
-	for _, english := range []bool{false, true} {
-		for _, width := range []int{80, 100} {
-			for _, useMouse := range []bool{false, true} {
-				for _, target := range []struct {
-					menu, row       int
-					dialog, runtime string
-					page            int
-				}{
-					{0, 0, "settings", "", chatPage},
-					{0, 1, "", "runtime", chatPage},
-					{1, 0, "", "", dshSettingsPage},
-					{2, 0, "help", "", chatPage},
-					{2, 1, "", "updates", chatPage},
-					{2, 2, "", "", logPage},
-					{2, 3, "", "diagnostics", chatPage},
-					{2, 4, "about", "", chatPage},
-				} {
-					m := newModel()
-					activeEnglish.Store(english)
-					m.Update(tea.WindowSizeMsg{Width: width, Height: 24})
-					m.runtime = &runtimeMock{}
-					m.input.SetValue("retained draft")
-					if useMouse {
-						mouse(m, menuStart(target.menu), 1, tea.MouseButtonLeft, tea.MouseActionPress)
-					} else {
-						key(m, tea.KeyF10)
-						for i := 0; i < target.menu; i++ {
-							key(m, tea.KeyRight)
-						}
-						for i := 0; i < target.row; i++ {
-							key(m, tea.KeyDown)
-						}
-					}
-					view := m.View()
-					if lipgloss.Width(view) > width || lipgloss.Height(view) > 24 {
-						t.Fatal("menu overflowed the terminal")
-					}
-					if useMouse {
-						mouse(m, min(menuStart(target.menu), width-29)+2, 3+target.row, tea.MouseButtonLeft, tea.MouseActionPress)
-					} else {
-						key(m, tea.KeyEnter)
-					}
-					if m.chrome.menuOpen || m.chrome.dialog != target.dialog || m.page != target.page || m.input.Value() != "retained draft" {
-						t.Fatalf("menu %d row %d opened the wrong destination (mouse=%v, English=%v)", target.menu, target.row, useMouse, english)
-					}
-					if target.runtime != "" && (m.runtimeDialog == nil || m.runtimeDialog.kind != target.runtime) {
-						t.Fatal("menu opened the wrong runtime panel")
-					}
-				}
-			}
-		}
-	}
+func TestLegacyMenuCannotCaptureInvisibleMouseTargets(t *testing.T) {
 	m := newModel()
+	m.input.SetValue("draft")
 	key(m, tea.KeyF10)
-	key(m, tea.KeyUp)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd == nil {
-		t.Fatal("last File item did not quit")
+	if m.chrome.menuOpen {
+		t.Fatal("retired top menu opened")
 	}
-	if _, ok := cmd().(tea.QuitMsg); !ok {
-		t.Fatal("last File item ran a different action")
+	mouse(m, 3, 1, tea.MouseButtonLeft, tea.MouseActionPress)
+	if m.chrome.menuOpen || m.chrome.dialog != "" || m.input.Value() != "draft" {
+		t.Fatal("invisible menu captured click")
 	}
 }

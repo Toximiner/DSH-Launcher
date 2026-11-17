@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- Experimental TUI `preview.40-opencode.1`: first OpenCode-style shell with visited session tabs, per-session drafts, a compact home screen, neutral theme and Ctrl+P palette instead of permanent menus/tree. Fixes input capture, disabled actions, translations, geometry and conversation-tail anchoring on resize. The intermediate binary is separate from the installed TUI; conversation and auxiliary-screen styling remain in progress.
+
 - TUI preview.40: Plugin Market now has a centered page with cards, descriptions, versions, and catalog/installed tabs. Automation tasks has a dedicated page with status filters and counts, creation/editing forms, run times, and readable delivery history. Tasks are read through schedule/catalog without the 200-row limit. Advanced rules remain available in the F2 JSON editor; confirmation and revision checks are preserved.
 
 - TUI preview.40: Plugins follows the GUI with a dedicated page, built-in settings cards, experimental and installed packages, dsh display metadata, More, Market and Add controls. Internal modules have a separate component view. Toggles require confirmation and a baseline check; results refresh without repeating the write. Schema-based settings, operation receipts and nested-panel return remain available.

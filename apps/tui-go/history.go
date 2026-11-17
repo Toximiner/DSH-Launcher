@@ -11,7 +11,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+)
 
 const historyPageMessages = 20
 const historyBackLimit = 128

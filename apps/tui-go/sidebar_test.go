@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/gorilla/websocket"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +12,6 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 func sidebarClick(t *testing.T, m *model, name string) {
@@ -32,69 +30,39 @@ func sidebarClick(t *testing.T, m *model, name string) {
 	t.Fatalf("sidebar entry %s is not visible", name)
 }
 
-func TestSidebarWorkspaceTreeAndFixedMore(t *testing.T) {
-	defer activeEnglish.Store(false)
-	for _, english := range []bool{false, true} {
-		for _, size := range []tea.WindowSizeMsg{{Width: 80, Height: 24}, {Width: 100, Height: 30}} {
-			m := newModel()
-			m.prefs.Language = map[bool]string{true: "en", false: ""}[english]
-			activeEnglish.Store(english)
-			m.Update(size)
-			m.input.SetValue("unsent 世界")
-			m.session = &sessionView{ID: "s", Title: "Current"}
-			m.side.workspaces = []sidebarWorkspace{{ID: "w", Title: "Project", Sessions: []string{"s", "old"}}}
-			m.archive = &archiveState{ids: map[string]bool{"old": true}}
-			sidebarClick(t, m, "workspace:w")
-			if !m.side.expanded["w"] || m.sessionBusy || m.session.ID != "s" || m.workbench != nil {
-				t.Fatal("expanding a workspace invoked a backend action")
-			}
-			for _, item := range m.sidebarItems() {
-				if item.value == "old" {
-					t.Fatal("archived session remains in the tree")
-				}
-			}
-			sidebarClick(t, m, "session:s")
-			if !m.input.Focused() || m.navFocused || m.input.Value() != "unsent 世界" {
-				t.Fatal("current session click lost the composer")
-			}
-			for i := 0; i < 35; i++ {
-				m.side.workspaces = append(m.side.workspaces, sidebarWorkspace{ID: fmt.Sprint(i), Title: fmt.Sprintf("Folder %02d", i)})
-			}
-			key(m, tea.KeyTab)
-			key(m, tea.KeyEnd)
-			key(m, tea.KeyUp)
-			view := m.View()
-			if !strings.Contains(clean(view), "Folder 34") || lipgloss.Width(view) > size.Width || lipgloss.Height(view) > size.Height {
-				t.Fatal("keyboard did not reveal the last folder within terminal bounds")
-			}
-			sidebarClick(t, m, "more")
-			if m.chrome.dialog != "more" {
-				t.Fatal("fixed bottom menu was lost after scrolling")
-			}
-			key(m, tea.KeyEnter)
-			if m.chrome.dialog != "settings" {
-				t.Fatal("More did not open client settings")
-			}
-			key(m, tea.KeyEsc)
+func TestRetiredSidebarDoesNotOccupyShell(t *testing.T) {
+	for _, size := range []tea.WindowSizeMsg{{Width: 80, Height: 24}, {Width: 100, Height: 30}} {
+		m := newModel()
+		m.Update(size)
+		m.side.workspaces = []sidebarWorkspace{{ID: "w", Title: "Project"}}
+		if m.sidebarVisible() || strings.Contains(clean(m.View()), "Workspaces") {
+			t.Fatal("retired sidebar is rendered")
+		}
+		width, _ := m.contentSize()
+		if width != size.Width-1 {
+			t.Fatal("retired sidebar still reserves width")
+		}
+		key(m, tea.KeyTab)
+		if m.navFocused {
+			t.Fatal("invisible sidebar took keyboard focus")
 		}
 	}
 }
-func TestSidebarMoreAndToolsDestinations(t *testing.T) {
+
+func TestRetiredSidebarDestinationsRemainInPalette(t *testing.T) {
 	m := newModel()
-	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m.input.SetValue("draft")
-	sidebarClick(t, m, "navigation")
-	key(m, tea.KeyEnter)
-	if m.page != sessionsPage || m.chrome.dialog != "" || m.input.Value() != "draft" {
-		t.Fatal("Tools did not open sessions with the draft intact")
+	paletteTestSelect(t, m, "Настройки dsh")
+	if m.page != dshSettingsPage || m.input.Value() != "draft" {
+		t.Fatal("backend settings are unreachable without sidebar")
 	}
-	sidebarClick(t, m, "more")
-	box, _ := m.dialogBox()
-	mouse(m, box.x+3, box.y+4, tea.MouseButtonLeft, tea.MouseActionPress)
-	if m.page != dshSettingsPage || m.chrome.dialog != "" {
-		t.Fatal("More mouse selection did not open backend settings")
+	key(m, tea.KeyEsc)
+	paletteTestSelect(t, m, "Настройки TUI")
+	if m.chrome.dialog != "settings" {
+		t.Fatal("client settings are unreachable without sidebar")
 	}
 }
+
 func TestSidebarRejectsStaleSnapshotsAndRetainsFailedRefresh(t *testing.T) {
 	m := newModel()
 	m.settingsLogin = "http://localhost/?token=current"
@@ -139,8 +107,11 @@ func TestHiddenSidebarRestoresComposerAndIgnoresTab(t *testing.T) {
 	m := newModel()
 	key(m, tea.KeyTab)
 	key(m, tea.KeyF4)
-	selectHubSetting(t, m, "sidebar")
-	key(m, tea.KeyEnter)
+	for _, row := range m.settingsHubRows() {
+		if row.action == "sidebar" {
+			t.Fatal("retired sidebar preference is still shown")
+		}
+	}
 	key(m, tea.KeyEsc)
 	if m.sidebarVisible() || m.navFocused || !m.input.Focused() {
 		t.Fatal("hiding focused sidebar trapped the composer")

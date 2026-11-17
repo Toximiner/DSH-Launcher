@@ -1,4 +1,20 @@
-# Go TUI preview — 0.2.0-preview.40
+# Go TUI preview — OpenCode shell milestone 1
+
+The experimental `0.2.0-preview.40-opencode.1` build uses visited session tabs,
+per-session drafts, a compact home composer and Ctrl+P navigation. It removes
+permanent menus/tree; model, permission and backend operations still use dsh.
+Conversation and auxiliary screens retain their previous styling in this first
+milestone. See the [approved rebuild plan](../../docs/tui-rebuild-plan.en.md).
+
+From the repository root, run the separate local build:
+
+```sh
+./build/previews/opencode-01/dsh-launcher-tui --start
+```
+
+The installed TUI is not replaced. F1/F4/F11/F12 and Alt page shortcuts remain
+compatible during migration. Older interface descriptions below are retained
+while their screens migrate; Ctrl+P is the current navigation entry point.
 
 [Implementation roadmap and plugin strategy](../../docs/tui-roadmap/README.en.md) ·
 [План развития на русском](../../docs/tui-roadmap/README.md)

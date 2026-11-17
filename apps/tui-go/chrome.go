@@ -9,7 +9,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+)
 
 type clientPreferences struct {
 	Mouse        bool   `json:"mouse"`
@@ -229,31 +230,14 @@ func (m *model) chromeKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		return m.openDialog("settings"), true
 	}
-	if key == "f1" {
-		if m.chrome.dialog == "settings" {
-			return m.settingsHelp(), true
-		}
+	if key == "f1" && !active {
 		return m.openDialog("help"), true
-	}
-	if key == "f10" || key == "alt+f" || key == "alt+v" || key == "alt+h" {
-		if key == "f10" && active {
-			return m.closeChrome(), true
-		}
-		m.beginChrome()
-		m.chrome.dialog = ""
-		m.chrome.menuOpen = true
-		m.chrome.menu = 0
-		if key == "alt+v" {
-			m.chrome.menu = 1
-		}
-		if key == "alt+h" {
-			m.chrome.menu = 2
-		}
-		m.chrome.item = 0
-		return nil, true
 	}
 	if !active {
 		return nil, false
+	}
+	if m.chrome.dialog == "settings" && key == "f1" {
+		return m.settingsHelp(), true
 	}
 	if key == "esc" {
 		return m.closeChrome(), true
@@ -441,21 +425,7 @@ func (m *model) chromeMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 		}
 		return nil, true
 	}
-	if msg.Button == tea.MouseButtonLeft && msg.Y == 1 {
-		for i, label := range menuNames {
-			label = tr(label)
-			if (area{menuStart(i), 1, lipgloss.Width(label), 1}).contains(msg.X, msg.Y) {
-				if m.chrome.menuOpen && m.chrome.menu == i {
-					return m.closeChrome(), true
-				}
-				m.beginChrome()
-				m.chrome.menuOpen = true
-				m.chrome.menu = i
-				m.chrome.item = 0
-				return nil, true
-			}
-		}
-	}
+
 	if m.chrome.menuOpen {
 		if msg.Button == tea.MouseButtonLeft {
 			x := min(menuStart(m.chrome.menu), m.width-29)
