@@ -189,7 +189,7 @@ func (m *model) sessionTabLayout() sessionTabLayout {
 			marker = " ●"
 		}
 		closeWidth := 0
-		if perTab >= 5 {
+		if perTab >= 5 && len(tabs) > 1 {
 			closeWidth = 3
 		}
 		bodyWidth := perTab - closeWidth
@@ -273,7 +273,7 @@ func (m *model) closeTab(id string) tea.Cmd {
 			break
 		}
 	}
-	if index < 0 {
+	if index < 0 || len(tabs) == 1 {
 		return nil
 	}
 	active := id == m.activeTabID()
@@ -290,10 +290,12 @@ func (m *model) closeTab(id string) tea.Cmd {
 	}
 	m.tabState.items = append(tabs[:index:index], tabs[index+1:]...)
 	if !active {
+		m.persistSessionTabs()
 		return nil
 	}
 	m.detachCurrentTab()
 	m.showChat()
+	m.persistSessionTabs()
 	if len(m.tabState.items) > 0 {
 		next := m.tabState.items[max(0, index-1)].ID
 		return m.switchTab(next)
@@ -319,6 +321,7 @@ func (m *model) tabForgetDeletedSession(id string) {
 		m.showChat()
 		m.rebuild()
 	}
+	m.persistSessionTabs()
 }
 
 func (m *model) switchTab(id string) tea.Cmd {

@@ -75,7 +75,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [chat, history, settings, goals, workbench, background, runtime, packages, account, clients, builtin_session_delete]
+        suite: [chat, history, settings, goals, workbench, background, runtime, packages, account, clients, builtin_session_delete, tab_restore]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v7

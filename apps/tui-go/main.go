@@ -17,7 +17,7 @@ import (
 	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
 )
 
-const version = "0.2.0-preview.40-opencode.10"
+const version = "0.2.0-preview.40-opencode.11"
 const help = "Ctrl+P — палитра команд: все страницы, настройки и действия\n" + "/runtime — установка и процесс dsh\n/updates — обновления и откат dsh/TUI\n/diagnostics — журнал, отчёт, уведомления\n" + "/compose — многострочное сообщение\n/attach <путь> — прикрепить файл до 2 МиБ\n/workspaces · /files · /terminals — рабочая область\n/presets — пресеты · Ctrl+N новая сессия\n/plugins · /commands · /packages — плагины\n/agents · /tasks · /jobs · /schedules — выполнение\n/parent — вернуться от подагента к родителю\nВ списках: F5 обновить · Esc назад\n" + "/market — маркет плагинов\n/new — новая сессия · /sessions — быстрый выбор\n/sessions-manager — управление сессиями\n/workspaces-manager — управление областями\n/session <id> — подключить сессию\n/rename — название текущей · F3 в списке\n/archive · /restore — архив и возврат\nВ списке: a — архив · Ctrl+X — перенести\n/fork — новая ветка · Ctrl+B в списке\n/models — выбор модели сессии\n/providers — настройки провайдеров\nВ настройках: Enter — форма · F6 — провайдеры\n/mode default|plan|goal — режим\n/goal — состояние цели · F3 правка\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/history — история сессии\nCtrl+F в истории — поиск · F3 — ещё\nCtrl+T в поиске — всё / сообщения / инструменты\nTab в истории — выбор · Ctrl+B — ветка\nCtrl+R в истории — Markdown/исходник\nВ истории: Ctrl+Y — копия · Ctrl+K — код\nF6/Shift+F6 — инструмент истории · Enter — детали\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nCtrl+Tab / Shift+Tab — сессии · Ctrl+N — новая сессия\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
@@ -68,6 +68,8 @@ type model struct {
 	prompts             map[string]*pendingPrompt
 	chrome              chromeState
 	tabState            sessionTabsState
+	tabPersistence      *tabPersistenceState
+	tabPersistenceScope string
 	palette             *paletteState
 	prefs               clientPreferences
 	mouseForcedOff      bool
@@ -273,12 +275,7 @@ func (m *model) showChat() tea.Cmd {
 }
 
 func (m *model) Init() tea.Cmd {
-	var session tea.Cmd
-	if m.createSession {
-		session = m.sessionOperation("new", "")
-	} else if m.initialSession != "" {
-		session = m.sessionOperation("connect", m.initialSession)
-	}
+	session := m.startSessionTabs()
 	var poll tea.Cmd
 	if m.runtime != nil {
 		poll = runtimePoll()
@@ -288,6 +285,8 @@ func (m *model) Init() tea.Cmd {
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tabRestoreResult:
+		return m, m.handleTabRestore(msg)
 	case textSelectionStart:
 		return m, m.beginTextSelection()
 	case conversationCopyResult:
@@ -471,6 +470,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.tabSessionChanged(msg.view)
 			m.session = msg.view
+			m.persistSessionTabs()
 			chatCmd = m.startChat(msg.view.ID)
 			m.syncContinuedQuestions()
 			m.reconcileQueuedPrompt()
@@ -548,8 +548,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resizeHistory()
 		return m, selectionCmd
 	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionPress {
+			m.interruptTabRestore()
+		}
 		return m, m.mouse(msg)
 	case tea.KeyMsg:
+		m.interruptTabRestore()
 		if cmd, handled := m.textSelectionKey(msg); handled {
 			return m, cmd
 		}

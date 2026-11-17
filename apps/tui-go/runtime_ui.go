@@ -10,7 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+)
 
 // The native controller owns processes and disk transactions. Only immutable
 // snapshots cross into the Bubble Tea model, including while a dialog is closed.
@@ -221,11 +222,21 @@ func (m *model) handleRuntimeTick() tea.Cmd {
 		if m.session != nil {
 			id = m.session.ID
 		}
-		m.stopChat()
-		m.chat = nil
-		m.session = nil
+		previousScope := m.tabPersistenceScope
 		m.settingsLogin = m.runtimeState.Login
-		if id != "" {
+		if m.tabPersistence != nil || previousScope != "" {
+			m.configureNativeTabPersistence("web", "", true)
+			if previousScope == m.tabPersistenceScope && id != "" {
+				m.initialSession = id
+			}
+			m.stopChat()
+			m.chat = nil
+			m.session = nil
+			connect = m.startSessionTabs()
+		} else if id != "" {
+			m.stopChat()
+			m.chat = nil
+			m.session = nil
 			connect = m.sessionOperation("connect", id)
 		} else {
 			connect = m.sessionOperation("new", "")

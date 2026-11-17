@@ -1510,5 +1510,8 @@
   "История и вложения сессии будут удалены без возможности восстановления. Подагенты также будут удалены. Файлы проекта и отдельные fork-сессии сохраняются.": "Session history and attachments will be permanently deleted, including subagents. Project files and separate fork sessions are kept.",
   "Сначала остановите работу сессии и её подагентов и очистите очередь.": "Stop the session and its subagents, and clear the queue first.",
   "Встроенное удаление недоступно. Перезапустите dsh через обновлённый лаунчер.": "Built-in deletion is unavailable. Restart dsh through the updated launcher.",
-  "Проверьте список сессий перед повтором.": "Check the session list before retrying."
+  "Проверьте список сессий перед повтором.": "Check the session list before retrying.",
+  "Не удалось сохранить открытые вкладки.": "Could not save open tabs.",
+  "Не удалось восстановить вкладки. Сохранённый список не изменён.": "Could not restore tabs. The saved list was left unchanged.",
+  "Не удалось определить файл открытых вкладок.": "Could not determine the open tabs file."
 }

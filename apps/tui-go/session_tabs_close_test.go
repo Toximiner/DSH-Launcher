@@ -57,28 +57,29 @@ func TestSessionTabCloseActiveConnectsLeftAndRestoresDrafts(t *testing.T) {
 	}
 }
 
-func TestSessionTabCloseFinalDetachesReadersWithoutCreatingSession(t *testing.T) {
+func TestSessionTabCloseFinalIsRefusedAndHasNoCloseHit(t *testing.T) {
 	m := tabFixture(1)
+	m.width = 80
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	m.chat = &chatState{id: m.session.ID, ctx: ctx, cancel: cancel, epoch: m.chatEpoch}
 	m.input.SetValue("unsent final draft")
 	oldSequence := m.sessionSequence
-	m.sessionBusy, m.sessionAction = true, "refresh"
-	m.closeTab("session-00")
-	if ctx.Err() == nil || m.session != nil || m.chat != nil || m.sessionBusy || len(m.tabList()) != 0 {
-		t.Fatal("final close did not detach local readers")
+	if cmd := m.closeTab("session-00"); cmd != nil {
+		t.Fatal("last close scheduled an operation")
 	}
-	if m.sessionAction != "" || m.input.Value() != "" || m.tabState.drafts["session-00"] != "unsent final draft" {
-		t.Fatal("final close created session or lost draft")
+	if ctx.Err() != nil || m.session == nil || m.chat == nil || len(m.tabList()) != 1 || m.sessionSequence != oldSequence || m.input.Value() != "unsent final draft" {
+		t.Fatal("final close discarded session, readers or draft")
 	}
-	m.Update(sessionResult{sequence: oldSequence, view: &sessionView{ID: "session-00"}})
-	if m.session != nil || len(m.tabList()) != 0 {
-		t.Fatal("late refresh reopened final tab")
+	for _, hit := range m.sessionTabLayout().hits {
+		if hit.close {
+			t.Fatal("last tab exposes an unusable close button")
+		}
 	}
-	m.Update(sessionResult{sequence: m.sessionSequence, view: &sessionView{ID: "session-00"}})
-	defer m.stopChat()
-	if m.input.Value() != "unsent final draft" {
-		t.Fatal("reopening from home lost saved draft")
+	// Permanent deletion remains separate and may legitimately leave home empty.
+	m.tabForgetDeletedSession("session-00")
+	if m.session != nil || len(m.tabList()) != 0 || ctx.Err() == nil {
+		t.Fatal("explicit deletion could not remove final session")
 	}
 }
 
@@ -130,7 +131,7 @@ func TestSessionTabCloseMouseUsesExactCellsAcrossOverflow(t *testing.T) {
 			t.Fatal("overflow rail has no close buttons")
 		}
 	}
-	m := tabFixture(1)
+	m := tabFixture(2)
 	m.width = 80
 	m.chrome.dialog = "settings"
 	for _, hit := range m.sessionTabLayout().hits {

@@ -150,9 +150,6 @@ func run(args []string, out io.Writer) error {
 		if attached {
 			fmt.Fprintln(out, tr("dsh уже работает — подключение к существующему процессу…"))
 			*loginFlag = control.Snapshot().Login
-			if *sessionFlag == "" {
-				*newFlag = true
-			}
 		} else {
 			if err := checkBackendNode(ctx); err != nil {
 				return err
@@ -207,9 +204,6 @@ func run(args []string, out io.Writer) error {
 			}
 			control.adopt(login, stop, done)
 			*loginFlag = login
-			if *sessionFlag == "" {
-				*newFlag = true
-			}
 		}
 	}
 	if (*sessionFlag != "" || *newFlag) && *loginFlag == "" {
@@ -240,6 +234,7 @@ func run(args []string, out io.Writer) error {
 	m.settingsContext = ctx
 	m.initialSession = *sessionFlag
 	m.createSession = *newFlag
+	m.configureNativeTabPersistence(*profileFlag, cwd, *startFlag)
 	options := []tea.ProgramOption{tea.WithAltScreen(), tea.WithoutSignalHandler()}
 	if m.mouseEnabled() {
 		options = append(options, tea.WithMouseCellMotion())

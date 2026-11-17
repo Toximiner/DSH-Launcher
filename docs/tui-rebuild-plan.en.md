@@ -259,6 +259,26 @@ The separate local build does not replace the installed TUI.
 ./build/previews/opencode-10/dsh-launcher-tui --start
 ```
 
+## Checkpoint 11: restoring open tabs
+
+Intermediate build: `0.2.0-preview.40-opencode.11`.
+
+TUI saves the ordered open tabs and active session between launches. The snapshot
+contains IDs only, partitioned by backend origin, profile and DSH_HOME. Tokens,
+conversation text and drafts are not written to disk. A fresh dsh catalog removes
+deleted sessions before restoration; connection failures preserve the previous
+snapshot. Explicit `--session` and `--new` choose the initial session. Closing the
+last tab is prevented; permanent deletion remains a separate action. With several
+clients, the last explicit navigation wins; an old window does not save on exit.
+Corrupt files are not automatically replaced.
+
+```sh
+./build/previews/opencode-11/dsh-launcher-tui --start
+```
+
+Next: flat Plugins, Plugin Market and Automation tasks screens with search,
+clear groups and existing operation checks preserved.
+
 ## Revised implementation order
 
 1. **Screenshot correction, preview `opencode.3` (implemented; user review pending).** Active conversation
