@@ -9,6 +9,12 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+## [1.18.2] — 2026-11-17
+
+### Fixed
+
+- Select X11/Wayland before Electron starts so the main window and child processes use the same backend, including after settings changes and restarts. An explicit `--ozone-platform` argument takes precedence and is no longer overwritten by Auto, preventing a backend mismatch that left the interface unresponsive to mouse input.
+
 ## [1.18.1] — 2026-11-16
 
 ### Changed

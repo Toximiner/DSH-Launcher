@@ -24,7 +24,7 @@ const electron = new Proxy({}, { get: (_t, p) => {
     getName: () => 'dsh-launcher', setName: noop,
     requestSingleInstanceLock: () => true, on: noop,
     whenReady: () => new Promise(() => {}), // never resolves — no window is raised
-    commandLine: { appendSwitch: noop }, disableHardwareAcceleration: noop,
+    commandLine: { appendSwitch: noop, getSwitchValue: () => '' }, disableHardwareAcceleration: noop,
     getPath: () => TMP, getLocale: () => 'en-US', quit: noop,
   };
   if (p === 'crashReporter') return { start: noop };

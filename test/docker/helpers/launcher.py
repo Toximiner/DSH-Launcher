@@ -44,7 +44,7 @@ def launcher_log():
 
 
 class Launcher:
-    def __init__(self, env):
+    def __init__(self, env, args=()):
         base = {'HOME': HOME, 'USER': 'tester', 'LANG': 'C.UTF-8', 'DISPLAY': ':99',
                 'PATH': '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin',
                 'DSH_LAUNCHER_GITHUB_API': GITHUB_API,  # None — the real GitHub
@@ -62,7 +62,7 @@ class Launcher:
         # As tester via Python (pytest in the container is root): the process
         # environment is exactly base, with no runuser/PAM additions.
         with open(LAUNCHER_OUT, 'w') as out:
-            subprocess.Popen(['/usr/bin/dsh-launcher', '--remote-debugging-port=9222'], cwd=HOME,
+            subprocess.Popen(['/usr/bin/dsh-launcher', '--remote-debugging-port=9222', *args], cwd=HOME,
                              user='tester', group='tester', extra_groups=[],
                              env=base, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
         self.pid = None

@@ -25,4 +25,11 @@ LOGDIR="${DSH_LOG_DIR:-$HOME/.local/state/dsh-launcher}"
 mkdir -p "$LOGDIR" 2>/dev/null || true
 export DSH_LOG_DIR="$LOGDIR"
 
+# Resolve the native backend before Electron starts, using its bundled Node.
+OZONE_PLATFORM="$(ELECTRON_RUN_AS_NODE=1 "$ELECTRON" "$DIR/src/ozone-startup.js" "$@")" || exit $?
+unset DSH_LAUNCHER_AUTO_OZONE
+if [ -n "$OZONE_PLATFORM" ]; then
+  export DSH_LAUNCHER_AUTO_OZONE="$OZONE_PLATFORM"
+  set -- "--ozone-platform=$OZONE_PLATFORM" "$@"
+fi
 exec "$ELECTRON" "$DIR" $SANDBOX_ARGS "$@"
