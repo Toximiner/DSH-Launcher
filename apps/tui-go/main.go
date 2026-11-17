@@ -17,7 +17,7 @@ import (
 	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
 )
 
-const version = "0.2.0-preview.40-opencode.4"
+const version = "0.2.0-preview.40-opencode.5"
 const help = "Ctrl+P — палитра команд: все страницы, настройки и действия\n" + "/runtime — установка и процесс dsh\n/updates — обновления и откат dsh/TUI\n/diagnostics — журнал, отчёт, уведомления\n" + "/compose — многострочное сообщение\n/attach <путь> — прикрепить файл до 2 МиБ\n/workspaces · /files · /terminals — рабочая область\n/presets — пресеты · Ctrl+N новая сессия\n/plugins · /commands · /packages — плагины\n/agents · /tasks · /jobs · /schedules — выполнение\n/parent — вернуться от подагента к родителю\nВ списках: F5 обновить · Esc назад\n" + "/market — маркет плагинов\n/new — новая сессия · /sessions — быстрый выбор\n/sessions-manager — управление сессиями\n/workspaces-manager — управление областями\n/session <id> — подключить сессию\n/rename — название текущей · F3 в списке\n/archive · /restore — архив и возврат\nВ списке: a — архив · Ctrl+X — перенести\n/fork — новая ветка · Ctrl+B в списке\n/models — выбор модели сессии\n/providers — настройки провайдеров\nВ настройках: Enter — форма · F6 — провайдеры\n/mode default|plan|goal — режим\n/goal — состояние цели · F3 правка\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/history — история сессии\nCtrl+F в истории — поиск · F3 — ещё\nCtrl+T в поиске — всё / сообщения / инструменты\nTab в истории — выбор · Ctrl+B — ветка\nCtrl+R в истории — Markdown/исходник\nВ истории: Ctrl+Y — копия · Ctrl+K — код\nF6/Shift+F6 — инструмент истории · Enter — детали\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nCtrl+Tab / Shift+Tab — сессии · Ctrl+N — новая сессия\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
@@ -187,6 +187,12 @@ func (m *model) rebuild() {
 			m.chatToolHits[i].row += offset
 			m.chatToolHits[i].end += offset
 		}
+		if m.chat != nil {
+			offset := strings.Count(ansi.Hardwrap(prefix, max(1, m.viewport.Width), true), "\n")
+			for i := range m.chat.reasoningHits {
+				m.chat.reasoningHits[i].row += offset
+			}
+		}
 		content = prefix + content
 	}
 	switch m.page {
@@ -236,6 +242,14 @@ func (m *model) resize() {
 	m.input.Width = max(1, w-6)
 	m.marketSearch.Width = max(1, m.viewport.Width-8)
 	m.rebuild()
+	if m.page == chatPage && m.toolFocused && m.chat != nil {
+		for _, hit := range m.chatToolHits {
+			if hit.id == m.chat.selectedTool {
+				m.viewport.SetYOffset(hit.row)
+				return
+			}
+		}
+	}
 	if followTail {
 		m.viewport.GotoBottom()
 	}

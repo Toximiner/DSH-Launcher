@@ -404,6 +404,13 @@ func (m *model) sessionPickerKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			return tea.Quit, true
 		case "f8":
 			return m.cancelChat(), true
+		case "f7":
+			if m.approvals != nil && len(m.approvals.requests) > 0 {
+				cmd := m.closeSessionPicker()
+				m.approvals.visible = true
+				return cmd, true
+			}
+			return nil, true
 		case "esc":
 			return m.closeSessionPicker(), true
 		case "f5":

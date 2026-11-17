@@ -43,6 +43,8 @@ class Model(BaseHTTPRequestHandler):
         else:
             delta = {'role': 'assistant', 'content': f'WORKBENCH_REPLY_{number}'}
             finish = 'stop'
+        if number == 1:
+            delta['reasoning_content'] = 'ACTUAL_DSH_REASONING_FIXTURE: verify the isolated workspace before replying.'
         for chunk in [{'choices': [{'index': 0, 'delta': delta, 'finish_reason': None}]},
                       {'choices': [{'index': 0, 'delta': {}, 'finish_reason': finish}]}]:
             self.wfile.write(('data: ' + json.dumps(chunk) + '\n\n').encode())
@@ -276,9 +278,11 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.send('\x1b[24~')
         app.wait('Модель сессии')
         app.wait('fixture baseline')
+        app.wait('Enter применяет выбор.')
         app.wait('secondary-fixture')
         capture('Модель сессии', sizes=((160, 40), (100, 30), (80, 24)))
         app.send('fixture-long')
+        app.wait('Поиск: fixture-long')
         app.wait('Fixture model')
         app.pump()
         model_row, model_line = next((y, line) for y, line in enumerate(app.screen.display)
@@ -292,13 +296,17 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.send('\x15')
         app.send('\x1b[24~')
         app.wait('fixture baseline')
+        app.wait('Enter применяет выбор.')
         app.send('fixture-long')
+        app.wait('Поиск: fixture-long')
         app.wait('Fixture model')
         app.send('\r')
         app.wait('Сессия: выбор подтверждён.')
         assert current_model()['provider'] == 'secondary-fixture' and current_model()['model'] == 'fixture-long'
         capture('Модель сессии', sizes=((160, 40), (100, 30), (80, 24)))
-        app.send('\x15baseline\r')
+        app.send('\x15baseline')
+        app.wait('Поиск: baseline')
+        app.send('\r')
         app.wait('Сессия: выбор подтверждён.')
         wait_for(lambda: current_model() == initial_model)
         app.send('\x1b')
@@ -555,6 +563,24 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.wait('Ctrl+P команды')
         # Per-message metadata now uses actual duration, without session-wide counters.
         capture('WORKBENCH_REPLY_1', sizes=((160, 40), (100, 30), (80, 24)))
+        # The adapter must expose a genuine reasoning block, never inferred prose.
+        thought_marker = 'ACTUAL_DSH_REASONING_FIXTURE'
+        app.wait('Размышления')
+        assert thought_marker not in app.text, 'Reasoning started expanded'
+        app.send('\x0f')  # Ctrl+O reveals actual returned reasoning.
+        app.wait(thought_marker)
+        thought_capture_index = capture.index
+        capture(thought_marker, sizes=((160, 40), (100, 30), (80, 24)))
+        print('Actual dsh reasoning capture index:', thought_capture_index, flush=True)
+        app.send('\x0f')
+        wait_for(lambda: (app.pump(), thought_marker not in app.text)[1])
+        app.command('/thoughts')
+        app.wait(thought_marker)
+        thought_row, thought_line = next((y, line) for y, line in enumerate(app.screen.display) if 'Размышления' in line)
+        thought_column = thought_line.index('Размышления')
+        app.send(f'\x1b[<0;{thought_column + 1};{thought_row + 1}M\x1b[<0;{thought_column + 1};{thought_row + 1}m')
+        wait_for(lambda: (app.pump(), thought_marker not in app.text)[1])
+        assert len(requests) == 1, 'Reasoning controls invoked the model'
         model_row, model_line = next((y, line) for y, line in enumerate(app.screen.display) if 'fixture' in line and 'Запись' in line)
         model_column = model_line.index('fixture')
         app.send(f'\x1b[<0;{model_column + 2};{model_row + 1}M\x1b[<0;{model_column + 2};{model_row + 1}m')
@@ -575,6 +601,11 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.send('\x1b[23~')
         app.wait('История сессии')
         app.wait('WORKBENCH_REPLY_1')
+        assert thought_marker not in app.text, 'History reasoning started expanded'
+        app.send('\x0f')
+        app.wait(thought_marker)
+        app.send('\x0f')
+        wait_for(lambda: (app.pump(), thought_marker not in app.text)[1])
         app.send('\x1b')
         app.wait('Ctrl+P команды')
         user = [message for message in requests[0]['messages'] if message.get('role') == 'user']
@@ -595,7 +626,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         assert any('approved' in str(message) for message in requests[4]['messages'] if message.get('role') == 'tool')
         app.send('\x04')
         app.exited()
-        print('Actual dsh workbench: OpenCode shell landing/palette/tab mouse navigation and per-session drafts, shared session/workspace picker filtering/mouse/cancellation/F3 management, grouped long-model chooser mouse selection without hidden writes and explicit selection/readback/restore, agent landing, conversation layout/stats/source copy/history, model/preset controls, permission confirmation/cancellation/restore, GUI-shaped plugins page/settings/components/toggle cancellation/enable/restore, inventories, workspace files/pages, explicit schedule create/pause/delete, terminal bridge/detach/close, multiline draft/upload/send, schedule CAS conflict, both plan-review choices and exactly five local model requests OK')
+        print('Actual dsh workbench: OpenCode shell landing/palette/tab mouse navigation and per-session drafts, shared session/workspace picker filtering/mouse/cancellation/F3 management, grouped long-model chooser mouse selection without hidden writes and explicit selection/readback/restore, agent landing, conversation layout/stats/source copy/history, actual public reasoning show/hide via CtrlO/slash/mouse/history with no extra model calls, model/preset controls, permission confirmation/cancellation/restore, GUI-shaped plugins page/settings/components/toggle cancellation/enable/restore, inventories, workspace files/pages, explicit schedule create/pause/delete, terminal bridge/detach/close, multiline draft/upload/send, schedule CAS conflict, both plan-review choices and exactly five local model requests OK')
     except Exception:
         if app:
             print(app.text, flush=True)

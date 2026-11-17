@@ -256,16 +256,21 @@ func (m *model) resizeHistory() {
 	h.toolRows = nil
 	content := tr("Ожидание истории…")
 	if h.projection != nil {
+		h.projection.reasoningHits = nil
 		renderer := &model{chat: h.projection, viewport: h.viewport, toolFocused: h.toolFocused}
 		var parts []string
 		row := 0
 		for _, display := range renderer.displayMessages() {
 			message := display.message
+			reasoningStart := len(h.projection.reasoningHits)
 			part := ""
 			if message.tool != nil {
 				part = renderer.displayTool(message.tool, display.depth)
 			} else {
 				part = accent().Bold(true).Render(message.role) + "\n" + m.messageText(message, h.viewport.Width, h.rawMarkdown)
+				if message.reasoning != "" {
+					part = renderReasoning(h.projection, reasoningEventKey(message.seq), message.reasoning, h.viewport.Width, row) + "\n" + part
+				}
 			}
 			if h.search != nil && message.seq == h.search.hitSeq {
 				h.search.anchor = row
@@ -281,9 +286,15 @@ func (m *model) resizeHistory() {
 					}
 				}
 				part = heading().Render(label) + "\n" + part
+				for i := reasoningStart; i < len(h.projection.reasoningHits); i++ {
+					h.projection.reasoningHits[i].row++
+				}
 			}
 			if message.seq == h.selectedSeq && (h.search == nil || message.seq != h.search.hitSeq) {
 				part = heading().Render(fmt.Sprintf(tr("◆ Точка ветвления #%d"), message.seq)) + "\n" + part
+				for i := reasoningStart; i < len(h.projection.reasoningHits); i++ {
+					h.projection.reasoningHits[i].row++
+				}
 			}
 			if message.tool != nil {
 				h.toolRows = append(h.toolRows, chatToolHit{message.tool.ID, row, row + strings.Count(ansi.Hardwrap(part, h.viewport.Width, true), "\n") + 1})
@@ -405,6 +416,14 @@ func (m *model) historyKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			h.note = tr("Ctrl+R — Markdown/исходник · Ctrl+F — поиск исходного текста.")
 		}
 		return nil, true
+	case "ctrl+o":
+		if msg.Type == tea.KeyCtrlO && !h.busy && h.projection != nil {
+			offset := h.viewport.YOffset
+			toggleReasoningState(h.projection)
+			m.resizeHistory()
+			h.viewport.SetYOffset(offset)
+		}
+		return nil, true
 	case "tab", "shift+tab":
 		if !h.busy {
 			m.moveHistorySelection(msg.Type == tea.KeyShiftTab)
@@ -470,6 +489,20 @@ func (m *model) historyMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 	if msg.Button == tea.MouseButtonLeft && !h.busy && (area{box.x + 2, box.y + 4, h.viewport.Width, h.viewport.Height}).contains(msg.X, msg.Y) {
 		row := msg.Y - (box.y + 4) + h.viewport.YOffset
 		if h.search == nil || !h.search.editing {
+			if h.projection != nil {
+				for _, hit := range h.projection.reasoningHits {
+					if row == hit.row {
+						if h.projection.expandedReasoning == nil {
+							h.projection.expandedReasoning = make(map[string]bool)
+						}
+						h.projection.expandedReasoning[hit.key] = !h.projection.expandedReasoning[hit.key]
+						offset := h.viewport.YOffset
+						m.resizeHistory()
+						h.viewport.SetYOffset(offset)
+						return nil, true
+					}
+				}
+			}
 			for _, hit := range h.toolRows {
 				if row >= hit.row && row < hit.end {
 					m.selectHistoryTool(hit.id, false)

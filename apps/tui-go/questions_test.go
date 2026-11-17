@@ -3,10 +3,12 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func questionModel(t *testing.T, questions []userQuestion) *model {
@@ -193,5 +195,52 @@ func TestQuestionProgressSurvivesTimedContinuation(t *testing.T) {
 	_, _, d := m.questionCurrent()
 	if d.custom.Value() != "unfinished answer" {
 		t.Fatal("timed continuation discarded the unfinished reply")
+	}
+}
+
+func TestQuestionFlatFrameGeometryAndDeferredCustomDraft(t *testing.T) {
+	for _, language := range []string{"ru", "en"} {
+		for _, size := range []tea.WindowSizeMsg{{Width: 80, Height: 24}, {Width: 100, Height: 30}, {Width: 160, Height: 40}} {
+			t.Run(fmt.Sprintf("%s/%dx%d", language, size.Width, size.Height), func(t *testing.T) {
+				m := questionModel(t, []userQuestion{{ID: "q", Header: "Header", Question: "Question geometry?", Detail: strings.Repeat("long question detail\n", 40) + "DETAIL_LAST", Options: []questionOption{{Label: "Choice 世界", Description: "Choice detail"}}}})
+				m.prefs.Language = language
+				m.applyClientAppearance()
+				defer activeEnglish.Store(false)
+				m.input.SetValue("chat draft")
+				m.Update(size)
+				box := m.approvalBox()
+				flat := m.questionView(strings.Repeat(strings.Repeat(" ", size.Width-1)+"\n", size.Height-1))
+				if lipgloss.Width(flat) > size.Width || lipgloss.Height(flat) > size.Height {
+					t.Fatal("flat question frame overflowed terminal")
+				}
+				plain := clean(flat)
+				if strings.ContainsAny(plain, "╭╮╰╯") {
+					t.Fatal("question retained rounded frame")
+				}
+				lines := strings.Split(plain, "\n")
+				buttons := box.y + box.height - 3
+				if !strings.Contains(lines[buttons], strings.Trim(tr("[Пропуск]"), "[]")) || !strings.Contains(lines[buttons], strings.Trim(tr("[Ответить]"), "[]")) {
+					t.Fatal("flat question controls diverged from mouse row")
+				}
+				m.approvals.viewport.GotoBottom()
+				if !strings.Contains(clean(m.View()), "DETAIL_LAST") {
+					t.Fatal("long question detail was clipped instead of scrollable")
+				}
+				m.questionFocus(1)
+				m.questionKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("custom draft 世界"), Paste: true})
+				_, _, draft := m.questionCurrent()
+				close := m.decisionClose(box)
+				if cmd := m.questionMouse(tea.MouseMsg{X: close.x, Y: close.y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress}); cmd != nil || m.approvals.visible || m.approvals.busy {
+					t.Fatal("closing question submitted an answer")
+				}
+				if draft.custom.Value() != "custom draft 世界" || m.input.Value() != "chat draft" || len(m.approvals.requests) != 1 {
+					t.Fatal("deferring question lost draft or pending request")
+				}
+				m.approvalKey(tea.KeyMsg{Type: tea.KeyF7})
+				if !m.approvals.visible || draft.custom.Value() != "custom draft 世界" {
+					t.Fatal("reopening flat question lost custom response")
+				}
+			})
+		}
 	}
 }

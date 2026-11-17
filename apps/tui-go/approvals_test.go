@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/gorilla/websocket"
 	"net/http"
 	"net/http/httptest"
@@ -342,5 +343,51 @@ func TestTimedQuestionClaimUsesInteractionMux(t *testing.T) {
 	case <-done:
 	case <-time.After(3 * time.Second):
 		t.Fatal("question transport leaked after cancellation")
+	}
+}
+
+func TestApprovalFlatFrameGeometryAndFullArguments(t *testing.T) {
+	for _, language := range []string{"ru", "en"} {
+		for _, size := range []tea.WindowSizeMsg{{Width: 80, Height: 24}, {Width: 100, Height: 30}, {Width: 160, Height: 40}} {
+			t.Run(fmt.Sprintf("%s/%dx%d", language, size.Width, size.Height), func(t *testing.T) {
+				m := approvalModel(t)
+				m.prefs.Language = language
+				m.applyClientAppearance()
+				defer activeEnglish.Store(false)
+				requestApproval(m, "long-approval", "s")
+				m.approvals.requests[0].Request.Reason = "REASON_FIRST\n" + strings.Repeat("reason 世界 detail\n", 45) + "REASON_LAST"
+				m.chat.messages = append(m.chat.messages, chatMessage{tool: &chatTool{ID: "call", Arguments: strings.Repeat("argument detail line\n", 40) + "ARGUMENTS_LAST"}})
+				m.Update(size)
+				box := m.approvalBox()
+				flat := m.approvalView(strings.Repeat(strings.Repeat(" ", size.Width-1)+"\n", size.Height-1))
+				if lipgloss.Width(flat) > size.Width || lipgloss.Height(flat) > size.Height {
+					t.Fatal("flat approval frame overflowed terminal")
+				}
+				plain := clean(flat)
+				if strings.ContainsAny(plain, "╭╮╰╯") {
+					t.Fatal("approval retained rounded frame")
+				}
+				lines := strings.Split(plain, "\n")
+				buttons := box.y + box.height - 4
+				if !strings.Contains(lines[buttons], strings.Trim(tr("[ Отказать ]"), "[] ")) || !strings.Contains(lines[buttons], strings.Trim(tr("[ Разрешить ]"), "[] ")) {
+					t.Fatal("flat decision buttons diverged from mouse row")
+				}
+				if !strings.Contains(plain, "REASON_FIRST") {
+					t.Fatal("reason was not readable at start of viewport")
+				}
+				m.approvals.viewport.GotoBottom()
+				if !strings.Contains(clean(m.View()), "ARGUMENTS_LAST") {
+					t.Fatal("full tool arguments were clipped instead of scrollable")
+				}
+				if cmd := m.answerApproval(); cmd != nil || m.approvals.busy {
+					t.Fatal("unselected flat dialog approved by default")
+				}
+				close := m.decisionClose(box)
+				cmd, handled := m.approvalMouse(tea.MouseMsg{X: close.x, Y: close.y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+				if !handled || cmd != nil || m.approvals.visible || len(m.approvals.requests) != 1 {
+					t.Fatal("Esc click answered or discarded pending permission")
+				}
+			})
+		}
 	}
 }

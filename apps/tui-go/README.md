@@ -1,14 +1,18 @@
-# Go TUI preview — OpenCode actions and pickers
+# Go TUI preview — OpenCode tools and decisions
 
-The experimental `0.2.0-preview.40-opencode.4` includes visited session tabs,
+The experimental `0.2.0-preview.40-opencode.5` includes visited session tabs,
 per-session drafts, compact home/conversation composers, optional right context
 and Ctrl+P navigation. Command, session/workspace and model pickers share a flat
-frame, measured hit targets, teal selection and a dimmed backdrop.
+frame, measured hit targets, teal selection and a dimmed backdrop. Tool calls
+collapse to compact summaries with expandable arguments/results. Permissions and
+agent questions use flat decision dialogs. Actual reasoning supplied by dsh is
+collapsed separately; Ctrl+O or `/thoughts` toggles it, as do header clicks.
+Ctrl+O also works within history. Copying replies preserves the reply source.
 
 From the repository root, run the separate local build:
 
 ```sh
-./build/previews/opencode-04/dsh-launcher-tui --start
+./build/previews/opencode-05/dsh-launcher-tui --start
 ```
 
 The binary remains separate from earlier builds. Main entry points:

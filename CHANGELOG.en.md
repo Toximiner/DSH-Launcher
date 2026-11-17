@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- Experimental TUI `preview.40-opencode.5`: compact expandable tool calls with distinct errors, separate reasoning supplied by dsh (Ctrl+O, `/thoughts`, click), and flat dimmed permission/question dialogs. Reply source copying, explicit decisions, scrolling and drafts are preserved; F7 reveals pending requests from the palette/session picker.
+
 - Experimental TUI `preview.40-opencode.4`: shared palette/exact-slash/base-shortcut registry and flat pickers with common geometry/dim backdrop. Adds session/workspace search, explicit creation in a selected workspace and separate full managers. Model selection has provider groups, current-model marks and sticky headings; explicit apply/cancel and write protections are retained.
 
 - Experimental TUI `preview.40-opencode.3` follows user screenshots more closely: full available conversation width, optional right context at 120+ columns and one workspace/context/command footer. Home input has 5 rows with padding verified against running OpenCode 2.3.0. Purple accent, teal palette and dimmed backdrop; no permanent clocks/copy buttons, with raw copying retained via Ctrl+Y/history. Fixes first-message reflow, long paths and stale context figures.

@@ -26,6 +26,7 @@ const (
 	Highlight     Token = "highlight"      // text on Active background, highlighted dialog borders
 	Code          Token = "code"           // inline code in markdown
 	Warning       Token = "warning"        // unconnected status, approval frames
+	Error         Token = "error"          // failed tool calls and actionable errors
 	Selection     Token = "selection"      // highlighted list row
 	SelectionText Token = "selection-text" // readable text over Selection
 	Secondary     Token = "secondary"      // teal section headings
@@ -46,6 +47,7 @@ var dark = palette{
 	Highlight: "#b7a8f0",
 	Code:      "#a8c7fa",
 	Warning:   "#f5c76b",
+	Error:     "#f0a0a0",
 	Selection: "#8bd5ca", SelectionText: "#152623", Secondary: "#8bd5ca", Backdrop: "#101010", BackdropText: "#555555",
 }
 
@@ -60,6 +62,7 @@ var light = palette{
 	Highlight: "#7044a0",
 	Code:      "#245c94",
 	Warning:   "#865b08",
+	Error:     "#b42332",
 	Selection: "#a5d8cf", SelectionText: "#17312b", Secondary: "#287f75", Backdrop: "#b8b6b1", BackdropText: "#73706b",
 }
 

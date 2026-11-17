@@ -11,7 +11,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+)
 
 type questionOption struct {
 	Label       string `json:"label"`
@@ -298,7 +299,12 @@ func (m *model) questionKey(msg tea.KeyMsg) tea.Cmd {
 	return nil
 }
 func questionButtons(inner int) string {
-	return lipgloss.NewStyle().Width(5).Render("[←]") + lipgloss.NewStyle().Width(5).Render("[→]") + lipgloss.NewStyle().Width(11).Render(tr("[Пропуск]")) + tr("[Ответить]")
+	return decisionButton("←", false, 5) + decisionButton("→", false, 5) + decisionButton(strings.Trim(tr("[Пропуск]"), "[]"), false, 11) + decisionButton(strings.Trim(tr("[Ответить]"), "[]"), false, inner-21)
+}
+func questionEditorStyle() textarea.Style {
+	base := lipgloss.NewStyle().Background(theme.Color(theme.Active)).Foreground(theme.Color(theme.Text))
+	soft := base.Foreground(theme.Color(theme.Muted))
+	return textarea.Style{Base: base, CursorLine: base, Text: base, Prompt: soft, Placeholder: soft, EndOfBuffer: base, LineNumber: soft, CursorLineNumber: soft}
 }
 func (m *model) questionView(base string) string {
 	s := m.approvals
@@ -347,6 +353,9 @@ func (m *model) questionView(base string) string {
 			}
 			row := strings.Count(ansi.Hardwrap(body, inner, true), "\n") + 1
 			part := mark + clean(o.Label)
+			if f.cursor == i {
+				part = lipgloss.NewStyle().Foreground(theme.Color(theme.Secondary)).Bold(true).Render(part)
+			}
 			if o.Description != "" {
 				part += "\n      " + clean(o.Description)
 			}
@@ -370,6 +379,9 @@ func (m *model) questionView(base string) string {
 	label := tr("Свой ответ · Tab — выбрать поле")
 	editor := strings.Repeat("\n", 2)
 	if d != nil {
+		d.custom.FocusedStyle = questionEditorStyle()
+		d.custom.BlurredStyle = questionEditorStyle()
+		d.custom.Placeholder = tr("Свой ответ…")
 		d.custom.SetWidth(inner)
 		d.custom.SetHeight(3)
 		editor = d.custom.View()
@@ -386,13 +398,17 @@ func (m *model) questionView(base string) string {
 	} else if d != nil && d.skipped {
 		note = tr("Вопрос пропущен. F5 — отправить.")
 	}
-	lines := []string{heading().Render(title), muted().Render(ansi.Truncate(progress, inner, "…")), s.viewport.View(), muted().Render(ansi.Truncate(label, inner, "…")), editor, ansi.Truncate(note, inner, "…"), questionButtons(inner), muted().Render(ansi.Truncate(tr("Tab выбор · Enter отметить · F5 ответ"), inner, "…"))}
-	return overlay(base, panel(box.width, box.height, strings.Join(lines, "\n"), theme.Highlight), box.x, box.y, m.width-1)
+	lines := []string{"", decisionTitle(title, inner), muted().Render(ansi.Truncate(progress, inner, "…")), s.viewport.View(), muted().Render(ansi.Truncate(label, inner, "…")), editor, ansi.Truncate(note, inner, "…"), questionButtons(inner), muted().Render(ansi.Truncate(tr("Tab выбор · Enter отметить · F5 ответ"), inner, "…")), ""}
+	return m.decisionSurface(base, box, lines)
 }
 func (m *model) questionMouse(msg tea.MouseMsg) tea.Cmd {
 	s := m.approvals
 	f, _, _ := m.questionCurrent()
 	box := m.approvalBox()
+	if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft && m.decisionClose(box).contains(msg.X, msg.Y) {
+		s.visible = false
+		return nil
+	}
 	inner := box.width - 4
 	bodyHeight := max(1, box.height-11)
 	body := area{box.x + 2, box.y + 3, inner, bodyHeight}

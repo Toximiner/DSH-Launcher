@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func toolEvent(t *testing.T, m *model, seq int, kind string, data any) {
@@ -170,5 +171,139 @@ func TestToolAbortOutcomeAndBoundedExpansion(t *testing.T) {
 	paletteTestSelect(t, m, "Настройки dsh")
 	if m.toolFocused || m.page != dshSettingsPage {
 		t.Fatal("page navigation retained tool keyboard focus")
+	}
+}
+
+func TestToolCollapsedSummariesUseCommandsAndIdentifyingResourceNames(t *testing.T) {
+	m := chatModel(t)
+	applyChat(t, m, `{"type":"snapshot","header":{"id":"s"},"cursor":-1}`)
+	for _, item := range []struct{ name, args, want string }{
+		{"bash", `{"command":"go test ./...","description":"Run tests","cwd":"/tmp"}`, "go test ./..."},
+		{"read", `{"file_path":"/tmp/notes.txt"}`, "notes.txt"},
+		{"search", `{"path":"src","pattern":"interface"}`, "src · interface"},
+		{"web", `{"url":"https://example.test/docs"}`, "https://example.test/docs"},
+		{"exec", `{"argv":["git","status","--short"]}`, "git status --short"},
+	} {
+		card := &chatTool{ID: "summary", Name: item.name, Arguments: item.args, State: "done"}
+		view := clean(m.toolViewWidth(card, 100))
+		if !strings.Contains(view, item.want) || strings.Contains(view, `{"`) || strings.Count(view, "\n") > 1 {
+			t.Fatalf("tool summary is noisy or hides its operation:%s", view)
+		}
+	}
+	path := "/tmp/" + strings.Repeat("long-directory/", 20) + "important-file.go"
+	raw, _ := json.Marshal(map[string]string{"file_path": path})
+	view := clean(m.toolViewWidth(&chatTool{ID: "long", Name: "read", State: "done", Arguments: string(raw)}, 76))
+	if !strings.Contains(view, "important-file.go") {
+		t.Fatal("narrow resource summary hides identifying filename")
+	}
+}
+
+func TestToolCollapsedStatesNestedRelationAndResultsStayWithinTwoRows(t *testing.T) {
+	defer activeEnglish.Store(false)
+	for _, english := range []bool{false, true} {
+		m := chatModel(t)
+		applyChat(t, m, `{"type":"snapshot","header":{"id":"s"},"cursor":-1}`)
+		activeEnglish.Store(english)
+		m.chat.messages = []chatMessage{{tool: &chatTool{ID: "parent", Name: "run_code"}}}
+		for _, state := range []string{"running", "done", "error", "stopped", "unknown", "future-outcome"} {
+			card := &chatTool{ID: "child", Name: "read", ParentID: "parent", RootID: "parent", Nested: true, State: state, Arguments: `{"path":"notes.txt"}`, Result: "first useful line\nsecond\nthird\nfourth"}
+			if state == "error" {
+				card.ErrorCode = "E_TEST"
+			}
+			view := m.toolViewWidth(card, 76)
+			if strings.Count(view, "\n") > 1 || lipgloss.Width(view) > 76 {
+				t.Fatalf("collapsed tool state%q expanded vertically", state)
+			}
+			if !strings.Contains(clean(view), tr("Внутри: ")+"run_code") {
+				t.Fatal("compact nested tool lost parent relationship")
+			}
+			if state == "error" && !strings.Contains(clean(view), "E_TEST") {
+				t.Fatal("collapsed failure hides its error code")
+			}
+			if state == "future-outcome" && !strings.Contains(clean(view), tr("? Результат не получен")) {
+				t.Fatal("unknown outcome is labeled successful or blank")
+			}
+		}
+	}
+}
+
+func TestToolExpansionRetainsFullArgumentsResultsAndRawState(t *testing.T) {
+	m := chatModel(t)
+	applyChat(t, m, `{"type":"snapshot","header":{"id":"s"},"cursor":-1}`)
+	args := `{"file_path":"notes.txt","offset":5,"limit":200,"unknown_field":"retained"}`
+	result := "first\n\nsecond\nthird\nlast-result-line"
+	card := &chatTool{ID: "a", Name: "read", State: "done", Arguments: args, Result: result}
+	collapsed := clean(m.toolViewWidth(card, 76))
+	if strings.Contains(collapsed, "last-result-line") || strings.Contains(collapsed, "unknown_field") {
+		t.Fatal("collapsed tool leaked full details")
+	}
+	m.chat.expandedTools = map[string]bool{"a": true}
+	expanded := clean(m.toolViewWidth(card, 76))
+	if !strings.Contains(expanded, result) || !strings.Contains(expanded, `"unknown_field": "retained"`) || !strings.Contains(expanded, tr("Аргументы:")) {
+		t.Fatal("expanded tool lost full result or unknown argument fields")
+	}
+	if card.Arguments != args || card.Result != result {
+		t.Fatal("rendering rewrote stored tool source")
+	}
+}
+
+func TestCompactToolLiveLossAndDisconnectRemainVisible(t *testing.T) {
+	m := chatModel(t)
+	applyChat(t, m, `{"type":"snapshot","header":{"id":"s"},"cursor":-1}`)
+	card := &chatTool{ID: "a", Name: "bash", State: "running", Arguments: `{"command":"build"}`}
+	m.chat.jobs = map[string]toolJob{"a": {ID: "j"}}
+	m.chat.observers = map[string]*toolOutputObserver{"j": {value: toolOutput{Text: "old\nnewest-output", Stale: true, Gap: true}}}
+	view := clean(m.toolViewWidth(card, 100))
+	if strings.Count(view, "\n") > 1 || !strings.Contains(view, tr(" · нет связи")) || !strings.Contains(view, tr(" · вывод неполный")) || !strings.Contains(view, "newest-output") {
+		t.Fatalf("compact live tool hid uncertainty or most recent output:%s", view)
+	}
+	m.chat.expandedTools = map[string]bool{"a": true}
+	expanded := clean(m.toolViewWidth(card, 100))
+	if !strings.Contains(expanded, "old\nnewest-output") || !strings.Contains(expanded, tr("\n[Часть вывода недоступна или обрезана]")) {
+		t.Fatal("expanded live tool lost raw output or loss notice")
+	}
+}
+
+func TestCompactToolPrioritizesLossFlagsAtMinimumWidth(t *testing.T) {
+	m := chatModel(t)
+	applyChat(t, m, `{"type":"snapshot","header":{"id":"s"},"cursor":-1}`)
+	m.chat.ready = false
+	card := &chatTool{ID: "a", Name: "tool-with-a-long-name", State: "running", Arguments: `{"command":"important-command"}`}
+	m.chat.jobs = map[string]toolJob{"a": {ID: "j"}}
+	m.chat.observers = map[string]*toolOutputObserver{"j": {value: toolOutput{Text: "last output", Stale: true, Gap: true}}}
+	for _, width := range []int{75, 126} {
+		view := clean(m.toolViewWidth(card, width))
+		if strings.Count(view, "\n") > 1 || !strings.Contains(view, strings.TrimPrefix(tr(" · нет связи"), " · ")) || !strings.Contains(view, strings.TrimPrefix(tr(" · вывод неполный"), " · ")) {
+			t.Fatalf("loss flags hidden at%dcolumns:%s", width, view)
+		}
+	}
+}
+
+func TestExpandedToolHeaderRemainsAnchoredWhenResized(t *testing.T) {
+	m := chatModel(t)
+	applyChat(t, m, `{"type":"snapshot","header":{"id":"s"},"cursor":-1}`)
+	toolEvent(t, m, 0, "tool/call", toolCall("read", "read", 1))
+	toolEvent(t, m, 1, "tool/result", toolResult("read", strings.Repeat("result row\n", 20), false))
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 42})
+	m.input.SetValue("resize tool draft 世界")
+	m.focusTool("read")
+	m.toggleTool("read")
+	if !m.viewport.AtBottom() {
+		t.Fatal("fixture must reproduce initial tail-follow state")
+	}
+	for _, size := range []tea.WindowSizeMsg{{Width: 80, Height: 24}, {Width: 160, Height: 40}, {Width: 100, Height: 30}} {
+		m.Update(size)
+		if len(m.chatToolHits) != 1 {
+			t.Fatal("resizing lost tool hit")
+		}
+		hit := m.chatToolHits[0]
+		y := m.conversationArea().y + hit.row - m.viewport.YOffset
+		lines := strings.Split(clean(m.View()), "\n")
+		if y < bodyTop || y >= m.composerBox().y || !strings.Contains(lines[y], "read · ✓ Готово") {
+			t.Fatal("resizing scrolled the selected expanded tool header out of view")
+		}
+		if !m.chat.expandedTools["read"] || m.input.Value() != "resize tool draft 世界" || !m.toolFocused {
+			t.Fatal("resizing lost expansion, focus or draft")
+		}
 	}
 }

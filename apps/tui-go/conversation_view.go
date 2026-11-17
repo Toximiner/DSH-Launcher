@@ -183,6 +183,14 @@ func (m *model) conversationMessage(message chatMessage, width, row int) string 
 	} else {
 		part = ansi.Hardwrap(m.messageText(message, width, false), width, true)
 	}
+	if message.reasoning != "" {
+		thoughts := renderReasoning(m.chat, reasoningEventKey(message.seq), message.reasoning, width, row)
+		if part != "" {
+			part = thoughts + "\n" + part
+		} else {
+			part = thoughts
+		}
+	}
 	part = strings.TrimRight(part, "\n")
 	if meta := messageMetadata(message, width); meta != "" {
 		part += "\n" + muted().Render(meta)
@@ -235,7 +243,7 @@ func (m *model) conversationKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	messages := m.displayMessages()
 	for i := len(messages) - 1; i >= 0; i-- {
 		message := messages[i].message
-		if (message.assistant || message.role == tr("АГЕНТ")) && message.tool == nil && message.approvalID == "" {
+		if (message.assistant || message.role == tr("АГЕНТ")) && message.text != "" && message.tool == nil && message.approvalID == "" {
 			return m.copyConversation(message.seq), true
 		}
 	}

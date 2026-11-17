@@ -137,6 +137,9 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if cmd, handled := m.conversationMouse(msg); handled {
 		return cmd
 	}
+	if cmd, handled := m.reasoningMouse(msg); handled {
+		return cmd
+	}
 	if m.page == chatPage && m.chat != nil && conversation.contains(msg.X, msg.Y) {
 		viewLines := strings.Split(clean(m.viewport.View()), "\n")
 		screenRow := msg.Y - conversation.y

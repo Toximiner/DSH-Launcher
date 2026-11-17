@@ -116,6 +116,29 @@ Intermediate build: `0.2.0-preview.40-opencode.4`.
 ./build/previews/opencode-04/dsh-launcher-tui --start
 ```
 
+## Checkpoint 5: tools, thoughts and decisions
+
+Intermediate build: `0.2.0-preview.40-opencode.5`.
+
+- Collapsed tools use at most two rows: name, actual state, a short command/path
+  and result preview. Errors have a distinct color; missing results, cancellation,
+  pending decisions and incomplete output are never presented as success.
+  F6/Shift+F6 selects a tool; Enter/click expands arguments and output.
+- Thoughts come only from explicit dsh reasoning blocks, separately from replies:
+  a collapsed header, click, Ctrl+O or `/thoughts` reveals them. Streaming,
+  restored attempts and durable history are supported; Ctrl+O works in history.
+  Reply copying retains its source without adding thoughts.
+- Permissions and questions use flat dimmed dialogs, top-right Esc, clear buttons
+  and scrolling for complete reasons, arguments and questions. Decisions remain
+  explicit; deferred requests and drafts are preserved. F7 from the palette or
+  session picker reveals a pending request without answering it.
+- Text limits, stale-result and uncertain-answer guards, disconnection states
+  and input capture by the topmost modal remain in place.
+
+```sh
+./build/previews/opencode-05/dsh-launcher-tui --start
+```
+
 ## Revised implementation order
 
 1. **Screenshot correction, preview `opencode.3` (implemented; user review pending).** Active conversation
@@ -129,11 +152,13 @@ Intermediate build: `0.2.0-preview.40-opencode.4`.
    flat searchable grouped command/model/session/project pickers, Esc at top right,
    teal selection and dimmed backdrop. Core pickers are unified in preview4;
    editors and confirmations continue in subsequent stages.
-3. **Tools and permissions.** Compact expandable results/thoughts, clear failures and
+3. **Tools and permissions (implemented in preview5; user review pending).** Compact expandable results/thoughts, clear failures and
    decisions, complete input capture by the topmost modal. Show only information dsh provides.
 4. **Auxiliary pages.** Settings, plugins/market, automation, files, terminals,
    subagents, queue/history, install/update/rollback and diagnostics use the same
    visual system while retaining operations and revision/confirmation safeguards.
+   Queue work also covers classifying and clearing the transient accepted-send
+   notice, which can currently remain after a normal reply.
 5. **Visual acceptance.** Compare actual captures of the four supplied scenes at a
    wide size and at 100×30/80×24; test Go race/PTY/isolated real dsh. Ask for a specific
    additional screenshot only when the current references leave a necessary state unclear.

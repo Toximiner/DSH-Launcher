@@ -50,7 +50,7 @@ func paletteLastAssistantSeq(m *model) int {
 	messages := m.displayMessages()
 	for i := len(messages) - 1; i >= 0; i-- {
 		message := messages[i].message
-		if (message.assistant || message.role == tr("АГЕНТ")) && message.tool == nil && message.approvalID == "" {
+		if (message.assistant || message.role == tr("АГЕНТ")) && message.text != "" && message.tool == nil && message.approvalID == "" {
 			return message.seq
 		}
 	}
@@ -269,7 +269,10 @@ func (m *model) paletteKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return m.cancelChat(), true
 	case "f7":
 		m.paletteClose()
-		return nil, false
+		if m.approvals != nil && len(m.approvals.requests) > 0 {
+			m.approvals.visible = true
+		}
+		return nil, true
 	case "ctrl+p", "esc":
 		m.paletteClose()
 		return nil, true

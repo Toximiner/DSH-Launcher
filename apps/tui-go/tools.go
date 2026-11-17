@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -32,17 +34,123 @@ func boundedToolText(text string, limit int) string {
 	return strings.ToValidUTF8(text[:limit], "") + tr("\n[Вывод обрезан по ограничению TUI]")
 }
 func (message chatMessage) byteSize() int {
-	size := len(message.text)
+	size := len(message.text) + len(message.reasoning)
 	if t := message.tool; t != nil {
 		size += len(t.ID) + len(t.ParentID) + len(t.RootID) + len(t.Name) + len(t.Arguments) + len(t.Result) + len(t.ErrorCode)
 	}
 	return size
 }
 func (m *model) toolView(t *chatTool) string { return m.toolViewWidth(t, m.viewport.Width) }
+
+// toolArgumentSummary selects actual command/resource fields without replacing
+// the stored arguments. Unknown JSON stays available in the expanded details.
+func toolArgumentSummary(arguments string) string {
+	if arguments == "" {
+		return ""
+	}
+	if len(arguments) > toolArgumentsLimit || !toolJSONDepthOK(arguments) {
+		return ""
+	}
+	var fields map[string]json.RawMessage
+	if json.Unmarshal([]byte(arguments), &fields) != nil {
+		var value string
+		if json.Unmarshal([]byte(arguments), &value) == nil {
+			return singleLine(value)
+		}
+		if json.Valid([]byte(arguments)) {
+			return ""
+		}
+		return strings.Join(strings.Fields(clean(arguments)), " ")
+	}
+	text := func(key string) string {
+		var value string
+		if json.Unmarshal(fields[key], &value) == nil {
+			return strings.Join(strings.Fields(clean(value)), " ")
+		}
+		return ""
+	}
+	for _, key := range []string{"command", "cmd"} {
+		if value := text(key); value != "" {
+			return value
+		}
+	}
+	var argv []string
+	if json.Unmarshal(fields["argv"], &argv) == nil && len(argv) > 0 {
+		return singleLine(strings.Join(argv, " "))
+	}
+	resource := ""
+	for _, key := range []string{"file_path", "path", "file", "filename", "url"} {
+		if resource = text(key); resource != "" {
+			break
+		}
+	}
+	for _, key := range []string{"pattern", "query", "search"} {
+		if value := text(key); value != "" {
+			if resource != "" {
+				return resource + " · " + value
+			}
+			return value
+		}
+	}
+	if resource != "" {
+		return resource
+	}
+	for _, key := range []string{"description", "code", "script"} {
+		if value := text(key); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// Resource paths keep their identifying filename when the terminal is narrow.
+// Shell commands retain their beginning, including the executable and operation.
+func compactToolSummary(arguments, summary string, width int) string {
+	if lipgloss.Width(summary) <= width {
+		return summary
+	}
+	var fields map[string]json.RawMessage
+	if len(arguments) <= toolArgumentsLimit && toolJSONDepthOK(arguments) && json.Unmarshal([]byte(arguments), &fields) == nil {
+		for _, command := range []string{"command", "cmd", "argv"} {
+			if len(fields[command]) > 0 {
+				return ansi.Truncate(summary, width, "…")
+			}
+		}
+		for _, key := range []string{"file_path", "path", "file", "filename"} {
+			var resource string
+			if json.Unmarshal(fields[key], &resource) == nil && resource != "" {
+				return ansi.TruncateLeft(summary, lipgloss.Width(summary)-width+1, "…")
+			}
+		}
+	}
+	return ansi.Truncate(summary, width, "…")
+}
+
+func toolResultPreview(result string, tail bool) string {
+	lines := strings.Split(clean(result), "\n")
+	if tail {
+		for i := len(lines) - 1; i >= 0; i-- {
+			if line := strings.TrimSpace(lines[i]); line != "" {
+				return line
+			}
+		}
+	}
+	for _, line := range lines {
+		if line = strings.TrimSpace(line); line != "" {
+			return line
+		}
+	}
+	return ""
+}
+
 func (m *model) toolViewWidth(t *chatTool, width int) string {
+	width = max(1, width)
 	labels := map[string]string{"running": tr("◌ Выполняется"), "done": tr("✓ Готово"), "error": tr("! Ошибка"), "stopped": tr("■ Остановлено"), "unknown": tr("? Результат не получен")}
 	state := labels[t.State]
-	if t.State == "running" && !m.chat.ready {
+	if state == "" {
+		state = labels["unknown"]
+	}
+	if t.State == "running" && (m.chat == nil || !m.chat.ready) {
 		state = tr("? Нет связи · состояние уточняется")
 	}
 	if t.State != "error" && t.State != "stopped" && m.approvals != nil {
@@ -60,65 +168,115 @@ func (m *model) toolViewWidth(t *chatTool, width int) string {
 			}
 		}
 	}
-	name := t.Name
+	expanded := m.chat != nil && m.chat.expandedTools[t.ID]
+	result, notice := t.Result, ""
+	uncertainty := []string{}
+	if t.State == "running" {
+		result, notice = m.liveToolOutput(t)
+		if m.chat != nil {
+			if job, ok := m.chat.jobs[t.ID]; ok {
+				if observer := m.chat.observers[job.ID]; observer != nil {
+					if observer.value.Stale {
+						uncertainty = append(uncertainty, strings.TrimPrefix(tr(" · нет связи"), " · "))
+					}
+					if observer.value.Gap {
+						uncertainty = append(uncertainty, strings.TrimPrefix(tr(" · вывод неполный"), " · "))
+					}
+				}
+			}
+		}
+	}
+	if strings.Contains(result, tr("\n[Вывод обрезан по ограничению TUI]")) {
+		uncertainty = append(uncertainty, strings.TrimPrefix(tr(" · вывод обрезан"), " · "))
+	}
+	name := singleLine(t.Name)
 	if name == "" {
 		name = tr("Инструмент · вызов вне окна истории")
 	}
 	indicator := "▸"
-	if m.chat.expandedTools[t.ID] {
+	if expanded {
 		indicator = "▾"
 	}
-	label := indicator + " " + name + " · " + state
-	style := accent().Bold(true)
-	if m.toolFocused && m.chat.selectedTool == t.ID {
-		label = "> " + label
-		style = heading()
+	prefix := indicator + " "
+	focused := m.toolFocused && m.chat != nil && m.chat.selectedTool == t.ID
+	if focused {
+		prefix = "> " + prefix
 	}
-	lines := []string{style.Render(ansi.Truncate(label, max(1, width), "…"))}
-	if t.Nested {
-		lines = append(lines, muted().Render(ansi.Truncate(m.nestedRelation(t), max(1, width), "…")))
+	// If state and loss flags cannot share a readable header, reserve the
+	// second row for those flags before nesting or output previews.
+	detailUncertainty := ""
+	if len(uncertainty) > 0 {
+		flags := strings.Join(uncertainty, " · ")
+		required := lipgloss.Width(prefix) + min(8, lipgloss.Width(name)) + lipgloss.Width(state) + lipgloss.Width(flags) + 6
+		if required <= width {
+			state += " · " + flags
+		} else {
+			detailUncertainty = flags
+		}
+	}
+	// Keep uncertainty and errors visible before spending space on arguments.
+	name = ansi.Truncate(name, max(1, width-lipgloss.Width(prefix)-lipgloss.Width(state)-3), "…")
+	label := prefix + name + " · " + state
+	summary := toolArgumentSummary(t.Arguments)
+	if available := width - lipgloss.Width(label) - 3; available >= 6 && summary != "" {
+		label += " · " + compactToolSummary(t.Arguments, summary, available)
+	}
+	style := muted()
+	if t.State == "running" {
+		style = accent()
+	}
+	if t.State == "error" {
+		style = lipgloss.NewStyle().Foreground(theme.Color(theme.Error))
+	}
+	if t.State == "unknown" || t.State == "stopped" || labels[t.State] == "" {
+		style = lipgloss.NewStyle().Foreground(theme.Color(theme.Warning))
+	}
+	if focused {
+		style = style.Bold(true)
+	}
+	lines := []string{style.Render(ansi.Truncate(label, width, "…"))}
+	if !expanded {
+		detail := []string{}
+		if detailUncertainty != "" {
+			detail = append(detail, detailUncertainty)
+		}
+		if t.Nested && m.chat != nil {
+			detail = append(detail, m.nestedRelation(t))
+		}
+		if t.ErrorCode != "" {
+			detail = append(detail, tr("Код ошибки: ")+singleLine(t.ErrorCode))
+		}
+		if preview := toolResultPreview(result, t.State == "running"); preview != "" {
+			detail = append(detail, preview)
+		}
+		if len(detail) > 0 {
+			lines = append(lines, muted().Render(ansi.Truncate(strings.Join(detail, " · "), width, "…")))
+		}
+		return strings.Join(lines, "\n")
+	}
+	if t.Nested && m.chat != nil {
+		lines = append(lines, muted().Render(m.nestedRelation(t)))
 	}
 	args := t.Arguments
 	var pretty bytes.Buffer
-	if args != "" && toolJSONDepthOK(args) && json.Indent(&pretty, []byte(args), "", "  ") == nil {
+	if args != "" && len(args) <= toolArgumentsLimit && toolJSONDepthOK(args) && json.Indent(&pretty, []byte(args), "", "  ") == nil {
 		args = boundedToolText(pretty.String(), toolArgumentsLimit)
 	}
 	if args != "" {
-		if m.chat.expandedTools[t.ID] {
-			lines = append(lines, muted().Render(tr("Аргументы:")), args)
-		} else {
-			lines = append(lines, muted().Render(ansi.Truncate("  "+strings.Join(strings.Fields(args), " "), max(1, width), "…")))
-		}
+		lines = append(lines, muted().Render(tr("Аргументы:")), args)
 	}
 	if t.ErrorCode != "" {
-		lines = append(lines, tr("Код ошибки: ")+t.ErrorCode)
+		lines = append(lines, tr("Код ошибки: ")+singleLine(t.ErrorCode))
 	}
-	result := t.Result
-	if t.State == "running" {
-		var notice string
-		result, notice = m.liveToolOutput(t)
-		if notice != "" {
-			lines = append(lines, muted().Render(notice))
-		}
+	if notice != "" {
+		lines = append(lines, muted().Render(notice))
 	}
 	if result != "" {
-		if !m.chat.expandedTools[t.ID] {
-			wrapped := strings.Split(ansi.Hardwrap(strings.TrimRight(result, "\n"), max(1, width), true), "\n")
-			if len(wrapped) > 3 {
-				if t.State == "running" {
-					result = tr("… [Раскрыть]\n") + strings.Join(wrapped[len(wrapped)-3:], "\n")
-				} else {
-					result = strings.Join(wrapped[:3], "\n") + tr("\n… [Раскрыть]")
-				}
-			}
-		}
 		lines = append(lines, result)
 	} else if t.State == "done" {
 		lines = append(lines, muted().Render(tr("Без текстового результата.")))
 	}
-	if m.chat.expandedTools[t.ID] {
-		lines = append(lines, muted().Render(tr("[Свернуть] · Enter / клик")))
-	}
+	lines = append(lines, muted().Render(tr("[Свернуть] · Enter / клик")))
 	return strings.Join(lines, "\n")
 }
 func (m *model) toolIDs() []string {

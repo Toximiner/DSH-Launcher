@@ -49,13 +49,14 @@ type compactChatRecord struct {
 	Chunk chatChunk `json:"chunk"`
 }
 type chatAttempt struct {
-	ID           string              `json:"attemptId"`
-	Turn         int                 `json:"turn"`
-	Step         int                 `json:"step"`
-	Next         int                 `json:"nextIndex"`
-	Stream       []compactChatRecord `json:"stream"`
-	blocks       map[int]string
-	committedSeq *int
+	ID              string              `json:"attemptId"`
+	Turn            int                 `json:"turn"`
+	Step            int                 `json:"step"`
+	Next            int                 `json:"nextIndex"`
+	Stream          []compactChatRecord `json:"stream"`
+	blocks          map[int]string
+	reasoningBlocks map[int]string
+	committedSeq    *int
 }
 type assistantChatFrame struct {
 	Type    string    `json:"type"`
@@ -98,6 +99,7 @@ type chatMessage struct {
 	human           bool
 	seq             int
 	role, text      string
+	reasoning       string
 	tool            *chatTool
 	approvalID      string
 	approvalTool    string
@@ -128,6 +130,8 @@ type chatState struct {
 	streamError          string
 	clearedThrough       int
 	expandedTools        map[string]bool
+	expandedReasoning    map[string]bool
+	reasoningHits        []reasoningHit
 	admitted             map[string]int
 	selectedTool         string
 	jobs                 map[string]toolJob
@@ -404,10 +408,24 @@ func (a *chatAttempt) chunk(chunk chatChunk) string {
 	}
 	switch chunk.Type {
 	case "text-delta":
+		delete(a.reasoningBlocks, chunk.Index)
 		a.blocks[chunk.Index] += chunk.Text
+	case "reasoning-delta":
+		if a.reasoningBlocks == nil {
+			a.reasoningBlocks = make(map[int]string)
+		}
+		delete(a.blocks, chunk.Index)
+		a.reasoningBlocks[chunk.Index] += chunk.Text
 	case "block-end":
 		if chunk.Block.Type == "text" {
 			a.blocks[chunk.Index] = chunk.Block.Text
+			delete(a.reasoningBlocks, chunk.Index)
+		} else if chunk.Block.Type == "reasoning" {
+			if a.reasoningBlocks == nil {
+				a.reasoningBlocks = make(map[int]string)
+			}
+			a.reasoningBlocks[chunk.Index] = chunk.Block.Text
+			delete(a.blocks, chunk.Index)
 		}
 	case "finish":
 		if chunk.Reason.Kind == "error" {
@@ -433,9 +451,13 @@ func (a *chatAttempt) text() string {
 func (a *chatAttempt) restore() string {
 	note := ""
 	for _, record := range a.Stream {
-		if record.Type == "text-chunks" {
+		if record.Type == "text-chunks" || record.Type == "reasoning-chunks" {
+			kind := "text-delta"
+			if record.Type == "reasoning-chunks" {
+				kind = "reasoning-delta"
+			}
 			for _, text := range record.Texts {
-				a.chunk(chatChunk{Type: "text-delta", Index: record.Index, Text: text})
+				a.chunk(chatChunk{Type: kind, Index: record.Index, Text: text})
 			}
 		} else if record.Type == "chunk" {
 			if n := a.chunk(record.Chunk); n != "" {
@@ -499,7 +521,7 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 			return errors.New(tr("неподдерживаемая причина завершения"))
 		}
 	}
-	text, role := "", ""
+	text, role, reasoning := "", "", ""
 	approvalID, approvalTool := "", ""
 	var tool *chatTool
 	switch event.Type {
@@ -524,6 +546,7 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 	case "assistant/message":
 		role = tr("АГЕНТ")
 		text = contentText(data.Message.Content)
+		reasoning = reasoningContent(data.Message.Content)
 	case "assistant/attempt":
 		a := &chatAttempt{Stream: data.Stream}
 		if note := a.restore(); note != "" {
@@ -531,6 +554,10 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 		}
 		role = tr("АГЕНТ · НЕЗАВЕРШЁННЫЙ ОТВЕТ")
 		text = a.text()
+		reasoning = a.reasoning()
+		if a.byteSize() > chatTextLimit {
+			return errors.New(tr("сообщение превышает размер, поддерживаемый TUI"))
+		}
 	case "tool/call":
 		if data.CallID == "" {
 			return errors.New(tr("вызов инструмента без идентификатора"))
@@ -643,9 +670,10 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 			s.note = tr("Выполнение остановлено.")
 		}
 	}
-	if len(text) > chatTextLimit {
+	if len(text)+len(reasoning) > chatTextLimit {
 		return errors.New(tr("сообщение превышает размер, поддерживаемый TUI"))
 	}
+	reasoning = clean(reasoning)
 	removed := make(map[int]bool)
 	if len(event.SurfaceOp) > 0 && string(event.SurfaceOp) != "\"append\"" {
 		var op struct {
@@ -695,12 +723,12 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 		}
 	}
 	s.messages = kept
-	if text != "" || tool != nil {
+	if text != "" || reasoning != "" || tool != nil {
 		elapsed := int64(0)
 		if event.Type == "assistant/message" && s.stepStarted > 0 && s.stepTurn == data.Turn && s.stepNumber == data.Step && event.Time >= s.stepStarted {
 			elapsed = event.Time - s.stepStarted
 		}
-		message := chatMessage{assistant: event.Type == "assistant/message", time: event.Time, elapsedMs: elapsed, human: event.Type == "user/message" && (data.Source.Kind == "user" || data.Source.Kind == "user-question-reply"), seq: event.Seq, role: role, text: text, tool: tool, approvalID: approvalID, approvalTool: approvalTool}
+		message := chatMessage{assistant: event.Type == "assistant/message", time: event.Time, elapsedMs: elapsed, human: event.Type == "user/message" && (data.Source.Kind == "user" || data.Source.Kind == "user-question-reply"), seq: event.Seq, role: role, text: text, reasoning: reasoning, tool: tool, approvalID: approvalID, approvalTool: approvalTool}
 		s.messages = append(s.messages, message)
 	}
 	positions := make(map[int]int, len(s.surface))
@@ -733,6 +761,12 @@ func (m *model) applyChatEvent(s *chatState, event chatEvent) error {
 		s.messages = kept
 	}
 	if s.live != nil && (event.Type == "assistant/message" || event.Type == "assistant/attempt") && (s.live.committedSeq != nil && *s.live.committedSeq == event.Seq || s.live.Turn == data.Turn && s.live.Step == data.Step) {
+		if s.expandedReasoning[reasoningAttemptKey(s.live.ID)] && reasoning != "" {
+			if s.expandedReasoning == nil {
+				s.expandedReasoning = make(map[string]bool)
+			}
+			s.expandedReasoning[reasoningEventKey(event.Seq)] = true
+		}
 		s.live = nil
 	}
 	return nil
@@ -745,6 +779,7 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 			return errors.New(tr("снимок другой сессии или неверный курсор"))
 		}
 		next := *s
+		next.expandedReasoning = copyReasoningExpansion(s.expandedReasoning)
 		next.messages = nil
 		next.stepStarted = 0
 		next.admitted = nil
@@ -772,7 +807,7 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 			if note := next.live.restore(); note != "" {
 				next.note = note
 			}
-			if len(next.live.text()) > chatTextLimit {
+			if next.live.byteSize() > chatTextLimit {
 				return errors.New(tr("снимок ответа превышает ограничение TUI"))
 			}
 		}
@@ -822,8 +857,9 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 			for index, text := range s.live.blocks {
 				next.blocks[index] = text
 			}
+			next.reasoningBlocks = copyReasoningBlocks(s.live.reasoningBlocks)
 			note := next.chunk(f.Chunk)
-			if len(next.text()) > chatTextLimit {
+			if next.byteSize() > chatTextLimit {
 				return errors.New(tr("ответ превышает размер, поддерживаемый TUI"))
 			}
 			next.Next++
@@ -855,6 +891,7 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 		return errors.New(tr("неподдерживаемый поток чата"))
 	}
 	pruneToolExpansion(s)
+	pruneReasoningExpansion(s)
 	return nil
 }
 
@@ -864,6 +901,7 @@ func (m *model) chatView() string {
 	if s == nil {
 		return tr("Ожидание подключения чата…")
 	}
+	s.reasoningHits = nil
 	lines := []string{}
 	if !s.ready {
 		lines = append(lines, tr("◌ Подключение чата…"))
@@ -892,7 +930,18 @@ func (m *model) chatView() string {
 		lines = append(lines, pendingPromptView(p.Text, p.Status, m.viewport.Width))
 	}
 	if s.live != nil {
-		lines = append(lines, muted().Render(tr("◌ Агент отвечает…"))+"\n"+renderMarkdown(s.live.text(), max(1, m.viewport.Width))+"\n")
+		liveRow := 0
+		if len(lines) > 0 {
+			liveRow = strings.Count(ansi.Hardwrap(strings.Join(lines, "\n"), max(1, m.viewport.Width), true), "\n") + 1
+		}
+		part := muted().Render(tr("◌ Агент отвечает…"))
+		if thought := renderReasoning(s, reasoningAttemptKey(s.live.ID), s.live.reasoning(), max(1, m.viewport.Width), liveRow+1); thought != "" {
+			part += "\n" + thought
+		}
+		if answer := s.live.text(); answer != "" {
+			part += "\n" + renderMarkdown(answer, max(1, m.viewport.Width))
+		}
+		lines = append(lines, part+"\n")
 	}
 	if queue := m.queueView(); queue != "" {
 		lines = append(lines, queue+"\n")

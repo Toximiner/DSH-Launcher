@@ -36,6 +36,7 @@ parser.add_argument('--capture-queue', help='Optional terminal-cell JSON of real
 parser.add_argument('--capture-question', help='Optional terminal-cell JSON of an actual question form')
 parser.add_argument('--capture-approval', help='Optional terminal-cell JSON of an actual pending permission')
 parser.add_argument('--capture-tools', help='Optional terminal-cell JSON of actual tool results')
+parser.add_argument('--through-decisions', action='store_true', help='Stop after real tool, permission, and question scenarios (skip queue/PTC stages)')
 parser.add_argument('--capture-cells', help='Optional terminal-cell JSON for an actual UI screenshot')
 args = parser.parse_args()
 model_calls = []
@@ -147,11 +148,10 @@ class Model(BaseHTTPRequestHandler):
 
 
 def capture_cells(app, path):
-    # Resizing can deliver a valid modal before the final screen rows arrive.
-    def fully_painted():
+    # Callers wait for semantic readiness; drain remaining resize/color frames
+    # without depending on a footer that is intentionally absent in modals.
+    for _ in range(5):
         app.pump()
-        return any("Ctrl+D" in line for line in app.screen.display[-2:])
-    wait_for(fully_painted)
     cells = []
     for y in range(app.screen.lines):
         for x in range(app.screen.columns):
@@ -163,6 +163,27 @@ def capture_cells(app, path):
     target.write_text(json.dumps({'source': 'Actual dsh with a controlled test model endpoint',
                                  'columns': app.screen.columns, 'rows': app.screen.lines,
                                  'cells': cells}, ensure_ascii=False))
+
+
+def wait_idle(app, timeout=20):
+    def idle():
+        app.pump()
+        footer = '\n'.join(app.screen.display[-2:])
+        return ('[F8 Стоп]' not in footer and '◌' not in footer
+                and 'Отправка не подтверждена' not in footer)
+    wait_for(idle, timeout=timeout)
+
+
+def expand_running_bash(app):
+    app.wait('bash · ◌ Выполняется', timeout=25)
+    for _ in range(16):
+        app.send('\x1b[17~')
+        app.pump()
+        if '> ▸ bash · ◌ Выполняется' in app.text:
+            app.send('\r')
+            app.wait('> ▾ bash · ◌ Выполняется')
+            return
+    raise AssertionError('Running bash card was not reachable with F6')
 
 
 with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
@@ -238,7 +259,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
     env = {key: value for key, value in os.environ.items()
            if key not in ('GH_TOKEN', 'GITHUB_TOKEN', 'CODESPACES_GITHUB_TOKEN', 'DSH_TUI_URL')}
     env.pop('NO_COLOR', None)
-    env.update(DSH_HOME=str(root / 'dsh'), TUI_TEST_API_KEY='test-only-not-a-real-key',
+    env.update(HOME=str(root), DSH_HOME=str(root / 'dsh'), TUI_TEST_API_KEY='test-only-not-a-real-key',
                TERM='xterm-256color', COLORTERM='truecolor', XDG_CONFIG_HOME=str(root / 'config'), XDG_DATA_HOME=str(root / 'data'))
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
@@ -271,9 +292,28 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         reader = threading.Thread(target=drain, daemon=True)
         reader.start()
         app = Terminal(str(Path(args.binary).resolve()), ['--new'], {**env, 'DSH_TUI_URL': login})
-        app.wait('Введите сообщение.', timeout=20)
-        # Capture identity before the first prompt generates a display title.
-        session_id = re.search(r'Сессия · (session-[a-z0-9-]+)', app.text).group(1)
+        app.wait('DeepSeek Harness', timeout=20)
+        # The tab deliberately truncates long UUIDs. Read full identity from
+        # the actual isolated backend, rather than treating display text as API.
+        parsed = urllib.parse.urlsplit(login)
+        origin = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, '', '', ''))
+        class InitialConnectResponse(urllib.request.HTTPErrorProcessor):
+            def http_response(self, request, response):
+                return response if response.status == 302 else super().http_response(request, response)
+        identity_opener = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()), InitialConnectResponse())
+        identity_opener.open(origin + '/connect?' + parsed.query, timeout=10).close()
+        identity_rpc = uuid.uuid4().hex
+        identity_request = urllib.request.Request(origin + '/api/session/list', data=json.dumps({
+            'type': 'client-request', 'rpcId': identity_rpc, 'method': 'session/list',
+            'payload': {'args': {'_request': {}}},
+        }).encode(), headers={'Content-Type': 'application/json', 'Origin': origin})
+        with identity_opener.open(identity_request, timeout=10) as response:
+            identity = json.load(response)
+        assert identity['rpcId'] == identity_rpc and identity['result']['ok'], identity
+        sessions = identity['result']['value']['items']
+        assert len(sessions) == 1, f'Expected one isolated session, got {len(sessions)}'
+        session_id = sessions[0]['sessionId']
         app.send('MODEL DRAFT')
         for columns, rows in [(120, 42), (100, 30), (80, 24)]:
             app.resize(columns, rows)
@@ -282,7 +322,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
             app.wait('Модель сессии')
             app.wait('Текущая: tui-fixture/fixture')
             app.send('fixture-alt')
-            app.wait('Выбор: tui-fixture/fixture-alt')
+            app.wait('fixture-alt')
             app.wait('общую модель по умолчанию')
             if args.capture_models:
                 capture_cells(app, args.capture_models + f'-{columns}x{rows}.json')
@@ -292,7 +332,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.send('\x1b[24~')
         app.wait('Текущая: tui-fixture/fixture')
         app.send('fixture-alt')
-        app.wait('Выбор: tui-fixture/fixture-alt')
+        app.wait('fixture-alt')
         app.send('\r')
         app.wait('выбор подтверждён', timeout=20)
         app.wait('Текущая: tui-fixture/fixture-alt')
@@ -310,11 +350,11 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Ответ 1: проверка транспорта настоящего dsh.', timeout=20)
         assert model_calls[0]['model'] == 'fixture-alt', 'Confirmed TUI selection did not reach actual model input'
         print('Actual dsh models: shared provider catalog, three sizes, cancelled selection, retained draft, confirmed change, reopen and selected model in the next request OK')
-        app.wait('Enter — отправить', timeout=20)
+        wait_idle(app)
         app.command('A second turn without tools.')
         app.wait('Ответ 2: проверка транспорта настоящего dsh.', timeout=20)
         app.send('\x1b[5~')
-        app.wait('Enter — отправить', timeout=20)
+        wait_idle(app)
         app.command('Another brief answer, no tools.')
         app.wait('Ответ 3: ', timeout=20)
         if args.capture_cells:
@@ -325,7 +365,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.command('Read notes.txt and missing-file.txt using tools.')
         app.wait('Ответ 5: проверка транспорта настоящего dsh.', timeout=25)
         app.send('\x1b[5~' * 10)
-        app.wait('Enter — отправить', timeout=20)
+        wait_idle(app)
         assert len(model_calls) == 5, 'Unexpected tool-turn model request retry'
         results = [message for message in model_calls[4]['messages'] if message.get('role') == 'tool']
         assert len(results) == 2, 'Actual dsh did not feed both tool results back to the model'
@@ -341,6 +381,11 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Tool output line 12', timeout=10)
         if args.capture_tools:
             capture_cells(app, args.capture_tools)
+            for columns, rows in [(80, 24), (100, 30), (160, 40)]:
+                app.resize(columns, rows)
+                app.wait('> ▾ read · ✓ Готово')
+                capture_cells(app, args.capture_tools + f'-{columns}x{rows}.json')
+            app.resize(120, 42)
         app.send('\x1b[17~')
         app.wait('> ▸ read · ! Ошибка', timeout=10)
         app.send('\x1b')
@@ -435,12 +480,17 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         assert not (project / 'grant.marker').exists(), 'Unselected Enter granted permission'
         if args.capture_approval:
             capture_cells(app, args.capture_approval)
+            for columns, rows in [(80, 24), (100, 30), (160, 40)]:
+                app.resize(columns, rows)
+                app.wait('Create grant.marker')
+                capture_cells(app, args.capture_approval + f'-{columns}x{rows}.json')
+            app.resize(120, 42)
         app.send('\t\x1b[C\r')
         app.wait('Ответ 7: проверка транспорта настоящего dsh.', timeout=20)
         assert (project / 'grant.marker').read_text() == 'approved\n', 'Approved action did not run'
         app.wait('Разрешено один раз', timeout=10)
         app.send('\x1b[5~' * 20)
-        app.wait('Enter — отправить', timeout=20)
+        wait_idle(app)
         app.command('Request permission to create the reject marker.')
         app.wait('Create reject.marker', timeout=20)
         app.send('\t\r')
@@ -448,7 +498,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         assert not (project / 'reject.marker').exists(), 'Rejected tool wrote its marker'
         app.wait('Отказано', timeout=10)
         app.send('\x1b[5~' * 20)
-        app.wait('Enter — отправить', timeout=20)
+        wait_idle(app)
         app.command('Request permission to create the cancel marker.')
         app.wait('Create cancel.marker', timeout=20)
         app.send('\x1b[19~')
@@ -479,6 +529,11 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Keep the chat draft.', timeout=10)
         if args.capture_question:
             capture_cells(app, args.capture_question)
+            for columns, rows in [(80, 24), (100, 30), (160, 40)]:
+                app.resize(columns, rows)
+                app.wait('Keep the chat draft.')
+                capture_cells(app, args.capture_question + f'-{columns}x{rows}.json')
+            app.resize(120, 42)
         app.send('\x1b[15~')
         app.wait('Ответ 12: проверка транспорта настоящего dsh.', timeout=20)
         app.wait('> retained chat draft', timeout=10)
@@ -493,7 +548,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         assert batch[1]['selected'] == ['Unit tests', 'PTY checks'], batch
         assert batch[2]['custom'] == 'Terminal questions work.\nKeep the chat draft.', batch
         app.send('\x1b[5~' * 20)
-        app.wait('Enter — отправить', timeout=20)
+        wait_idle(app)
         app.send('\x15')
         app.command('Ask a timed question, then continue after disconnect.')
         app.wait('Can we continue after reconnect?', timeout=20)
@@ -511,13 +566,18 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Ответ 15: проверка транспорта настоящего dsh.', timeout=20)
         assert any('answer_to_pending_question' in json.dumps(message) for message in model_calls[14]['messages']), 'Continued reply was not tagged by dsh'
         app.send('\x1b[5~' * 20)
-        app.wait('Enter — отправить', timeout=20)
+        wait_idle(app)
         app.command('Ask one more question for cancellation.')
         app.wait('Cancel this unanswered question?', timeout=20)
         app.send('\x1b[19~')
         app.wait('Выполнение остановлено.', timeout=20)
         assert len(model_calls) == 16, 'Unexpected question retry or duplicate reply'
         wait_for(question_deferred)
+        if args.through_decisions:
+            print('Actual dsh tools and decisions checkpoint: raw results, expansion, permission grant/reject/cancel, questions, reconnect and no resubmission OK')
+            app.send('\x04')
+            app.exited()
+            raise SystemExit(0)
         app.command('QUEUE FIRST')
         app.wait('Ответ 17: ', timeout=20)
         app.wait('Enter — в очередь')
@@ -549,7 +609,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
             return 'ОЧЕРЕДЬ DSH ·' not in app.text
         wait_for(queue_drained)
         app.send('\x1b[5~' * 20)
-        app.wait('Enter — отправить', timeout=20)
+        wait_idle(app)
         assert len(model_calls) == 19, 'Queue execution retried or lost a model turn'
         markers = ['QUEUE FIRST', 'QUEUE SECOND', 'QUEUE THIRD']
         for number, expected in zip([17, 18, 19], markers):
@@ -596,7 +656,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Ответ 21: проверка транспорта настоящего dsh.', timeout=20)
         wait_for(queue_drained)
         app.send('\x1b[5~' * 20)
-        app.wait('Enter — отправить', timeout=20)
+        wait_idle(app)
         assert len(model_calls) == 21, 'Removed task executed or a retained task was lost'
         assert not any('REMOVE THIS PENDING TASK' in json.dumps(message) for message in model_calls[20]['messages']), 'Removed prompt leaked into model history'
         assert any('KEEP THIS PENDING TASK' in json.dumps(message) for message in model_calls[20]['messages']), 'Remaining queued task was not executed'
@@ -651,7 +711,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Ответ 24: проверка транспорта настоящего dsh.', timeout=25)
         wait_for(queue_drained)
         app.send('\x1b[5~' * 20)
-        app.wait('Enter — отправить', timeout=20)
+        wait_idle(app)
         assert len(model_calls) == 24, 'Editing duplicated or lost a queued turn'
         changed = [message for message in model_calls[22]['messages'] if message.get('role') == 'user'][-1]
         retained = [message for message in model_calls[23]['messages'] if message.get('role') == 'user'][-1]
@@ -698,7 +758,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('Ответ 27: проверка транспорта настоящего dsh.', timeout=25)
         wait_for(queue_drained)
         app.send('\x1b[5~' * 20)
-        app.wait('Enter — отправить', timeout=20)
+        wait_idle(app)
         assert len(model_calls) == 27, 'Steering duplicated or lost model work'
         hint = [message for message in model_calls[25]['messages'] if message.get('role') == 'user'][-1]
         retained = [message for message in model_calls[26]['messages'] if message.get('role') == 'user'][-1]
@@ -746,8 +806,8 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         assert created['rpcId'] == create_id and created['result']['ok'], 'Actual PTC session could not be created'
         nested_session = created['result']['value']['sessionId']
         app.command('/session ' + nested_session)
-        app.wait('Сессия · ' + nested_session, timeout=20)
-        app.wait('Введите сообщение.', timeout=20)
+        app.wait(nested_session, timeout=20)
+        app.wait('DeepSeek Harness', timeout=20)
         app.command('Run nested file tools in the isolated PTC preset.')
         app.wait('Внутри: run_code', timeout=25)
         app.wait('tui_nested_wait · ◌ Выполняется', timeout=20)
@@ -766,7 +826,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         (project / 'nested-release.marker').write_text('release\n')
         app.wait('Ответ 29: проверка транспорта настоящего dsh.', timeout=25)
         app.send('\x1b[5~' * 20)
-        app.wait('Enter — отправить', timeout=20)
+        wait_idle(app)
         app.send('NESTED HISTORY DRAFT')
         app.send('\x1b[23~')
         app.wait('PgUp/PgDn')
@@ -794,6 +854,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         app.wait('run_code · ■ Остановлено', timeout=20)
         app.wait('bash · ■ Остановлено', timeout=20)
         app.command('Run a command with incremental stdout and stderr.')
+        expand_running_bash(app)
         app.wait('Вывод команды', timeout=25)
         app.wait('LIVE STDOUT FIRST', timeout=25)
         app.wait('LIVE STDERR SECOND', timeout=20)
@@ -804,6 +865,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         previous_app.close(root / 'before-stdout-reconnect.ansi')
         app = Terminal(str(Path(args.binary).resolve()), ['--session', nested_session], {**env, 'DSH_TUI_URL': login})
         app.resize(120, 42)
+        expand_running_bash(app)
         app.wait('Вывод команды', timeout=20)
         app.wait('LIVE STDOUT FIRST', timeout=20)
         app.wait('LIVE STDERR SECOND')
@@ -814,6 +876,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
             previous_app.close(root / f'before-stdout-{columns}x{rows}.ansi')
             app = Terminal(str(Path(args.binary).resolve()), ['--session', nested_session],
                            {**env, 'DSH_TUI_URL': login}, columns=columns, rows=rows)
+            expand_running_bash(app)
             if columns > 80:
                 app.wait('Вывод команды', timeout=20)
             app.send('\x1b[6~' * 200)
@@ -825,10 +888,11 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-real-chat-') as home:
         (project / 'stdout-release.marker').write_text('release\n')
         app.wait('Ответ 32: проверка транспорта настоящего dsh.', timeout=25)
         app.send('\x1b[5~' * 20)
-        app.wait('Enter — отправить', timeout=20)
+        wait_idle(app)
         results = [message for message in model_calls[31]['messages'] if message.get('role') == 'tool']
         assert any('LIVE FINAL OUTPUT' in json.dumps(message.get('content')) for message in results), 'Observation consumed the model output cursor'
         app.command('Run an incremental command and cancel it.')
+        expand_running_bash(app)
         app.wait('Вывод команды', timeout=20)
         app.wait('LIVE BEFORE CANCEL', timeout=20)
         app.send('\x1b[19~')
