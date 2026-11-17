@@ -16,7 +16,7 @@ func conversationModel(t *testing.T) *model {
 	applyChat(t, m, `{"type":"snapshot","header":{"id":"s"},"cursor":2,"records":[{"type":"event","event":{"seq":0,"type":"user/message","time":1700000000000,"data":{"source":{"kind":"user"},"content":[{"type":"text","text":"Привет 世界"}]}}},{"type":"event","event":{"seq":1,"type":"step/start","time":1700000001000,"data":{"turn":1,"step":1}}},{"type":"event","event":{"seq":2,"type":"assistant/message","time":1700000002500,"data":{"turn":1,"step":1,"message":{"content":[{"type":"text","text":"Ответ **готов**."}]}}}}]}`)
 	return m
 }
-func TestConversationColumnMessagesAndCopyHitAreas(t *testing.T) {
+func TestConversationColumnMessagesAndKeyboardCopy(t *testing.T) {
 	for _, language := range []string{"ru", "en"} {
 		for _, size := range []tea.WindowSizeMsg{{Width: 80, Height: 24}, {Width: 100, Height: 30}, {Width: 160, Height: 40}} {
 			t.Run(language+"/"+fmt.Sprint(size.Width), func(t *testing.T) {
@@ -30,18 +30,21 @@ func TestConversationColumnMessagesAndCopyHitAreas(t *testing.T) {
 				m.rebuild()
 				view := m.View()
 				if !m.conversationVisible() || lipgloss.Width(view) > size.Width || lipgloss.Height(view) > size.Height {
-					t.Fatal("conversation overflowed or returned to landing")
+					t.Fatalf("conversation overflowed or returned to landing: got %dx%d, terminal %dx%d", lipgloss.Width(view), lipgloss.Height(view), size.Width, size.Height)
 				}
 				col := m.chatColumn()
 				content := m.conversationArea()
-				if col.width > conversationMaxWidth || content.x != col.x+2 || content.y != bodyTop || m.composerBox().x != col.x {
+				if col.width <= 0 || col.x+col.width >= size.Width || content.x != col.x+2 || content.y != bodyTop || m.composerBox().x != col.x {
 					t.Fatal("viewport, composer and column diverged")
 				}
 				if m.composerBox().y != bodyTop+content.height {
 					t.Fatal("viewport and composer do not meet")
 				}
-				if len(m.chatCopyHits) != 2 {
-					t.Fatal("committed messages have no copy targets")
+				if size.Width >= 160 && col.width <= 100 {
+					t.Fatal("wide conversation retained narrow centered column")
+				}
+				if strings.Contains(clean(view), "["+tr("Копировать")+"]") {
+					t.Fatal("conversation retained permanent copy actions")
 				}
 				lines := strings.Split(clean(view), "\n")
 				user, agent := -1, -1
@@ -56,22 +59,11 @@ func TestConversationColumnMessagesAndCopyHitAreas(t *testing.T) {
 				if agent < 0 || user != agent+2 {
 					t.Fatal("user card and assistant are not aligned to the same left column")
 				}
-				for _, hit := range m.chatCopyHits {
-					y := content.y + hit.row - m.viewport.YOffset
-					if y >= len(lines) || !strings.Contains(lines[y], "["+tr("Копировать")+"]") {
-						t.Fatal("copy target did not match rendered row")
-					}
-					visible := ansi.TruncateLeft(lines[y], content.x+hit.x, "")
-					if !strings.HasPrefix(visible, "["+tr("Копировать")+"]") {
-						t.Fatal("copy target did not match rendered column")
-					}
-				}
 				var copied string
 				m.copyClipboard = func(_ context.Context, value string) (string, error) { copied = value; return "copied", nil }
-				hit := m.chatCopyHits[1]
-				_, cmd := m.Update(tea.MouseMsg{X: content.x + hit.x, Y: content.y + hit.row, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress})
+				_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlY})
 				if cmd == nil {
-					t.Fatal("copy click did not execute")
+					t.Fatal("keyboard copy did not execute")
 				}
 				m.Update(cmd())
 				if copied != "Ответ **готов**." || m.input.Value() != "preserved draft" {
@@ -152,7 +144,7 @@ func TestConversationCopySurvivesLanguageSwitch(t *testing.T) {
 	}
 }
 
-func TestConversationMessageCopyGeometryAfterWrapping(t *testing.T) {
+func TestConversationMessageLayoutAfterWrapping(t *testing.T) {
 	for _, language := range []string{"ru", "en"} {
 		for _, width := range []int{75, 95, 96} {
 			for _, human := range []bool{true, false} {
@@ -163,7 +155,6 @@ func TestConversationMessageCopyGeometryAfterWrapping(t *testing.T) {
 					defer activeEnglish.Store(false)
 					m.session.AgentPreset = strings.Repeat("long-agent-preset-", 12)
 					message := chatMessage{seq: 42, human: human, assistant: !human, time: 1700000000000, elapsedMs: 1500, text: strings.Repeat("世界🙂 Пример é ", 22) + "\n\n```go\nfmt.Println(\"hello\")\n```"}
-					m.chatCopyHits = nil
 					rendered := m.conversationMessage(message, width, 17)
 					rows := strings.Split(rendered, "\n")
 					for _, line := range rows {
@@ -171,18 +162,11 @@ func TestConversationMessageCopyGeometryAfterWrapping(t *testing.T) {
 							t.Fatalf("message row overflow: width=%d, available=%d", lipgloss.Width(line), width)
 						}
 					}
-					if len(m.chatCopyHits) != 1 {
-						t.Fatal("wrapped message should have exactly one copy control")
+					if strings.Contains(clean(rendered), "["+tr("Копировать")+"]") {
+						t.Fatal("wrapped message retained permanent copy action")
 					}
-					hit := m.chatCopyHits[0]
-					local := hit.row - 17
-					if local < 0 || local >= len(rows) {
-						t.Fatal("copy row outside rendered message")
-					}
-					label := "[" + tr("Копировать") + "]"
-					cell := ansi.TruncateLeft(ansi.Strip(rows[local]), hit.x, "")
-					if !strings.HasPrefix(cell, label) || hit.width != lipgloss.Width(label) || hit.seq != 42 {
-						t.Fatal("copy geometry does not match wrapped message")
+					if human && len(rows) != strings.Count(ansi.Hardwrap(clean(message.text), width-2, true), "\n")+2 {
+						t.Fatal("ordinary human message gained a permanent metadata row")
 					}
 					if human && !strings.HasPrefix(ansi.Strip(rows[0]), "┃ ") {
 						t.Fatal("user message lost left accent")
@@ -196,14 +180,47 @@ func TestConversationMessageCopyGeometryAfterWrapping(t *testing.T) {
 	}
 }
 
-func TestConversationNonCopyableMessagesHaveNoInvisibleTarget(t *testing.T) {
+func TestConversationDirectCopyPreservesSourcesWithoutButtons(t *testing.T) {
 	m := conversationModel(t)
-	for _, message := range []chatMessage{{text: "", assistant: true}, {text: "approval text", approvalID: "permission"}} {
-		m.chatCopyHits = nil
-		rendered := m.conversationMessage(message, 75, 0)
-		if len(m.chatCopyHits) != 0 || strings.Contains(clean(rendered), "["+tr("Копировать")+"]") {
-			t.Fatal("noncopyable message has a copy action")
+	m.input.SetValue("retained draft")
+	for _, message := range m.chat.messages {
+		if message.tool != nil || message.approvalID != "" {
+			continue
 		}
+		var copied string
+		m.copyClipboard = func(_ context.Context, source string) (string, error) { copied = source; return "copied", nil }
+		cmd := m.copyConversation(message.seq)
+		if cmd == nil {
+			t.Fatal("message source copy was lost with hidden buttons")
+		}
+		m.Update(cmd())
+		if copied != message.text || m.input.Value() != "retained draft" {
+			t.Fatal("direct copy changed original message or draft")
+		}
+	}
+}
+
+func TestConversationScrollAndCopyDoNotJumpToTail(t *testing.T) {
+	m := conversationModel(t)
+	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m.chat.messages[1].text = strings.Repeat("long answer line\n", 90)
+	m.rebuild()
+	m.viewport.GotoTop()
+	content := m.conversationArea()
+	m.mouse(tea.MouseMsg{X: content.x + 2, Y: content.y + 2, Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown})
+	if m.viewport.YOffset <= 0 {
+		t.Fatal("conversation mouse wheel did not scroll history")
+	}
+	offset := m.viewport.YOffset
+	m.input.SetValue("draft while reading")
+	m.copyClipboard = func(_ context.Context, source string) (string, error) { return "copied", nil }
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlY})
+	if cmd == nil {
+		t.Fatal("copy shortcut unavailable while reading older messages")
+	}
+	m.Update(cmd())
+	if m.viewport.YOffset != offset || m.input.Value() != "draft while reading" {
+		t.Fatal("copy jumped to tail or lost draft")
 	}
 }
 

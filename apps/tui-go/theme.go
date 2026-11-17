@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 
 	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
@@ -39,6 +40,24 @@ func surface(text string, color theme.Token) string {
 	lines := strings.Split(painted, "\n")
 	for i := range lines {
 		lines[i] = background + lines[i] + "\x1b[0m"
+	}
+	return strings.Join(lines, "\n")
+}
+
+// dimBackdrop replaces presentation ANSI rather than replaying nested colors or
+// terminal actions. Plain characters, spaces, graphemes and line breaks remain
+// exactly in place; modal geometry still refers to the original terminal cells.
+func dimBackdrop(base string) string {
+	plain := ansi.Strip(base)
+	sample := lipgloss.NewStyle().Foreground(theme.Color(theme.BackdropText)).Background(theme.Color(theme.Backdrop)).Render(" ")
+	split := strings.IndexByte(sample, ' ')
+	if split <= 0 {
+		return plain
+	}
+	colors := sample[:split]
+	lines := strings.Split(plain, "\n")
+	for i := range lines {
+		lines[i] = colors + lines[i] + "\x1b[0m"
 	}
 	return strings.Join(lines, "\n")
 }

@@ -32,7 +32,6 @@ type conversationPressure struct {
 	Pressure  *int64 `json:"pressureTokens"`
 	Capacity  *int64 `json:"contextWindow"`
 }
-type conversationCopyHit struct{ row, x, width, seq int }
 type conversationCopyResult struct {
 	owner     *chatState
 	operation int
@@ -49,13 +48,7 @@ func (m *model) conversationVisible() bool {
 	return m.page == chatPage && !m.landingVisible()
 }
 func (m *model) chatColumn() area {
-	w, h := m.contentSize()
-	x := 0
-	if m.sidebarVisible() {
-		x = sidebarWidth + sidebarGap
-	}
-	column := min(w, conversationMaxWidth)
-	return area{x + (w-column)/2, bodyTop, column, h}
+	return m.conversationLayout().chat
 }
 func (m *model) conversationArea() area {
 	x, y := 0, bodyTop+3
@@ -87,7 +80,7 @@ func (m *model) conversationHeader(title string) (string, string, []agentHit) {
 func (m *model) conversationView(title string, w, h int) string {
 	column := m.chatColumn()
 	lines := []string{}
-	chatHeight := max(1, h-conversationComposerHeight-1)
+	chatHeight := max(1, h-conversationComposerHeight)
 	for _, line := range strings.Split(m.viewport.View(), "\n") {
 		lines = append(lines, "  "+ansi.Truncate(line, column.width-4, "…"))
 	}
@@ -98,7 +91,6 @@ func (m *model) conversationView(title string, w, h int) string {
 		lines = append(lines, "")
 	}
 	lines = append(lines, m.conversationComposerView())
-	lines = append(lines, muted().Render(ansi.Truncate(m.conversationFooter(), column.width, "…")))
 	content := strings.Join(lines, "\n")
 	return lipgloss.PlaceHorizontal(w, lipgloss.Center, lipgloss.NewStyle().Width(column.width).Height(h).Render(content))
 }
@@ -179,7 +171,6 @@ func (m *model) conversationMessage(message chatMessage, width, row int) string 
 	width = max(4, width)
 	role := conversationRoleLabel(message.role)
 	human := message.human || role == tr("ВЫ") || strings.HasPrefix(role, tr("ВЫ ·"))
-	assistant := message.assistant || role == tr("АГЕНТ")
 	part := ""
 	if human {
 		wrapped := ansi.Hardwrap(clean(message.text), width-2, true)
@@ -193,35 +184,8 @@ func (m *model) conversationMessage(message chatMessage, width, row int) string 
 		part = ansi.Hardwrap(m.messageText(message, width, false), width, true)
 	}
 	part = strings.TrimRight(part, "\n")
-	metadata := []string{}
-	if assistant {
-		metadata = append(metadata, tr("Агент"))
-	} else if role != "" && (!human || role != tr("ВЫ")) {
-		metadata = append(metadata, role)
-	}
-	if message.elapsedMs > 0 {
-		metadata = append(metadata, fmt.Sprintf(tr("Ответ за %.1f с"), float64(message.elapsedMs)/1000))
-	}
-	if clock := messageClock(message.time); clock != "" {
-		metadata = append(metadata, clock)
-	}
-	canCopy := message.tool == nil && message.approvalID == "" && message.text != ""
-	meta := strings.Join(metadata, " · ")
-	if canCopy {
-		copyLabel := "[" + tr("Копировать") + "]"
-		// Reserve space before truncating metadata so the complete visible copy
-		// action and its hit range always agree, including wide Unicode messages.
-		meta = ansi.Truncate(meta, max(0, width-lipgloss.Width(copyLabel)-2), "…")
-		copyX := 0
-		if meta != "" {
-			copyX = lipgloss.Width(meta) + 2
-			meta += "  "
-		}
-		meta += copyLabel
-		m.chatCopyHits = append(m.chatCopyHits, conversationCopyHit{row: row + strings.Count(part, "\n") + 1, x: copyX, width: lipgloss.Width(copyLabel), seq: message.seq})
-	}
-	if meta != "" {
-		part += "\n" + muted().Render(ansi.Truncate(meta, width, "…"))
+	if meta := messageMetadata(message, width); meta != "" {
+		part += "\n" + muted().Render(meta)
 	}
 	return part + "\n"
 }
@@ -287,15 +251,6 @@ func (m *model) conversationMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 			m.navFocused, m.toolFocused = false, false
 			m.input.Focus()
 			return m.agentControl(hit.action), true
-		}
-	}
-	content := m.conversationArea()
-	if content.contains(msg.X, msg.Y) {
-		row := msg.Y - content.y + m.viewport.YOffset
-		for _, hit := range m.chatCopyHits {
-			if row == hit.row && msg.X >= content.x+hit.x && msg.X < content.x+hit.x+hit.width {
-				return m.copyConversation(hit.seq), true
-			}
 		}
 	}
 	return nil, false

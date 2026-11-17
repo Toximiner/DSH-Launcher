@@ -131,6 +131,13 @@ var paletteCatalog = []paletteItem{
 			m.viewport.GotoTop()
 			return nil
 		}},
+	{group: "Навигация", label: "Показать/скрыть контекст", hint: "",
+		enabled: func(m *model) bool { return m.page == chatPage },
+		run: func(m *model) tea.Cmd {
+			m.contextPanelHidden = !m.contextPanelHidden
+			m.resize()
+			return nil
+		}},
 	{group: "Навигация", label: "Установка и dsh", hint: "/runtime",
 		enabled: func(*model) bool { return true },
 		run:     func(m *model) tea.Cmd { return m.openRuntime("runtime") }},
@@ -580,16 +587,16 @@ func (m *model) paletteView(base string) string {
 	for i := first; i < min(len(rows), first+count); i++ {
 		row := rows[i]
 		if row.kind == "heading" {
-			lines = append(lines, accent().Render(tr(row.group)))
+			lines = append(lines, lipgloss.NewStyle().Foreground(theme.Color(theme.Secondary)).Render(tr(row.group)))
 			continue
 		}
 		item := paletteCatalog[row.index]
-		text := bar(tr(item.label), muted().Render(tr(item.hint)), inner)
+		text := muted().Render(bar(tr(item.label), tr(item.hint), inner))
 		if item.enabled != nil && !item.enabled(m) {
 			text = muted().Render(bar(tr(item.label), "—", inner))
 		}
 		if i == p.offset {
-			text = lipgloss.NewStyle().Width(inner).Foreground(theme.Color(theme.Text)).Background(theme.Color(theme.Active)).Render(text)
+			text = lipgloss.NewStyle().Width(inner).Foreground(theme.Color(theme.SelectionText)).Background(theme.Color(theme.Selection)).Render(ansi.Strip(text))
 		}
 		lines = append(lines, text)
 	}
@@ -605,5 +612,5 @@ func (m *model) paletteView(base string) string {
 		lines[i] = ansi.Truncate(lines[i], inner, "…")
 	}
 	front := lipgloss.NewStyle().Width(box.width).Height(box.height).Padding(0, 2).Foreground(theme.Color(theme.Text)).Background(theme.Color(theme.Panel)).Render(strings.Join(lines, "\n"))
-	return overlay(base, surface(front, theme.Panel), box.x, box.y, m.width-1)
+	return overlay(dimBackdrop(base), surface(front, theme.Panel), box.x, box.y, m.width-1)
 }

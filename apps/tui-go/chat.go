@@ -859,7 +859,6 @@ func (m *model) applyChatFrame(s *chatState, frame *chatFrame) error {
 
 func (m *model) chatView() string {
 	m.chatToolHits = nil
-	m.chatCopyHits = nil
 	s := m.chat
 	if s == nil {
 		return tr("Ожидание подключения чата…")

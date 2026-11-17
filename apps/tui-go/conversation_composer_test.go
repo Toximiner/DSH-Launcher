@@ -25,8 +25,8 @@ func TestCompactConversationComposerGeometryAndDraft(t *testing.T) {
 				cursor := m.input.Position()
 				box := m.composerBox()
 				_, height := m.contentSize()
-				if box.y != bodyTop+height-conversationComposerHeight-1 || box.height != conversationComposerHeight {
-					t.Fatal("composer is not pinned above its status row")
+				if box.y != bodyTop+height-conversationComposerHeight || box.height != conversationComposerHeight {
+					t.Fatal("composer is not pinned to the bottom of the body")
 				}
 				view := m.conversationComposerView()
 				if lipgloss.Width(view) != box.width || lipgloss.Height(view) != conversationComposerHeight {

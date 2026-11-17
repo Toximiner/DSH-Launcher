@@ -2,10 +2,14 @@
 
 [Русский](tui-rebuild-plan.md) | **English**
 
-The reference is OpenCode TUI 2.2.5 and the approved mockups. The main layout uses
-horizontal session tabs, a central conversation, a compact composer and the
-Ctrl+P command palette. Permanent menus and the left tree are removed. Backend,
-models and configuration remain native dsh features; the client stays on Go/Bubble Tea.
+The visual reference is the user's four OpenCode 2.3.0 screenshots (home,
+conversation with right context panel, command palette, session/project picker).
+They supersede approximate mockups and the earlier 2.2.5 reference where they differ.
+The implementation remains Go/Bubble Tea with actual dsh behavior and configuration.
+
+Existing `opencode.1` and `.2` builds are technical checkpoints, not a claim of
+visual parity. In `.2`, the width cap, repeated footer hints, permanent copy labels
+and global amber accent still differ from the supplied reference.
 
 ## Milestone 1: shell
 
@@ -57,17 +61,51 @@ Run separately from the repository root:
 ./build/previews/opencode-02/dsh-launcher-tui --start
 ```
 
-## Remaining approved plan
+## Milestone 3: correction from the user's screenshots
 
-3. Shared action registry for palette, slash commands and shortcuts; common
-   geometry/styling for model, session, settings and confirmation dialogs.
-4. Tools/permissions: compact expandable results, prominent errors/questions
-   and complete input capture by the topmost window.
-5. Settings, Plugins, Plugin Market, Automation tasks, files, terminals,
-   subagents, queue/history and installation/update/rollback/diagnostics:
-   gradually adopt the same visual system while preserving dsh operations.
-6. Final mockup comparison, Go race/PTY/actual-dsh scenarios in isolated profiles,
-   user review, and only then replacement of the installed TUI.
+Intermediate build: `0.2.0-preview.40-opencode.3`.
+
+- Removed the 100-column conversation cap. At 120+ columns a 30-column right
+  panel shows the title, known context and workspace; the palette includes
+  “Show/hide context”. Narrow terminals hide the panel automatically; home keeps
+  its centered composer. The first message reflows without a resize event.
+- One bottom line shows workspace, known context and Ctrl+P. Running/queue state,
+  plan/goal mode, delivery failures, archive and child read-only guidance replace
+  secondary details when needed.
+- Purple agent accent, teal palette groups/selection with dark selected text.
+  Opening the palette dims the backdrop without moving its text.
+- Removed permanent message clocks/copy buttons. Ctrl+Y, palette and history
+  selection still copy original source. Assistant metadata shows known role/duration;
+  semantic question and approval labels are preserved.
+- MCP inventory and historical model identity are omitted because current projected
+  records do not provide reliable data. Unified session/model pickers are still ahead.
+
+```sh
+./build/previews/opencode-03/dsh-launcher-tui --start
+```
+
+## Revised implementation order
+
+1. **Screenshot correction, preview `opencode.3` (implemented; user review pending).** Active conversation
+   uses the available width, with an optional right context panel on wide terminals;
+   home keeps a compact centered composer. One bottom status line shows workspace,
+   known context usage and commands. Agent accent is purple; list selection teal.
+   Ordinary messages have no permanent copy button or clock; source copying remains
+   through Ctrl+Y/palette/history. Preserve semantic question/approval/service labels.
+   Context shows actual dsh data only; absent historical model/MCP data is omitted.
+2. **Shared actions and pickers.** One action registry for palette, slash and shortcuts;
+   flat searchable grouped command/model/session/project pickers, Esc at top right,
+   teal selection and dimmed backdrop. Palette colors/backdrop start in preview3;
+   unifying remaining dialogs follows afterwards.
+3. **Tools and permissions.** Compact expandable results/thoughts, clear failures and
+   decisions, complete input capture by the topmost modal. Show only information dsh provides.
+4. **Auxiliary pages.** Settings, plugins/market, automation, files, terminals,
+   subagents, queue/history, install/update/rollback and diagnostics use the same
+   visual system while retaining operations and revision/confirmation safeguards.
+5. **Visual acceptance.** Compare actual captures of the four supplied scenes at a
+   wide size and at 100×30/80×24; test Go race/PTY/isolated real dsh. Ask for a specific
+   additional screenshot only when the current references leave a necessary state unclear.
+   User reviews intermediate builds before any replacement of an installed application.
 
 ## Verification and delivery
 

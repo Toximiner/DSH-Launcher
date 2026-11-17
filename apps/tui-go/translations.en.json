@@ -1449,5 +1449,9 @@
   "◌ Ожидание ответа…": "◌ Waiting for reply…",
   "! Отправка не подтверждена · /retry-send": "! Delivery unconfirmed · /retry-send",
   "! Не отправлено": "! Not sent",
-  "◌ Агент отвечает…": "◌ Agent is responding…"
+  "◌ Агент отвечает…": "◌ Agent is responding…",
+  "Контекст": "Context",
+  "Показать/скрыть контекст": "Show/hide context",
+  "%.1f с": "%.1f s",
+  "АГЕНТ ·": "AGENT ·"
 }

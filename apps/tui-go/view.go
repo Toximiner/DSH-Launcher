@@ -104,7 +104,7 @@ func (m *model) View() string {
 		right = lipgloss.PlaceHorizontal(w, lipgloss.Center, m.schedulesContent(box))
 	}
 	if m.page == 0 {
-		right = m.conversationView(title, w, bodyHeight)
+		right = m.conversationLayoutView(m.conversationView(title, m.chatColumn().width, bodyHeight))
 		if m.landingVisible() {
 			column := m.chatColumn()
 			right = lipgloss.PlaceHorizontal(w, lipgloss.Center, m.landingView(title, column.width, bodyHeight))
@@ -113,6 +113,9 @@ func (m *model) View() string {
 	body := right
 	hints := m.footerHints()
 	footer := bar(muted().Render(hints), muted().Render(tr("Ctrl+P команды")), width)
+	if m.page == chatPage {
+		footer = m.conversationFooter()
+	}
 	view = m.paletteView(m.runtimeView(m.approvalView(m.queueDialogView(m.settingsFormView(m.goalView(m.composeView(m.benchView(m.modelsView(m.historyCodeView(m.archiveView(m.forkView(m.renameView(m.chromeView(m.historyView(header + "\n" + body + "\n" + footer)))))))))))))))
 	view = lipgloss.NewStyle().Foreground(theme.Color(theme.Text)).Background(theme.Color(theme.Bg)).Width(width).Height(m.height).Render(view)
 	return surface(view, theme.Bg)
@@ -120,7 +123,7 @@ func (m *model) View() string {
 
 // footerContextUsage returns opencode-style context usage, e.g. "8.7K (4%)".
 func (m *model) footerContextUsage() string {
-	if m.session == nil {
+	if m.session == nil || m.sessionStale {
 		return ""
 	}
 	p := m.session.Pressure

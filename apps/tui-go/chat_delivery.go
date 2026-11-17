@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -34,18 +36,22 @@ func pendingPromptView(text, status string, width int) string {
 	return surface(strings.Join(lines, "\n"), theme.Panel) + "\n" + muted().Render(ansi.Truncate(promptDeliveryLabel(status), max(1, width), "…")) + "\n"
 }
 
-// Keep send/queue/readonly guidance visible before optional usage statistics.
+// One quiet footer mirrors the reference: workspace at left, context/actions at right.
+// Exceptional states replace idle metrics, keeping recovery and readonly guidance visible.
 func (m *model) conversationFooter() string {
-	_, hint := m.composerText()
 	width := m.chatColumn().width
-	stateParts := strings.Split(m.conversationStatus(), " · ")
-	var details []string
-	for _, part := range stateParts {
-		if part != tr("Режим: ")+m.modeLabel() {
-			details = append(details, part)
-		}
+	if m.landingVisible() {
+		return bar("", muted().Render(version), max(1, m.width-1))
 	}
-	state := strings.Join(details, " · ")
+	path := singleLine(filepath.Clean(m.workspace))
+	if home, err := os.UserHomeDir(); err == nil && (path == home || strings.HasPrefix(path, home+string(filepath.Separator))) {
+		path = "~" + strings.TrimPrefix(path, home)
+	}
+
+	state := ""
+	if m.chat != nil && m.chat.copyNote != "" {
+		state = singleLine(m.chat.copyNote)
+	}
 	if m.chat != nil && !m.chat.ready {
 		state = tr("◌ Подключение чата…")
 		if m.chat.streamError != "" {
@@ -55,17 +61,22 @@ func (m *model) conversationFooter() string {
 		if p := m.prompts[m.session.ID]; p != nil {
 			state = promptDeliveryLabel(p.Status)
 		} else if m.session.Running || m.chat != nil && m.chat.live != nil {
-			state = tr("◌ Агент отвечает…")
+			_, state = m.composerText()
+		} else if m.session.Address.Kind == "subagent" || m.isSessionArchived(m.session.ID) {
+			_, state = m.composerText()
 		}
 	}
-	// The actionable hint takes precedence; long diagnostics remain in the transcript.
-	if m.session != nil {
-		hint = m.modeLabel() + " · " + hint
+	if state == "" {
+		state = m.footerContextUsage()
 	}
-	left := ansi.Truncate(hint, max(1, width), "…")
-	remaining := width - lipgloss.Width(left) - 2
-	if remaining < 10 || state == "" {
-		return muted().Render(left)
+	if m.session != nil && m.modeLabel() != tr("обычный") {
+		state = m.modeLabel() + " · " + state
+		state = strings.TrimSuffix(state, " · ")
 	}
-	return bar(muted().Render(left), muted().Render(ansi.Truncate(state, remaining, "…")), width)
+	commands := tr("Ctrl+P команды")
+	right := commands
+	if state != "" {
+		right = ansi.Truncate(state, max(1, width-min(12, width/3)-lipgloss.Width(commands)-3), "…") + "  " + commands
+	}
+	return bar(muted().Render(path), muted().Render(right), width)
 }

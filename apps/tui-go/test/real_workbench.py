@@ -467,15 +467,15 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
             app.pump()
             return 'WORKBENCH_REPLY_1' in app.text and '◌ Агент отвечает…' not in app.text
         wait_for(committed_reply)
-        app.wait('[F8 Стоп]')
-        app.wait('1 ход · 1 шаг', timeout=20)
+        app.wait('Ctrl+P команды')
+        # Per-message metadata now uses actual duration, without session-wide counters.
         capture('WORKBENCH_REPLY_1', sizes=((160, 40), (100, 30), (80, 24)))
         model_row, model_line = next((y, line) for y, line in enumerate(app.screen.display) if 'fixture' in line and 'Запись' in line)
         model_column = model_line.index('fixture')
         app.send(f'\x1b[<0;{model_column + 2};{model_row + 1}M\x1b[<0;{model_column + 2};{model_row + 1}m')
         app.wait('Модель сессии')
         app.send('\x1b')
-        app.wait('[F8 Стоп]')
+        app.wait('Ctrl+P команды')
         # Ctrl+Y copies the committed source through PTY-only OSC 52.
         import base64
         import re
@@ -491,7 +491,7 @@ with tempfile.TemporaryDirectory(prefix='dsh-tui-workbench-') as directory:
         app.wait('История сессии')
         app.wait('WORKBENCH_REPLY_1')
         app.send('\x1b')
-        app.wait('[F8 Стоп]')
+        app.wait('Ctrl+P команды')
         user = [message for message in requests[0]['messages'] if message.get('role') == 'user']
         assert 'first line\nsecond line привет' in json.dumps(user, ensure_ascii=False).replace('\\n', '\n'), user
         assert 'sample.txt' in json.dumps(requests[0]['messages'], ensure_ascii=False), 'Uploaded file reference did not reach the model'

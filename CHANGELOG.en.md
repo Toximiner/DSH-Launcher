@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- Experimental TUI `preview.40-opencode.3` follows user screenshots more closely: full available conversation width, optional right context at 120+ columns and one workspace/context/command footer. Purple accent, teal palette and dimmed backdrop; no permanent clocks/copy buttons, with raw copying retained via Ctrl+Y/history. Fixes first-message reflow, long paths and stale context figures.
+
 - Experimental TUI `preview.40-opencode.2`: single-column conversation without duplicate headers, left-accent messages, pinned compact composer and delivery states. Markdown/code use contiguous surfaces and highlighting for both themes; source copy, current mode and semantic labels are preserved. “+ New” follows the tabs. The build is delivered separately.
 
 - Experimental TUI `preview.40-opencode.1`: first OpenCode-style shell with visited session tabs, per-session drafts, a compact home screen, neutral theme and Ctrl+P palette instead of permanent menus/tree. Fixes input capture, disabled actions, translations, geometry and conversation-tail anchoring on resize. The intermediate binary is separate from the installed TUI; conversation and auxiliary-screen styling remain in progress.

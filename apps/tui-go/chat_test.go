@@ -166,7 +166,8 @@ func TestChatNoticesFollowTailWithoutStealingHistoryScroll(t *testing.T) {
 		t.Fatal("incoming status stole the user's history scroll")
 	}
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	y := m.composerBox().y + conversationComposerHeight
+	m.session.Running = true
+	y := m.height - 1
 	footer := clean(m.conversationFooter())
 	x := m.composerBox().x + len([]rune(footer[:strings.Index(footer, "[F8 Стоп]")]))
 	if !strings.Contains(clean(strings.Split(m.View(), "\n")[y]), "[F8 Стоп]") {

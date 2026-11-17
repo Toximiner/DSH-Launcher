@@ -59,12 +59,14 @@ class TerminalPreview(unittest.TestCase):
         path = output / f'{self._testMethodName}-{name}-{screen.columns}x{screen.lines}.json'
         path.write_text(json.dumps({'columns': screen.columns, 'rows': screen.lines, 'cells': cells}))
 
-    def assert_composer_surface(self):
+    def assert_composer_surface(self, context_hidden=False):
         self.app.pump()
         screen = self.app.screen
-        width = min(screen.columns - 1, 100)
-        x = (screen.columns - 1 - width) // 2
-        y = screen.lines - 6
+        width = screen.columns - 1
+        if screen.columns >= 120 and not context_hidden:
+            width -= 32  # 30-cell context panel and 2-cell gap.
+        x = 0
+        y = screen.lines - 5
         for row in range(y, y + 4):
             self.assertEqual(screen.buffer[row][x].data, '┃', f'Composer edge moved at row {row}')
             for col in range(x, x + width):
@@ -235,7 +237,8 @@ class TerminalPreview(unittest.TestCase):
             self.capture('streaming')
             self.app.wait('Потоковый ответ из тестового dsh')
             self.capture('dialog')
-            self.app.wait('Enter — отправить')
+            self.app.wait('Потоковый ответ из тестового dsh',
+                          absent=('[F8 Стоп]', '◌ Ожидание ответа…', '◌ Отправка…'))
             self.app.send('Черновик для проверки')
             self.app.wait('Черновик для проверки')
             for columns, rows in ((80, 24), (100, 30), (160, 40)):
@@ -442,7 +445,7 @@ class TerminalPreview(unittest.TestCase):
         self.app.resize(80, 24)
         def resized():
             self.app.pump()
-            return self.app.screen.columns == 80 and any('Ctrl+P команды' in row for row in self.app.screen.display[-2:])
+            return self.app.screen.columns == 80 and 'Ctrl+P команды' in self.app.text
         wait_for(resized)
         self.app.command('/help')
         self.app.wait('Ctrl+Tab / Shift+Tab — сессии')

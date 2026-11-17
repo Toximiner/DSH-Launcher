@@ -17,7 +17,7 @@ import (
 	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
 )
 
-const version = "0.2.0-preview.40-opencode.2"
+const version = "0.2.0-preview.40-opencode.3"
 const help = "Ctrl+P — палитра команд: все страницы, настройки и действия\n" + "/runtime — установка и процесс dsh\n/updates — обновления и откат dsh/TUI\n/diagnostics — журнал, отчёт, уведомления\n" + "/compose — многострочное сообщение\n/attach <путь> — прикрепить файл до 2 МиБ\n/workspaces · /files · /terminals — рабочая область\n/presets — пресеты · Ctrl+N новая сессия\n/plugins · /commands · /packages — плагины\n/agents · /tasks · /jobs · /schedules — выполнение\n/parent — вернуться от подагента к родителю\nВ списках: F5 обновить · Esc назад\n" + "/market — маркет плагинов\n/new — новая сессия · /sessions — список\n/session <id> — подключить сессию\n/rename — название текущей · F3 в списке\n/archive · /restore — архив и возврат\nВ списке: a — архив · Ctrl+X — перенести\n/fork — новая ветка · Ctrl+B в списке\n/models — выбор модели сессии\n/providers — настройки провайдеров\nВ настройках: Enter — форма · F6 — провайдеры\n/mode default|plan|goal — режим\n/goal — состояние цели · F3 правка\n/goal <цель>|pause|resume|clear — работа с целью\n/stop — остановить агента · F8\n/retry-send — повторить неопределённую отправку\n/history — история сессии\nCtrl+F в истории — поиск · F3 — ещё\nCtrl+T в поиске — всё / сообщения / инструменты\nTab в истории — выбор · Ctrl+B — ветка\nCtrl+R в истории — Markdown/исходник\nВ истории: Ctrl+Y — копия · Ctrl+K — код\nF6/Shift+F6 — инструмент истории · Enter — детали\n/help — справка\n/clear — очистить экран\n/exit — выйти\nF5 — отправить ответы в окне вопросов\nF7 — вопросы и разрешения\nF9 — очередь · F3 правка · Ctrl+G уточнить\nF5 — сохранить задание в редакторе\nF6 — инструменты · Enter — раскрыть · Esc — ввод\n↑/↓ — история ввода · PgUp/PgDn — прокрутка\nCtrl+Tab / Shift+Tab — сессии · Ctrl+N — новая сессия\nМышь: клик — раздел или поле ввода · колесо — прокрутка"
 
 const (
@@ -36,7 +36,7 @@ var pages = []string{"Чат", "Сессии", "Настройки dsh", "Нас
 type quitMsg struct{}
 
 type model struct {
-	chatCopyHits        []conversationCopyHit
+	contextPanelHidden  bool
 	modelRevision       int
 	agentInfo           *agentContext
 	side                sidebarState
@@ -148,6 +148,7 @@ func clean(value string) string {
 
 func (m *model) rebuild() {
 	followTail := m.chat != nil && m.page == chatPage && m.viewport.AtBottom()
+	m.syncConversationGeometry()
 	var lines []string
 	for _, line := range m.lines {
 		label := tr("СПРАВКА")
@@ -185,9 +186,6 @@ func (m *model) rebuild() {
 			m.chatToolHits[i].row += offset
 			m.chatToolHits[i].end += offset
 		}
-		for i := range m.chatCopyHits {
-			m.chatCopyHits[i].row += strings.Count(ansi.Hardwrap(prefix, max(1, m.viewport.Width), true), "\n")
-		}
 		content = prefix + content
 	}
 	switch m.page {
@@ -221,9 +219,9 @@ func (m *model) resize() {
 		m.toolFocused = false
 	}
 	w, h := m.contentSize()
-	if m.page == 0 {
-		w = min(w, conversationMaxWidth)
-		h -= conversationComposerHeight + 1
+	if m.page == chatPage {
+		w = m.conversationLayout().chat.width
+		h -= conversationComposerHeight
 	}
 	m.viewport.Width = max(1, w-4)
 	m.viewport.Height = max(1, h-4)

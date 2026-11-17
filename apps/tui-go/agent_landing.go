@@ -109,7 +109,7 @@ func (m *model) landingBox() area {
 }
 func (m *model) composerBox() area {
 	box := m.chatColumn()
-	y := bodyTop + box.height - conversationComposerHeight - 1
+	y := bodyTop + box.height - conversationComposerHeight
 	if m.landingVisible() {
 		return m.landingBox()
 	}

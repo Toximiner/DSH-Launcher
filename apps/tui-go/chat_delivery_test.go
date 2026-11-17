@@ -45,10 +45,23 @@ func TestConversationFooterKeepsReadonlyAndQueueGuidance(t *testing.T) {
 	if !strings.Contains(clean(m.conversationFooter()), "/agents") {
 		t.Fatal("subagent lost readonly guidance")
 	}
+	m.session.Address.Kind = ""
+	m.session.Running = false
+	m.session.Plan = &planState{Active: true}
 	if !strings.Contains(clean(m.conversationFooter()), m.modeLabel()) {
-		t.Fatal("copy receipt hid the current mode")
+		t.Fatal("copy receipt hid the nondefault mode")
 	}
 	if lipgloss.Width(m.conversationFooter()) > m.chatColumn().width {
 		t.Fatal("footer exceeds conversation")
+	}
+}
+
+func TestFooterDoesNotPresentStalePressureAsCurrent(t *testing.T) {
+	m := conversationModel(t)
+	used, capacity := int64(25000), int64(100000)
+	m.session.Pressure = &conversationPressure{Projected: &used, Capacity: &capacity}
+	m.sessionStale = true
+	if m.footerContextUsage() != "" {
+		t.Fatal("footer displays stale context usage")
 	}
 }
