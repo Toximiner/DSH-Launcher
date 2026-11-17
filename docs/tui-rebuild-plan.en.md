@@ -33,11 +33,32 @@ From the repository root:
 This milestone does not finish conversation, tool or auxiliary-screen styling.
 Those screens retain their existing implementations for now.
 
+## Milestone 2: conversation and composer
+
+Intermediate build: `0.2.0-preview.40-opencode.2`.
+
+- “+ New” follows the visible tabs; unused space stays to its right.
+- One conversation column without duplicate headings or Chat/Trajectory tabs.
+  User messages use a quiet surface with a left accent; assistant Markdown has
+  compact time, duration and source-copy controls. Question, approval and service
+  message labels retain their meaning.
+- Four contiguous composer rows stay pinned below the transcript, with the same
+  agent/model/permission geometry as home. Mode, queue, stop, archive and child
+  read-only guidance remain visible.
+- Compact delivery, waiting, streaming and reconnect states; uncertain delivery
+  retains explicit retry guidance. No automatic prompt retries are introduced.
+- Code surfaces have language labels, wrapping and highlighting for both themes;
+  Markdown caching accounts for language, theme and terminal color profile.
+- F11/palette still opens history. Modal and tool styling belongs to later stages.
+
+Run separately from the repository root:
+
+```sh
+./build/previews/opencode-02/dsh-launcher-tui --start
+```
+
 ## Remaining approved plan
 
-1. Adjust the first shell following user review.
-2. Conversation/composer: OpenCode-style messages, Markdown/code, pinned input
-   and compact sending/running/reconnection states.
 3. Shared action registry for palette, slash commands and shortcuts; common
    geometry/styling for model, session, settings and confirmation dialogs.
 4. Tools/permissions: compact expandable results, prominent errors/questions

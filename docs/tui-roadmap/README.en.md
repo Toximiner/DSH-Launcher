@@ -1,6 +1,6 @@
 # TUI development roadmap
 
-The first OpenCode-style shell has a separate intermediate build. See the [rebuild plan](../tui-rebuild-plan.en.md) for current scope and remaining milestones.
+The OpenCode-style shell and conversation have separate intermediate builds. Current milestone: conversation/composer (`opencode.2`); next: shared actions and dialogs. See the [rebuild plan](../tui-rebuild-plan.en.md).
 
 Plugin Market and Automation tasks now follow the GUI structure: dedicated pages, cards and status indicators; tasks have status filters and creation/editing forms. Delivery history is readable, with explicit time zones. F2 in a form opens advanced JSON for complex rules. Revision checks and confirmation remain in place.
 

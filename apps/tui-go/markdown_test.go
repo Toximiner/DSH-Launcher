@@ -4,6 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -12,7 +16,7 @@ func TestMarkdownPreservesCodeLinksUnicodeAndTableContent(t *testing.T) {
 	source := "# Heading **bold**\n\nA *small* paragraph with `a < b && c` and [docs](https://example.test/a).\n\n3. first\n4. second\n   - nested\n\n> quoted text\n\n```go\n\tfmt.Println(\"世界\")\n\n// a < b & c\n```\n\n| Name | Value |\n| :--- | ---: |\n| 世界 | 42 |\n| Кириллица | 🙂 |\n"
 	rendered := renderMarkdown(source, 50)
 	plain := ansi.Strip(rendered)
-	for _, want := range []string{"Heading bold", "a < b && c", "docs", "(https://example.test/a)", "3. first", "4. second", "• nested", "│ quoted text", "Код · go", "    fmt.Println(\"世界\")", "// a < b & c", "世界", "Кириллица", "42", "🙂", "┬"} {
+	for _, want := range []string{"Heading bold", "a < b && c", "docs", "(https://example.test/a)", "3. first", "4. second", "• nested", "│ quoted text", "go", "    fmt.Println(\"世界\")", "// a < b & c", "世界", "Кириллица", "42", "🙂", "┬"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("missing %q in:\n%s", want, plain)
 		}
@@ -117,5 +121,93 @@ func TestMarkdownHistorySelectionUsesRenderedRows(t *testing.T) {
 	m.historyKey(tea.KeyMsg{Type: tea.KeyCtrlR})
 	if h.rawMarkdown {
 		t.Fatal("query editing toggled history source mode")
+	}
+}
+
+func TestMarkdownCodePanelWrapsAndPaintsEveryRow(t *testing.T) {
+	syntaxTestProfile(t)
+	defer theme.SetLight(false)
+	source := "\tprintln(\"世界 👩🏽‍💻 Привет\", 42) // " + strings.Repeat("long-value", 15) + "\n\nreturn nil\n"
+	for _, light := range []bool{false, true} {
+		theme.SetLight(light)
+		background := lipgloss.NewStyle().Background(theme.Color(theme.Panel)).Render(" ")
+		background = background[:strings.IndexByte(background, ' ')]
+		for _, width := range []int{50, 74, 94} {
+			rendered := renderMarkdown("```go\n"+source+"```", width)
+			lines := strings.Split(rendered, "\n")
+			if strings.TrimSpace(ansi.Strip(lines[0])) != "go" {
+				t.Fatal("code label is not compact")
+			}
+			if strings.Contains(ansi.Strip(rendered), "┌") || strings.Contains(ansi.Strip(rendered), "│") {
+				t.Fatal("code retained decorative box borders")
+			}
+			for _, line := range lines {
+				if ansi.StringWidth(line) != width {
+					t.Fatalf("panel row does not fill %d cells: %q", width, line)
+				}
+				if !strings.HasPrefix(line, background) {
+					t.Fatal("panel row starts outside its surface")
+				}
+				// Syntax resets must restore the panel before the remaining visible cells.
+				for _, tail := range strings.Split(line, "\x1b[0m")[1:] {
+					if tail != "" && !strings.HasPrefix(tail, background) {
+						t.Fatal("syntax reset punched a background seam")
+					}
+				}
+			}
+			got := strings.Join(strings.Fields(ansi.Strip(strings.Join(lines[1:], "\n"))), "")
+			want := strings.Join(strings.Fields(source), "")
+			if got != want {
+				t.Fatal("code wrapping changed source characters", got, want)
+			}
+			if !strings.Contains(ansi.Strip(rendered), "👩🏽‍💻") {
+				t.Fatal("wrapping split an emoji grapheme")
+			}
+		}
+	}
+}
+
+func TestMarkdownNestedListsQuotesAndCodeFitConversationWidths(t *testing.T) {
+	source := "# Heading 世界\n\nParagraph **strong** and *emphasis* " + strings.Repeat("long-url-without-breaks", 12) + ".\n\n1. First\n   - Nested entry 世界\n\n     ```json\n     {\"key\": \"" + strings.Repeat("世界🙂", 30) + "\"}\n     ```\n\n> Quoted **bold** content\n>\n> ```sh\n> printf '%s' \"" + strings.Repeat("value", 40) + "\"\n> ```\n"
+	for _, width := range []int{50, 74, 94} {
+		rendered := renderMarkdown(source, width)
+		for _, line := range strings.Split(rendered, "\n") {
+			if ansi.StringWidth(line) > width {
+				t.Fatalf("nested Markdown overflow at %d: %q", width, line)
+			}
+		}
+		plain := ansi.Strip(rendered)
+		for _, want := range []string{"Heading 世界", "1. First", "• Nested entry 世界", "json", "sh", "│ Quoted bold content"} {
+			if !strings.Contains(plain, want) {
+				t.Fatalf("missing semantic content %q", want)
+			}
+		}
+	}
+}
+
+func TestMarkdownCacheSeparatesThemeLanguageAndColorProfile(t *testing.T) {
+	syntaxTestProfile(t)
+	defer theme.SetLight(false)
+	defer activeEnglish.Store(false)
+	m := newModel()
+	message := chatMessage{assistant: true, text: "```\nunchanged source 世界\n```"}
+	dark := m.messageText(message, 50, false)
+	theme.SetLight(true)
+	light := m.messageText(message, 50, false)
+	if dark == light || len(m.markdown.entries) != 2 {
+		t.Fatal("theme reused stale Markdown styling")
+	}
+	activeEnglish.Store(true)
+	english := m.messageText(message, 50, false)
+	if !strings.Contains(ansi.Strip(english), "Code") || len(m.markdown.entries) != 3 {
+		t.Fatal("language reused cached code label")
+	}
+	lipgloss.SetColorProfile(termenv.Ascii)
+	plain := m.messageText(message, 50, false)
+	if strings.Contains(plain, "\x1b[") || len(m.markdown.entries) != 4 {
+		t.Fatal("color profile reused styled Markdown")
+	}
+	if m.messageText(message, 50, true) != message.text {
+		t.Fatal("presentation changed authoritative copy source")
 	}
 }

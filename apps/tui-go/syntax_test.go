@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+
 	"github.com/alecthomas/chroma/v2"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -110,6 +112,27 @@ func TestSyntaxLexerErrorsAndPanicsFallBackWithoutPartialOutput(t *testing.T) {
 		delete(syntaxLexers, name)
 		if got != source {
 			t.Fatal("lexer failure changed text or retained partial colors")
+		}
+	}
+}
+
+func TestSyntaxColorsRemainReadableInLightAndDarkThemes(t *testing.T) {
+	syntaxTestProfile(t)
+	defer theme.SetLight(false)
+	source := "func main() { println(\"世界\", 42) } // comment\n"
+	theme.SetLight(false)
+	dark := highlightCode(source, "go", newSyntaxBudget())
+	theme.SetLight(true)
+	light := highlightCode(source, "go", newSyntaxBudget())
+	if dark == light {
+		t.Fatal("light theme retained dark-only syntax palette")
+	}
+	if ansi.Strip(dark) != source || ansi.Strip(light) != source {
+		t.Fatal("theme switch changed source")
+	}
+	for _, kind := range []chroma.TokenType{chroma.Comment, chroma.Keyword, chroma.LiteralString, chroma.LiteralNumber, chroma.NameFunction, chroma.NameBuiltin, chroma.Operator} {
+		if syntaxColor(kind) == "" {
+			t.Fatal("supported token lost syntax color")
 		}
 	}
 }

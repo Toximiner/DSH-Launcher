@@ -1444,5 +1444,10 @@
   "◌ Чтение настроек dsh": "◌ Reading dsh settings",
   "✓ Готово": "✓ Done",
   "✓ Снимок настроек dsh": "✓ dsh settings snapshot",
-  "＋ Добавить запись": "＋ Add entry"
+  "＋ Добавить запись": "＋ Add entry",
+  "◌ Отправка…": "◌ Sending…",
+  "◌ Ожидание ответа…": "◌ Waiting for reply…",
+  "! Отправка не подтверждена · /retry-send": "! Delivery unconfirmed · /retry-send",
+  "! Не отправлено": "! Not sent",
+  "◌ Агент отвечает…": "◌ Agent is responding…"
 }

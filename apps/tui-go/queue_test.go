@@ -150,9 +150,9 @@ func TestQueueMasksContextAndKeepsStopMouseAligned(t *testing.T) {
 	if !strings.Contains(hint, "в очередь") {
 		t.Fatal("busy composer did not explain queue submission")
 	}
-	_, height := m.contentSize()
-	y := bodyTop + height - composerHeight - 1 + 4
-	x := sidebarWidth + sidebarGap + 2 + len([]rune(hint[:strings.Index(hint, "[F8 Стоп]")]))
+	y := m.composerBox().y + conversationComposerHeight
+	footer := clean(m.conversationFooter())
+	x := m.composerBox().x + len([]rune(footer[:strings.Index(footer, "[F8 Стоп]")]))
 	if !strings.Contains(strings.Split(clean(m.View()), "\n")[y], "[F8 Стоп]") || m.mouse(tea.MouseMsg{X: x, Y: y, Button: tea.MouseButtonLeft, Action: tea.MouseActionPress}) == nil {
 		t.Fatal("queue hint broke the Stop mouse target")
 	}

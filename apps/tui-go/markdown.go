@@ -14,14 +14,17 @@ import (
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+)
 
 const markdownInputLimit = 256 << 10
 const markdownCacheLimit = 8 << 20
 
 type markdownKey struct {
-	text  string
-	width int
+	text           string
+	width          int
+	light, english bool
+	profile        int
 }
 type markdownCache struct {
 	entries map[markdownKey]string
@@ -36,7 +39,7 @@ func (m *model) messageText(message chatMessage, width int, raw bool) string {
 	if m.markdown == nil {
 		m.markdown = &markdownCache{entries: make(map[markdownKey]string)}
 	}
-	key := markdownKey{message.text, max(1, min(512, width))}
+	key := markdownKey{text: message.text, width: max(1, min(512, width)), light: theme.IsLight(), english: activeEnglish.Load(), profile: int(lipgloss.ColorProfile())}
 	if rendered, ok := m.markdown.entries[key]; ok {
 		return rendered
 	}
@@ -172,17 +175,29 @@ func prefixMarkdown(value, prefix string) string {
 	return strings.Join(lines, "\n")
 }
 func (r *terminalMarkdown) code(node ast.Node, language string, width int) string {
-	label := tr("Код")
-	if language != "" {
-		label += " · " + language
+	// A single panel surface separates source from prose without a box around it.
+	// Reserve padding before wrapping, and fill every row including empty lines.
+	padding := min(2, max(0, (width-1)/2))
+	inner := max(1, width-padding*2)
+	label := singleLine(language)
+	if label == "" {
+		label = tr("Код")
 	}
+	label = ansi.Truncate(label, inner, "…")
 	content := strings.TrimSuffix(string(node.Lines().Value(r.source)), "\n")
 	content = strings.ReplaceAll(content, "\t", "    ")
 	if r.syntax == nil {
 		r.syntax = newSyntaxBudget()
 	}
 	content = highlightCode(content, language, r.syntax)
-	return muted().Render(ansi.Truncate("┌─ "+label, width, "…")) + "\n" + prefixMarkdown(ansi.Hardwrap(content, max(1, width-2), true), "│ ") + "\n" + muted().Render(strings.Repeat("─", min(width, 16)))
+	content = ansi.Hardwrap(content, inner, true)
+	lines := append([]string{muted().Render(label)}, strings.Split(content, "\n")...)
+	text := lipgloss.NewStyle().Foreground(theme.Color(theme.Text))
+	for i, line := range lines {
+		line = text.Render(line)
+		lines[i] = strings.Repeat(" ", padding) + line + strings.Repeat(" ", max(0, width-padding-ansi.StringWidth(line)))
+	}
+	return surface(strings.Join(lines, "\n"), theme.Panel)
 }
 func (r *terminalMarkdown) block(node ast.Node, width, depth int) string {
 	if depth > 64 {

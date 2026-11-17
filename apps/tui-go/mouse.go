@@ -2,6 +2,8 @@ package main
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 )
 
@@ -211,13 +213,13 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 		return cmd
 	}
 	composer := m.composerBox()
-	if !m.landingVisible() && m.page == chatPage && m.session != nil && msg.Y == composer.y+3 {
-		_, hint := m.composerText()
+	if m.conversationVisible() && msg.Y == composer.y+conversationComposerHeight {
+		hint := ansi.Strip(m.conversationFooter())
 		index := strings.Index(hint, tr("[F8 Стоп]"))
 		if index < 0 {
 			return nil
 		}
-		x := composer.x + 2 + len([]rune(hint[:index]))
+		x := composer.x + lipgloss.Width(hint[:index])
 		if (area{x, msg.Y, len([]rune(tr("[F8 Стоп]"))), 1}).contains(msg.X, msg.Y) {
 			return m.cancelChat()
 		}

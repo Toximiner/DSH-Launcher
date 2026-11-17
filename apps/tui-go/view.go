@@ -104,17 +104,7 @@ func (m *model) View() string {
 		right = lipgloss.PlaceHorizontal(w, lipgloss.Center, m.schedulesContent(box))
 	}
 	if m.page == 0 {
-		chat := panel(w, bodyHeight-composerHeight-1, view, theme.Border)
-		border := theme.Border
-		if !m.navFocused {
-			border = theme.Accent
-		}
-		label, hint := m.composerText()
-		composer := heading().Render(tr("Сообщение")) + muted().Render(label) + "\n" + m.modeControls() + "\n" + m.input.View() + "\n" + muted().Render(hint)
-		right = chat + "\n" + panel(w, composerHeight, composer, border)
-		if m.conversationVisible() {
-			right = m.conversationView(title, w, bodyHeight)
-		}
+		right = m.conversationView(title, w, bodyHeight)
 		if m.landingVisible() {
 			column := m.chatColumn()
 			right = lipgloss.PlaceHorizontal(w, lipgloss.Center, m.landingView(title, column.width, bodyHeight))

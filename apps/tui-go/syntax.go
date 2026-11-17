@@ -4,6 +4,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/charmbracelet/lipgloss"
@@ -93,27 +95,34 @@ func highlightCode(source, language string, budget *syntaxBudget) (result string
 }
 
 func syntaxColor(kind chroma.TokenType) string {
+	color := func(dark, light string) string {
+		if theme.IsLight() {
+			return light
+		}
+		return dark
+	}
+
 	switch {
 	case kind == chroma.GenericInserted:
-		return "#7ee787"
+		return color("#7ee787", "#28663f")
 	case kind == chroma.GenericDeleted:
-		return "#ff7b72"
+		return color("#ff7b72", "#a53b2c")
 	case kind == chroma.GenericHeading || kind == chroma.GenericSubheading:
-		return "#79c0ff"
+		return color("#79c0ff", "#955027")
 	case kind.Category() == chroma.Comment:
-		return "#8b949e"
+		return string(theme.Color(theme.Muted))
 	case kind.Category() == chroma.Keyword:
-		return "#ff7b72"
+		return color("#ff7b72", "#a53b2c")
 	case kind.SubCategory() == chroma.LiteralString:
-		return "#a5d6ff"
+		return color("#a5d6ff", "#245c94")
 	case kind.SubCategory() == chroma.LiteralNumber:
-		return "#79c0ff"
+		return color("#79c0ff", "#955027")
 	case kind.SubCategory() == chroma.NameFunction || kind == chroma.NameClass:
-		return "#d2a8ff"
+		return color("#d2a8ff", "#7042a0")
 	case kind.SubCategory() == chroma.NameBuiltin || kind == chroma.NameTag || kind == chroma.NameAttribute:
-		return "#7ee787"
+		return color("#7ee787", "#28663f")
 	case kind.Category() == chroma.Operator:
-		return "#ff7b72"
+		return color("#ff7b72", "#a53b2c")
 	}
 	return ""
 }

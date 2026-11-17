@@ -10,8 +10,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
 )
 
 type agentContext struct {
@@ -111,11 +109,11 @@ func (m *model) landingBox() area {
 }
 func (m *model) composerBox() area {
 	box := m.chatColumn()
-	y := bodyTop + box.height - composerHeight - 1
+	y := bodyTop + box.height - conversationComposerHeight - 1
 	if m.landingVisible() {
 		return m.landingBox()
 	}
-	return area{box.x, y, box.width, composerHeight}
+	return area{box.x, y, box.width, conversationComposerHeight}
 }
 func (m *model) modelButton() string {
 	selected := modelSelection{}
@@ -156,78 +154,15 @@ func (m *model) landingControls() (string, string, []agentHit) {
 	if m.landingVisible() {
 		return m.landingCompactControls()
 	}
-	box := m.composerBox()
-	inner := box.width - 4
-	hits := []agentHit{}
-	button := func(label, action string, x, y, limit int) string {
-		text := "[" + ansi.Truncate(singleLine(label), max(1, limit-2), "…") + "]"
-		hits = append(hits, agentHit{area{x, y, lipgloss.Width(text), 1}, action})
-		return accent().Render(text)
-	}
-	workspace := filepath.Base(m.workspace)
-	for _, w := range m.side.workspaces {
-		if m.session != nil {
-			for _, id := range w.Sessions {
-				if id == m.session.ID && w.Title != "" {
-					workspace = w.Title
-				}
-			}
-		}
-	}
-	preset := tr("Агент")
-	if m.session != nil && m.session.AgentPreset != "" {
-		preset = m.session.AgentPreset
-		if m.agentInfo != nil && m.agentInfo.presets[preset] != "" {
-			preset = m.agentInfo.presets[preset]
-		}
-	}
-	half := (inner - 1) / 2
-	contextY := box.y + 4
-	folder := button("▸ "+workspace, "workspaces", box.x+2, contextY, half)
-	agent := button(preset, "presets", box.x+2+lipgloss.Width(folder)+1, contextY, half)
-	modeChip := muted().Render("[" + m.modeLabel() + "]")
-	contextLine := folder + " " + agent + " " + modeChip
-	toolY := box.y + 3
-	plus := button("+", "compose", box.x+2, toolY, 3)
-	left := plus
-	permission := m.permissionButton()
-	// Reserve room for the model at the minimum supported width.
-	if permission != "" {
-		left += " " + button(permission, "permissions", box.x+6, toolY, max(8, (inner-7)/2))
-	}
-	modelWidth := max(8, inner-lipgloss.Width(left)-1)
-	modelLabel := "[" + ansi.Truncate(singleLine(m.modelButton()), modelWidth-2, "…") + "]"
-	modelX := box.x + 2 + inner - lipgloss.Width(modelLabel)
-	hits = append(hits, agentHit{area{modelX, toolY, lipgloss.Width(modelLabel), 1}, "models"})
-	tools := bar(left, accent().Render(modelLabel), inner)
-	return contextLine, tools, hits
+	metadata, hits := m.compactComposerControls(m.composerBox())
+	return "", metadata, hits
 }
 
 // landingCompactControls returns both visible controls and their exact cell areas.
 // The metadata row shares the input background; the context row stays outside it.
 func (m *model) landingCompactControls() (string, string, []agentHit) {
 	box := m.landingBox()
-	inner := max(1, box.width-4)
-	panelStyle := lipgloss.NewStyle().Background(theme.Color(theme.Panel))
-	fg := panelStyle.Foreground(theme.Color(theme.Accent))
-	soft := panelStyle.Foreground(theme.Color(theme.Muted))
-	hits := []agentHit{}
-	permission := ansi.Truncate(singleLine(m.permissionButton()), max(1, inner/3), "…")
-	available := inner
-	if permission != "" {
-		available -= lipgloss.Width(permission) + 2
-	}
-	preset := ansi.Truncate(m.agentPresetLabel(), max(1, available/3), "…")
-	modelLabel := strings.TrimSuffix(m.modelButton(), " · "+tr("По умолчанию"))
-	modelLabel = ansi.Truncate(singleLine(modelLabel), max(1, available-lipgloss.Width(preset)-3), "…")
-	left := fg.Render(preset + " · " + modelLabel)
-	metadata := bar(left, soft.Render(permission), inner)
-	y := box.y + 3
-	hits = append(hits, agentHit{area{box.x + 2, y, lipgloss.Width(preset), 1}, "presets"})
-	hits = append(hits, agentHit{area{box.x + 2 + lipgloss.Width(preset) + 3, y, lipgloss.Width(modelLabel), 1}, "models"})
-	if permission != "" {
-		hits = append(hits, agentHit{area{box.x + box.width - 2 - lipgloss.Width(permission), y, lipgloss.Width(permission), 1}, "permissions"})
-	}
+	metadata, hits := m.compactComposerControls(box)
 	workspace := filepath.Base(m.workspace)
 	for _, w := range m.side.workspaces {
 		if m.session == nil {
@@ -253,19 +188,7 @@ func (m *model) landingView(title string, w, h int) string {
 	_ = title
 	box := m.landingBox()
 	contextLine, tools, _ := m.landingControls()
-	input := m.input
-	input.Placeholder = tr("Что будем делать? / команды · @ файлы")
-	input.Width = max(1, box.width-4)
-	panelStyle := lipgloss.NewStyle().Background(theme.Color(theme.Panel)).Foreground(theme.Color(theme.Text))
-	input.TextStyle = input.TextStyle.Background(theme.Color(theme.Panel))
-	input.PlaceholderStyle = input.PlaceholderStyle.Background(theme.Color(theme.Panel))
-	input.Cursor.Style = input.Cursor.Style.Background(theme.Color(theme.Panel))
-	input.PromptStyle = input.PromptStyle.Background(theme.Color(theme.Panel))
-	edge := panelStyle.Foreground(theme.Color(theme.Accent)).Render("┃")
-	row := func(content string) string {
-		return edge + panelStyle.Width(box.width-1).Render(" "+content)
-	}
-	composer := surface(strings.Join([]string{row(input.View()), row(""), row(""), row(tools)}, "\n"), theme.Panel)
+	composer := m.compactComposerSurface(box, tr("Что будем делать? / команды · @ файлы"), tools)
 	lines := make([]string, m.landingStart())
 	for _, line := range []string{"█▀▄ █▀▀ █ █", "█ █ ▀▀█ █▀█", "▀▀  ▀▀▀ ▀ ▀"} {
 		lines = append(lines, lipgloss.PlaceHorizontal(w, lipgloss.Center, heading().Render(line)))

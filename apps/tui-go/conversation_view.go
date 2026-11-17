@@ -10,7 +10,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+)
 
 const conversationMaxWidth = 100
 
@@ -45,7 +46,7 @@ var conversationMenu = []menuEntry{
 }
 
 func (m *model) conversationVisible() bool {
-	return m.page == chatPage && m.chat != nil && m.session != nil && !m.landingVisible()
+	return m.page == chatPage && !m.landingVisible()
 }
 func (m *model) chatColumn() area {
 	w, h := m.contentSize()
@@ -57,14 +58,15 @@ func (m *model) chatColumn() area {
 	return area{x + (w-column)/2, bodyTop, column, h}
 }
 func (m *model) conversationArea() area {
-	x := 0
+	x, y := 0, bodyTop+3
 	if m.sidebarVisible() {
 		x = sidebarWidth + sidebarGap
 	}
 	if m.page == chatPage {
 		x = m.chatColumn().x
+		y = bodyTop
 	}
-	return area{x + 2, bodyTop + 3, m.viewport.Width, m.viewport.Height}
+	return area{x + 2, y, m.viewport.Width, m.viewport.Height}
 }
 func (m *model) agentPresetLabel() string {
 	label := tr("Агент")
@@ -76,54 +78,27 @@ func (m *model) agentPresetLabel() string {
 	}
 	return singleLine(label)
 }
+
+// Session identity lives in the tab rail; composer controls carry the agent
+// and model. Keep this compatibility API inert rather than leave invisible hits.
 func (m *model) conversationHeader(title string) (string, string, []agentHit) {
-	box := m.chatColumn()
-	inner := box.width - 4
-	if title == "" && m.session != nil {
-		name := m.session.Title
-		if name == "" {
-			name = m.session.ID
-		}
-		title = tr("Сессия · ") + name
-	}
-	title = singleLine(title)
-	preset := "[" + ansi.Truncate(m.agentPresetLabel(), max(5, inner/3)-2, "…") + "]"
-	more := "[···]"
-	name := ansi.Truncate(title, max(1, inner-lipgloss.Width(preset)-lipgloss.Width(more)-3), "…")
-	left := heading().Render(name) + " " + accent().Render(preset)
-	top := bar(left, accent().Render(more), inner)
-	tab := "[" + tr("Чат") + "]"
-	trajectory := "[" + tr("Траектория") + "]"
-	tabs := accent().Bold(true).Render(tab) + "  " + muted().Render(trajectory)
-	hits := []agentHit{
-		{area{box.x + 2 + lipgloss.Width(name) + 1, box.y, lipgloss.Width(preset), 1}, "presets"},
-		{area{box.x + box.width - 2 - lipgloss.Width(more), box.y, lipgloss.Width(more), 1}, "conversation"},
-		{area{box.x + 2, box.y + 1, lipgloss.Width(tab), 1}, "chat"},
-		{area{box.x + 2 + lipgloss.Width(tab) + 2, box.y + 1, lipgloss.Width(trajectory), 1}, "history"},
-	}
-	return top, tabs, hits
+	return "", "", nil
 }
 func (m *model) conversationView(title string, w, h int) string {
 	column := m.chatColumn()
-	top, tabs, _ := m.conversationHeader(title)
-	lines := []string{"  " + top, "  " + tabs, "  " + muted().Render(strings.Repeat("─", m.viewport.Width))}
+	lines := []string{}
+	chatHeight := max(1, h-conversationComposerHeight-1)
 	for _, line := range strings.Split(m.viewport.View(), "\n") {
-		lines = append(lines, "  "+line)
+		lines = append(lines, "  "+ansi.Truncate(line, column.width-4, "…"))
 	}
-	// Keep the viewport origin and composer geometry stable at every supported size.
-	chatHeight := h - composerHeight - 1
+	if len(lines) > chatHeight {
+		lines = lines[:chatHeight]
+	}
 	for len(lines) < chatHeight {
 		lines = append(lines, "")
 	}
-	_, tools, _ := m.landingControls()
-	label, hint := m.composerText()
-	border := theme.Accent
-	if m.navFocused {
-		border = theme.Border
-	}
-	composer := heading().Render(tr("Сообщение")) + muted().Render(label) + "\n" + m.input.View() + "\n" + tools + "\n" + muted().Render(ansi.Truncate(hint, column.width-4, "…"))
-	lines = append(lines, panel(column.width, composerHeight, composer, border))
-	lines = append(lines, muted().Render(ansi.Truncate(m.conversationStatus(), column.width, "…")))
+	lines = append(lines, m.conversationComposerView())
+	lines = append(lines, muted().Render(ansi.Truncate(m.conversationFooter(), column.width, "…")))
 	content := strings.Join(lines, "\n")
 	return lipgloss.PlaceHorizontal(w, lipgloss.Center, lipgloss.NewStyle().Width(column.width).Height(h).Render(content))
 }
@@ -189,48 +164,64 @@ func messageClock(ms int64) string {
 	}
 	return time.UnixMilli(ms).Local().Format("15:04")
 }
+
+// Projected records can outlive an interface-language switch. Translate known
+// application role keys at render time while preserving semantic reply labels.
+func conversationRoleLabel(role string) string {
+	for _, source := range []string{"ВЫ", "ВЫ · ОТВЕТЫ НА ВОПРОС", "АГЕНТ", "АГЕНТ · НЕЗАВЕРШЁННЫЙ ОТВЕТ", "СООБЩЕНИЕ DSH", "РАЗРЕШЕНИЕ", "РАЗРЕШЕНИЕ · ОЖИДАЕТ ОТВЕТА"} {
+		if role == source || (englishCatalog[source] != "" && role == englishCatalog[source]) {
+			return tr(source)
+		}
+	}
+	return singleLine(role)
+}
 func (m *model) conversationMessage(message chatMessage, width, row int) string {
-	human := message.human || message.role == tr("ВЫ") || strings.HasPrefix(message.role, tr("ВЫ ·"))
-	content := m.messageText(message, width, false)
-	role := message.role
-	if message.assistant {
-		role = tr("АГЕНТ")
+	width = max(4, width)
+	role := conversationRoleLabel(message.role)
+	human := message.human || role == tr("ВЫ") || strings.HasPrefix(role, tr("ВЫ ·"))
+	assistant := message.assistant || role == tr("АГЕНТ")
+	part := ""
+	if human {
+		wrapped := ansi.Hardwrap(clean(message.text), width-2, true)
+		rows := strings.Split(wrapped, "\n")
+		surface := lipgloss.NewStyle().Width(width - 1).Foreground(theme.Color(theme.Text)).Background(theme.Color(theme.Panel))
+		for i, line := range rows {
+			rows[i] = accent().Render("┃") + surface.Render(" "+line)
+		}
+		part = strings.Join(rows, "\n")
+	} else {
+		part = ansi.Hardwrap(m.messageText(message, width, false), width, true)
 	}
-	label := accent().Bold(true).Render(role)
+	part = strings.TrimRight(part, "\n")
+	metadata := []string{}
+	if assistant {
+		metadata = append(metadata, tr("Агент"))
+	} else if role != "" && (!human || role != tr("ВЫ")) {
+		metadata = append(metadata, role)
+	}
 	if message.elapsedMs > 0 {
-		label += " · " + muted().Render(fmt.Sprintf(tr("Ответ за %.1f с"), float64(message.elapsedMs)/1000))
+		metadata = append(metadata, fmt.Sprintf(tr("Ответ за %.1f с"), float64(message.elapsedMs)/1000))
 	}
-	meta := "[" + tr("Копировать") + "]"
 	if clock := messageClock(message.time); clock != "" {
-		meta += "  " + clock
+		metadata = append(metadata, clock)
 	}
 	canCopy := message.tool == nil && message.approvalID == "" && message.text != ""
-	if !canCopy {
-		meta = messageClock(message.time)
-	}
-	part := ""
-	copyX := 0
-	if human {
-		bubbleMax := max(4, min(width, max(12, width*3/4)))
-		wrapped := ansi.Hardwrap(message.text, bubbleMax-2, true)
-		bubbleWidth := min(bubbleMax, lipgloss.Width(wrapped)+2)
-		bubble := lipgloss.NewStyle().Width(bubbleWidth).Padding(0, 1).Background(theme.Color(theme.Active)).Foreground(theme.Color(theme.Text)).Render(wrapped)
-		part = lipgloss.PlaceHorizontal(width, lipgloss.Right, label) + "\n" + lipgloss.PlaceHorizontal(width, lipgloss.Right, bubble)
-		copyX = max(0, width-lipgloss.Width(meta))
-	} else {
-		part = label + "\n" + content
+	meta := strings.Join(metadata, " · ")
+	if canCopy {
+		copyLabel := "[" + tr("Копировать") + "]"
+		// Reserve space before truncating metadata so the complete visible copy
+		// action and its hit range always agree, including wide Unicode messages.
+		meta = ansi.Truncate(meta, max(0, width-lipgloss.Width(copyLabel)-2), "…")
+		copyX := 0
+		if meta != "" {
+			copyX = lipgloss.Width(meta) + 2
+			meta += "  "
+		}
+		meta += copyLabel
+		m.chatCopyHits = append(m.chatCopyHits, conversationCopyHit{row: row + strings.Count(part, "\n") + 1, x: copyX, width: lipgloss.Width(copyLabel), seq: message.seq})
 	}
 	if meta != "" {
-		meta = ansi.Truncate(meta, width, "…")
-		if canCopy {
-			m.chatCopyHits = append(m.chatCopyHits, conversationCopyHit{row: row + strings.Count(ansi.Hardwrap(part, width, true), "\n") + 1, x: copyX, width: lipgloss.Width("[" + tr("Копировать") + "]"), seq: message.seq})
-		}
-		if human {
-			meta = lipgloss.PlaceHorizontal(width, lipgloss.Right, muted().Render(meta))
-		} else {
-			meta = muted().Render(meta)
-		}
-		part += "\n" + meta
+		part += "\n" + muted().Render(ansi.Truncate(meta, width, "…"))
 	}
 	return part + "\n"
 }
@@ -289,14 +280,6 @@ func (m *model) conversationKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 func (m *model) conversationMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 	if !m.conversationVisible() {
 		return nil, false
-	}
-	_, _, headerHits := m.conversationHeader("")
-	for _, hit := range headerHits {
-		if hit.contains(msg.X, msg.Y) {
-			m.navFocused, m.toolFocused = false, false
-			m.input.Focus()
-			return m.agentControl(hit.action), true
-		}
 	}
 	_, _, hits := m.landingControls()
 	for _, hit := range hits {

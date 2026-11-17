@@ -127,9 +127,16 @@ func (m *model) sessionTabLayout() sessionTabLayout {
 		x += cells
 	}
 	neutral := lipgloss.NewStyle().Foreground(theme.Color(theme.Muted))
-	add(" + "+tr("Новая")+" ", neutral, "", true)
+	createLabel := " + " + tr("Новая") + " "
+	fullWidth := width
+	width = max(0, width-lipgloss.Width(createLabel))
+	addCreate := func() {
+		width = fullWidth
+		add(createLabel, neutral, "", true)
+	}
 	tabs := m.tabList()
 	if len(tabs) == 0 {
+		addCreate()
 		layout.view = strings.Join(parts, "")
 		return layout
 	}
@@ -191,6 +198,7 @@ func (m *model) sessionTabLayout() sessionTabLayout {
 		}
 		add(marker, neutral, id, false)
 	}
+	addCreate()
 	layout.view = strings.Join(parts, "")
 	return layout
 }

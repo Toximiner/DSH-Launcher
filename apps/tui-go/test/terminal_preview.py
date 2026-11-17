@@ -59,6 +59,20 @@ class TerminalPreview(unittest.TestCase):
         path = output / f'{self._testMethodName}-{name}-{screen.columns}x{screen.lines}.json'
         path.write_text(json.dumps({'columns': screen.columns, 'rows': screen.lines, 'cells': cells}))
 
+    def assert_composer_surface(self):
+        self.app.pump()
+        screen = self.app.screen
+        width = min(screen.columns - 1, 100)
+        x = (screen.columns - 1 - width) // 2
+        y = screen.lines - 6
+        for row in range(y, y + 4):
+            self.assertEqual(screen.buffer[row][x].data, '┃', f'Composer edge moved at row {row}')
+            for col in range(x, x + width):
+                self.assertEqual(screen.buffer[row][col].bg, '242424',
+                                 f'Composer surface gap at {col},{row}')
+        self.assertIn('Агент', screen.display[y + 3])
+        self.assertNotIn('[Модель]', screen.display[y + 3])
+
     def palette(self, query, execute=True):
         self.app.send('\x10')
         self.app.wait('Найти команду…')
@@ -218,9 +232,20 @@ class TerminalPreview(unittest.TestCase):
             self.app.command('enter')
             self.app.wait('Потоковый ')
             self.assertNotIn('из тестового dsh', self.app.text)
+            self.capture('streaming')
             self.app.wait('Потоковый ответ из тестового dsh')
             self.capture('dialog')
             self.app.wait('Enter — отправить')
+            self.app.send('Черновик для проверки')
+            self.app.wait('Черновик для проверки')
+            for columns, rows in ((80, 24), (100, 30), (160, 40)):
+                self.app.resize(columns, rows)
+                self.app.wait('Черновик для проверки')
+                self.assert_composer_surface()
+                self.capture('conversation-surface')
+            self.app.resize(100, 30)
+            self.app.wait('Черновик для проверки')
+            self.app.send('\x15')
             self.app.command('cancel test')
             self.app.wait('Частичный ответ до отмены')
             self.app.send('\x1b[19~')  # F8

@@ -30,6 +30,10 @@ func TestSessionTabsRevealActiveAndShareCellGeometry(t *testing.T) {
 			if lipgloss.Width(layout.view) > width {
 				t.Fatalf("rail overflow at %d", width)
 			}
+			last := layout.hits[len(layout.hits)-1]
+			if !last.new {
+				t.Fatal("new session button must follow the tabs")
+			}
 			found := false
 			end := 0
 			for _, hit := range layout.hits {
@@ -170,5 +174,30 @@ func TestSessionTabsShortcutsRespectEditorsAndPages(t *testing.T) {
 	cmd, handled := m.tabKey(key)
 	if !handled || cmd == nil || m.sessionAction != "new" {
 		t.Fatal("base chat CtrlN unavailable")
+	}
+}
+
+func TestSessionTabsNewButtonFollowsLastTab(t *testing.T) {
+	for _, count := range []int{0, 1, 3} {
+		m := tabFixture(count)
+		m.width = 160
+		layout := m.sessionTabLayout()
+		last := layout.hits[len(layout.hits)-1]
+		if !last.new {
+			t.Fatal("new session button is not the last tab")
+		}
+		if count == 0 {
+			if last.x != 0 {
+				t.Fatal("empty tab rail has leading padding")
+			}
+		} else {
+			previous := layout.hits[len(layout.hits)-2]
+			if last.x != previous.x+previous.width {
+				t.Fatal("new session button is separated from the last tab")
+			}
+		}
+		if last.x+last.width >= m.width-1 {
+			t.Fatal("short tab rail is stretched to the right edge")
+		}
 	}
 }

@@ -11,6 +11,8 @@ Run a private live instance with actual dsh in GitHub Codespaces: [instructions]
 
 ## Terminal version (experimental)
 
+The redesign branch includes a separate `opencode.2` preview: session tabs, Ctrl+P palette and a compact conversation. Run `./build/previews/opencode-02/dsh-launcher-tui --start`. See the [rebuild plan](docs/tui-rebuild-plan.en.md) for scope and next milestones.
+
 GUI parity inventory, implementation milestones, and plugin strategy: [TUI roadmap](docs/tui-roadmap/README.en.md).
 
 Install a native Linux build from the

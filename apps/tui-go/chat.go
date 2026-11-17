@@ -889,11 +889,10 @@ func (m *model) chatView() string {
 		row += strings.Count(ansi.Hardwrap(part, max(1, m.viewport.Width), true), "\n")
 	}
 	if p := m.prompts[s.id]; p != nil {
-		label := map[string]string{"sending": tr("ОТПРАВЛЯЕТСЯ"), "accepted": tr("ПРИНЯТО DSH · ОЖИДАНИЕ СОСТОЯНИЯ"), "unknown": tr("РЕЗУЛЬТАТ ОТПРАВКИ НЕИЗВЕСТЕН · /retry-send"), "rejected": tr("НЕ ОТПРАВЛЕНО")}[p.Status]
-		lines = append(lines, heading().Render(tr("ВЫ · ")+label)+"\n"+clean(p.Text)+"\n")
+		lines = append(lines, pendingPromptView(p.Text, p.Status, m.viewport.Width))
 	}
 	if s.live != nil {
-		lines = append(lines, accent().Bold(true).Render(tr("АГЕНТ · ПОТОКОВЫЙ ОТВЕТ"))+"\n"+s.live.text()+"\n")
+		lines = append(lines, muted().Render(tr("◌ Агент отвечает…"))+"\n"+renderMarkdown(s.live.text(), max(1, m.viewport.Width))+"\n")
 	}
 	if queue := m.queueView(); queue != "" {
 		lines = append(lines, queue+"\n")

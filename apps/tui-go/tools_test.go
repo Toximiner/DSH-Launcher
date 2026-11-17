@@ -138,11 +138,8 @@ func TestToolsKeyboardMouseAndNarrowLayoutPreserveDraft(t *testing.T) {
 		if len(m.chatToolHits) != 1 {
 			t.Fatal("tool header hit area is missing")
 		}
-		x := 2
-		if width >= 79 {
-			x += sidebarWidth + sidebarGap
-		}
-		y := bodyTop + 3 + m.chatToolHits[0].row - m.viewport.YOffset
+		x := m.conversationArea().x
+		y := m.conversationArea().y + m.chatToolHits[0].row - m.viewport.YOffset
 		rendered := strings.Split(clean(m.View()), "\n")
 		if y >= len(rendered) || !strings.Contains(rendered[y], "read ·") {
 			t.Fatalf("tool hit area did not align at width %d: row %d", width, y)
