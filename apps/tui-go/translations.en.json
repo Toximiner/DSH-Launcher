@@ -1513,5 +1513,8 @@
   "Проверьте список сессий перед повтором.": "Check the session list before retrying.",
   "Не удалось сохранить открытые вкладки.": "Could not save open tabs.",
   "Не удалось восстановить вкладки. Сохранённый список не изменён.": "Could not restore tabs. The saved list was left unchanged.",
-  "Не удалось определить файл открытых вкладок.": "Could not determine the open tabs file."
+  "Не удалось определить файл открытых вкладок.": "Could not determine the open tabs file.",
+  "Открыть сессию по ID": "Open session by ID",
+  "Прикрепить файл": "Attach a file",
+  "↑/↓ выбор · Enter выполнить · Tab дополнить": "↑/↓ select · Enter run · Tab complete"
 }

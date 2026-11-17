@@ -27,6 +27,9 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if !m.mouseEnabled() {
 		return nil
 	}
+	if cmd, handled := m.slashSuggestionsMouse(msg); handled {
+		return cmd
+	}
 	if cmd, handled := m.sessionPickerMouse(msg); handled {
 		return cmd
 	}

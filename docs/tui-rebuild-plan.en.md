@@ -299,6 +299,22 @@ these screens follow its common picker style.
 Next: files, terminals, subagents, queue and history; then runtime, updates,
 rollback, diagnostics and overall visual acceptance.
 
+## Checkpoint 13: slash-command suggestions
+
+Intermediate build: `0.2.0-preview.40-opencode.13`.
+
+Typing `/` opens suggestions above the composer, filtered from the shared action
+catalog. Up/Down selects, Enter runs, Tab completes and Esc dismisses while
+preserving input. Clicking completes without running. Commands requiring arguments
+complete with a space. Unavailable actions show a reason and retain their normal
+execution checks. Suggestions stay hidden inside prose, while entering arguments,
+and behind other dialogs. Opening the list makes no dsh requests. Compared with
+isolated installed OpenCode 2.3.0; this TUI uses Tab only to complete and Enter to run.
+
+```sh
+./build/previews/opencode-13/dsh-launcher-tui --start
+```
+
 ## Revised implementation order
 
 1. **Screenshot correction, preview `opencode.3` (implemented; user review pending).** Active conversation
