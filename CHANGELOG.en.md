@@ -7,6 +7,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- TUI `preview.40-opencode.9`: a tab's close button only closes that local tab, preserves its draft and leaves the dsh agent running; closing the active tab selects a neighbor, and closing the final tab returns home. Behavior was checked against running OpenCode 2.3.0. Separate permanent deletion is available through Delete in the session manager or `/delete-session` for the current session: Cancel is selected by default, activity is reread, and deletion uses the enabled Archive Manager's public API. TUI does not stop the agent automatically, bypass the plugin with filesystem deletion, or retry an unconfirmed write. The preflight check is not CAS or a transaction; atomic subagent deletion is not guaranteed.
+
 - TUI: removed duplicate headings in the session picker and the dsh settings, session manager and log pages. Loading status, errors and workspace context remain visible.
 
 - TUI `preview.40-opencode.8`: compact searchable grouped settings retain all 15 actions in place of two panes; arrows change local preferences. The shortcut reference, dsh schema forms and small launcher dialogs use flat surfaces, retaining explicit saves, revision checks and secret protection. Other auxiliary screens remain in progress; the local build does not replace the installed TUI.

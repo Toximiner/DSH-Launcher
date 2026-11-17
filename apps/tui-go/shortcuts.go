@@ -5,6 +5,7 @@ package main
 type shortcut struct{ keys, action, context string }
 
 var localTUIShortcuts = []shortcut{
+	{"Delete", "Удалить сессию навсегда", "Сессии"},
 	{"Ctrl+P", "Палитра команд", "Основной экран"},
 	{"Ctrl+Tab / Shift+Tab", "Переключить открытую сессию", "Основной экран"},
 	{"Tab / Shift+Tab", "Разделы / параметры", "Настройки TUI"},

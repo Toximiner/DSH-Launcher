@@ -20,8 +20,9 @@ type sessionTabsState struct {
 
 type sessionTabHit struct {
 	area
-	id  string
-	new bool
+	id    string
+	new   bool
+	close bool
 }
 
 type sessionTabLayout struct {
@@ -42,10 +43,17 @@ func (m *model) tabSessionChanged(next *sessionView) {
 		if previous != "" {
 			m.tabState.drafts[previous] = m.input.Value()
 			m.input.SetValue(m.tabState.drafts[next.ID])
-			m.input.CursorEnd()
-			m.historyIndex = len(m.history)
-			m.draft = m.input.Value()
+		} else if draft, exists := m.tabState.drafts[next.ID]; exists {
+			// A tab reopened after the final tab was closed retains its draft.
+			m.tabState.drafts[""] = m.input.Value()
+			m.input.SetValue(draft)
+		} else {
+			// An initial/new-session draft moves into that session, not a second home copy.
+			m.tabState.drafts[""] = ""
 		}
+		m.input.CursorEnd()
+		m.historyIndex = len(m.history)
+		m.draft = m.input.Value()
 	}
 	// Retain a session first opened before the tab state was initialized.
 	if previous != "" {
@@ -180,14 +188,23 @@ func (m *model) sessionTabLayout() sessionTabLayout {
 		if tab.Running {
 			marker = " ●"
 		}
-		inner := max(0, perTab-2-lipgloss.Width(marker))
+		closeWidth := 0
+		if perTab >= 5 {
+			closeWidth = 3
+		}
+		bodyWidth := perTab - closeWidth
+		inner := max(0, bodyWidth-2-lipgloss.Width(marker))
 		text := " " + ansi.Truncate(label, inner, "…") + marker
-		text += strings.Repeat(" ", max(0, perTab-lipgloss.Width(text)))
+		text += strings.Repeat(" ", max(0, bodyWidth-lipgloss.Width(text)))
 		style := neutral
 		if tab.ID == m.activeTabID() {
 			style = lipgloss.NewStyle().Foreground(theme.Color(theme.Text)).Background(theme.Color(theme.Active)).Bold(true)
 		}
 		add(text, style, tab.ID, false)
+		if closeWidth > 0 {
+			add(" ✕ ", style, tab.ID, false)
+			layout.hits[len(layout.hits)-1].close = true
+		}
 	}
 	if overflow {
 		id := ""
@@ -215,6 +232,9 @@ func (m *model) tabRailMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 	}
 	for _, hit := range m.sessionTabLayout().hits {
 		if hit.contains(msg.X, msg.Y) {
+			if hit.close {
+				return m.closeTab(hit.id), true
+			}
 			if hit.new {
 				return m.sessionOperation("new", m.sidebarNewWorkspace()), true
 			}
@@ -222,6 +242,83 @@ func (m *model) tabRailMouse(msg tea.MouseMsg) (tea.Cmd, bool) {
 		}
 	}
 	return nil, true
+}
+
+// Detach only local readers. Closing a tab must never stop or delete its backend session.
+func (m *model) detachCurrentTab() {
+	m.stopChat()
+	m.chat = nil
+	m.approvals = nil
+	m.chatEpoch++
+	m.sessionSequence++ // In-flight refreshes must not reopen the detached tab.
+	m.session = nil
+	m.sessionBusy, m.sessionStale = false, false
+	m.sessionAction, m.sessionError = "", ""
+	m.sessionQueue = nil
+	m.toolFocused = false
+	m.chatToolHits = nil
+	m.lines = nil
+	m.input.SetValue(m.tabState.drafts[""])
+	m.input.CursorEnd()
+	m.historyIndex = len(m.history)
+	m.draft = m.input.Value()
+}
+
+func (m *model) closeTab(id string) tea.Cmd {
+	tabs := m.tabList()
+	index := -1
+	for i, tab := range tabs {
+		if tab.ID == id {
+			index = i
+			break
+		}
+	}
+	if index < 0 {
+		return nil
+	}
+	active := id == m.activeTabID()
+	if active && (m.sessionBusy && m.sessionAction != "refresh" || len(m.sessionQueue) > 0) {
+		// Retain ownership of an operation that may already have reached dsh.
+		m.append(tr("Дождитесь переключения сессии."))
+		return nil
+	}
+	if active {
+		if m.tabState.drafts == nil {
+			m.tabState.drafts = make(map[string]string)
+		}
+		m.tabState.drafts[id] = m.input.Value()
+	}
+	m.tabState.items = append(tabs[:index:index], tabs[index+1:]...)
+	if !active {
+		return nil
+	}
+	m.detachCurrentTab()
+	m.showChat()
+	if len(m.tabState.items) > 0 {
+		next := m.tabState.items[max(0, index-1)].ID
+		return m.switchTab(next)
+	}
+	m.rebuild()
+	return m.input.Focus()
+}
+
+// A successful permanent deletion also forgets the draft; ordinary tab closing does not.
+// The caller owns the backend delete receipt and subsequent catalog refresh.
+func (m *model) tabForgetDeletedSession(id string) {
+	tabs := m.tabList()
+	kept := make([]sessionItem, 0, len(tabs))
+	for _, tab := range tabs {
+		if tab.ID != id {
+			kept = append(kept, tab)
+		}
+	}
+	m.tabState.items = kept
+	delete(m.tabState.drafts, id)
+	if id == m.activeTabID() {
+		m.detachCurrentTab()
+		m.showChat()
+		m.rebuild()
+	}
 }
 
 func (m *model) switchTab(id string) tea.Cmd {

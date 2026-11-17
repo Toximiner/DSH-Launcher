@@ -94,6 +94,9 @@ func (m *model) mouse(msg tea.MouseMsg) tea.Cmd {
 	if m.historyReader != nil && m.historyReader.codeDialog != nil {
 		return m.historyCodeMouse(msg)
 	}
+	if m.archiveDialog != nil && m.archiveDialog.deleting {
+		return m.sessionDeleteMouse(msg)
+	}
 	if m.archiveDialog != nil || m.renameDialog != nil || m.forkDialog != nil {
 		return nil
 	}

@@ -1,6 +1,6 @@
-# Go TUI preview — OpenCode settings and shortcuts
+# Go TUI preview — session tabs and explicit deletion
 
-The experimental `0.2.0-preview.40-opencode.8` includes visited session tabs,
+The experimental `0.2.0-preview.40-opencode.9` includes visited session tabs,
 per-session drafts, compact home/conversation composers, optional right context
 and Ctrl+P navigation. Command, session/workspace and model pickers share a flat
 frame, measured hit targets, teal selection and a dimmed backdrop. Tool calls
@@ -8,6 +8,27 @@ collapse to compact summaries with expandable arguments/results. Permissions and
 agent questions use flat decision dialogs. Actual reasoning supplied by dsh is
 collapsed separately; Ctrl+O or `/thoughts` toggles it, as do header clicks.
 Ctrl+O also works within history. Copying replies preserves the reply source.
+
+Preview `.9` adds a close button to each visited tab. Closing is local: it preserves
+that session's draft and running backend agent. The active tab switches to a
+neighbor; closing the final tab returns to an empty home without creating a
+session. Reopening a conversation restores its saved draft. Tab closing was
+compared with actual installed OpenCode 2.3.0; our close button remains visible
+without requiring mouse hover.
+
+Permanent deletion is a separate action: Delete in `/sessions-manager`, or
+`/delete-session` for the current session. The confirmation selects Cancel by
+default. TUI rereads activity and refuses a running session, queued work or
+pending input; it never stops the agent automatically. Deletion requires an
+enabled Archive Manager and uses its public API. There is no filesystem fallback
+or automatic retry after an unconfirmed result: check the session list first.
+The activity check is a preflight read, not CAS or a transaction; the client does
+not guarantee atomic subagent deletion. Successful deletion forgets the local tab
+and draft. Project files and separate fork sessions are outside this operation.
+
+Repeated headings in the session picker, dsh settings, session manager and log
+were removed in the preceding header cleanup; loading/error/workspace context
+remains available.
 
 Preview `.8` replaces the GUI-style settings panes with a compact searchable,
 grouped list retaining all 15 settings actions and current values. Left/Right
@@ -24,7 +45,7 @@ the installed application.
 From the repository root, run the separate local build:
 
 ```sh
-./build/previews/opencode-08/dsh-launcher-tui --start
+./build/previews/opencode-09/dsh-launcher-tui --start
 ```
 
 The binary remains separate from earlier builds. Main entry points:

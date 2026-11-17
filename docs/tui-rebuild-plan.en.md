@@ -194,6 +194,36 @@ the installed application.
 ./build/previews/opencode-08/dsh-launcher-tui --start
 ```
 
+## Checkpoint 9: closing tabs and deleting sessions
+
+Intermediate build: `0.2.0-preview.40-opencode.9`.
+
+- A close button closes a visited tab locally: its conversation, running agent
+  and draft remain. The active tab selects its left neighbor (or the next tab
+  when there is none to the left); closing the final tab returns to empty home
+  without creating a session. Reopening restores the draft. Closing the active
+  tab is unavailable while an operation is pending.
+- Closing behavior was checked against installed OpenCode 2.3.0 with an isolated
+  profile and local model. OpenCode shows its close button on hover; ours remains
+  visible without requiring mouse-motion support.
+- Permanent deletion is separate: Delete in `/sessions-manager`, or
+  `/delete-session` for the current conversation. Cancel is selected by default.
+  TUI rereads activity and refuses running agents, queued work or pending input;
+  it does not stop agents automatically.
+- An enabled Archive Manager is required. Deletion uses its public API, with no
+  filesystem bypass. Unconfirmed writes never retry automatically; check the
+  list before trying again. The activity preflight is not CAS or a transaction;
+  the client does not guarantee atomic subagent deletion. Project files and
+  separate fork sessions remain. Confirmed deletion forgets the local tab/draft.
+- The preceding header cleanup removed repeated headings in the session picker,
+  dsh settings, session manager and log, retaining loading/error context.
+
+The remaining scope of stage 4 is unchanged. The installed TUI is not replaced.
+
+```sh
+./build/previews/opencode-09/dsh-launcher-tui --start
+```
+
 ## Revised implementation order
 
 1. **Screenshot correction, preview `opencode.3` (implemented; user review pending).** Active conversation

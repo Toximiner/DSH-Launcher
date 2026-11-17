@@ -1487,5 +1487,21 @@
   "Изменить локальный параметр": "Change local setting",
   "Tab / Shift+Tab": "Tab / Shift+Tab",
   "↑/↓ выбор · Enter открыть · ←/→ изменить": "↑/↓ select · Enter open · ←/→ change",
-  "Tab раздел · F1 клавиши · F5 обновить · Esc закрыть": "Tab section · F1 shortcuts · F5 refresh · Esc close"
+  "Tab раздел · F1 клавиши · F5 обновить · Esc закрыть": "Tab section · F1 shortcuts · F5 refresh · Esc close",
+  "Удалить сессию навсегда": "Permanently delete session",
+  "Ctrl+X архив/возврат · Delete удалить · a фильтр · r новые": "Ctrl+X archive/restore · Delete remove · a filter · r refresh",
+  "Проверка активности и удаление…": "Checking activity and deleting…",
+  "Сессия отсутствует в свежем списке dsh.": "The session is absent from the fresh dsh catalog.",
+  "Не удалось проверить активность сессии.": "Could not verify session activity.",
+  "Сначала остановите работу сессии и очистите очередь.": "Stop the session and clear its queue first.",
+  "dsh не подтвердил удаление сессии.": "dsh did not confirm session deletion.",
+  "Удаление не подтверждено. ": "Deletion unconfirmed. ",
+  "Нужен включённый Archive Manager. Проверьте список перед повтором.": "Archive Manager must be enabled. Check the list before retrying.",
+  "Удалить сессию навсегда?": "Permanently delete this session?",
+  "История и вложения сессии будут удалены без возможности восстановления. Archive Manager также удаляет подагентов. Файлы проекта и отдельные fork-сессии сохраняются.": "Session history and attachments will be permanently deleted. Archive Manager also deletes subagents. Project files and separate fork sessions are kept.",
+  "Удалить навсегда": "Delete permanently",
+  "Tab / ← → выбор · Enter подтвердить · Esc отмена": "Tab / ← → select · Enter confirm · Esc cancel",
+  "Esc — закрыть и проверить список сессий": "Esc — close and check the session list",
+  "Дождитесь подтверждения отправленного сообщения.": "Wait for confirmation of the submitted message.",
+  "Отмена": "Cancel"
 }

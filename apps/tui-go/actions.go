@@ -49,6 +49,7 @@ var actionRegistry = []actionDescriptor{
 	{id: "session.archive", group: "Сессии", label: "Архивировать", hint: "/archive", aliases: []string{"/archive"}, keys: []string{}, scope: actionChat,
 		enabled: paletteHasSession,
 		run:     func(m *model) tea.Cmd { return m.openSessionArchive(true, false) }},
+	{id: "session.delete", group: "Сессии", label: "Удалить сессию навсегда", hint: "/delete-session", aliases: []string{"/delete-session"}, scope: actionChat, enabled: paletteHasSession, run: func(m *model) tea.Cmd { return m.openSessionDelete(true) }},
 	{id: "session.restore", group: "Сессии", label: "Восстановить из архива", hint: "/restore", aliases: []string{"/restore"}, keys: []string{}, scope: actionChat,
 		enabled: paletteHasURL,
 		run:     func(m *model) tea.Cmd { return m.openSessionArchive(true, true) }},

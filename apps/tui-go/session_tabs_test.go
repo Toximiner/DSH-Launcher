@@ -53,7 +53,7 @@ func TestSessionTabsRevealActiveAndShareCellGeometry(t *testing.T) {
 			}
 			// Every clickable cell, including running markers, dispatches its own tab.
 			for _, hit := range layout.hits {
-				if hit.new {
+				if hit.new || hit.close {
 					continue
 				}
 				for x := hit.x; x < hit.x+hit.width; x++ {

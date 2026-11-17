@@ -9,12 +9,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme")
+	"github.com/Toximiner/DSH-Launcher/apps/tui-go/internal/theme"
+)
 
 type sessionArchive struct {
 	id                                string
 	restore, focused, busy, attempted bool
 	note                              string
+	deleting, confirmDelete           bool
+	login                             string
 }
 type sessionArchiveResult struct {
 	dialog *sessionArchive
@@ -51,8 +54,14 @@ func (m *model) openSessionArchive(current, restore bool) tea.Cmd {
 }
 func (m *model) archiveKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	d := m.archiveDialog
+	if msg.Paste {
+		return nil, d != nil
+	}
 	if d == nil {
 		if m.forkDialog == nil && m.renameDialog == nil && m.historyReader == nil && !m.chrome.menuOpen && m.chrome.dialog == "" && m.page == sessionsPage && !m.navFocused {
+			if msg.Type == tea.KeyDelete {
+				return m.openSessionDelete(false), true
+			}
 			if msg.Type == tea.KeyCtrlX {
 				return m.openSessionArchive(false, m.showArchived), true
 			}
@@ -65,6 +74,9 @@ func (m *model) archiveKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			}
 		}
 		return nil, false
+	}
+	if d.deleting {
+		return m.sessionDeleteKey(msg)
 	}
 	switch msg.Type {
 	case tea.KeyCtrlC, tea.KeyCtrlD, tea.KeyF7, tea.KeyF8:
@@ -122,6 +134,9 @@ func (m *model) handleSessionArchive(result sessionArchiveResult) tea.Cmd {
 	if d == nil || d != result.dialog {
 		return nil
 	}
+	if d.deleting {
+		return m.handleSessionDelete(result)
+	}
 	d.busy = false
 	if result.err != nil {
 		d.note = tr("Не подтверждено. Проверьте архив; для активной сессии сначала остановите задачи. ") + clean(result.err.Error())
@@ -143,6 +158,9 @@ func (m *model) archiveView(base string) string {
 	d := m.archiveDialog
 	if d == nil {
 		return base
+	}
+	if d.deleting {
+		return m.sessionDeleteView(base)
 	}
 	title := tr("Архивирование сессии")
 	explanation := tr("История сохранится. Сессия перейдёт в архив. Работающие задачи могут запретить архивирование; сначала остановите их. Восстановить сессию можно из списка архива.")
