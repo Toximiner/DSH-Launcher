@@ -15,7 +15,9 @@ def matching_backends(mode):
         if not proc.name.isdigit():
             continue
         try:
-            args = (proc / 'cmdline').read_bytes().split(b'\0')
+            # Electron can rewrite its process title into one argv slot. The
+            # installed path and backend switches contain no whitespace.
+            args = (proc / 'cmdline').read_bytes().replace(b'\0', b' ').split()
         except OSError:
             continue
         if not args or args[0] != b'/opt/dsh-launcher/electron/electron':
