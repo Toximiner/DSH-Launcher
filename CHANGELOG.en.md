@@ -9,6 +9,12 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+## [1.18.3] — 2026-11-17
+
+### Fixed
+
+- When attaching to an already running dsh, the launcher announces available updates at startup. Update now installs the launcher update instead of only restarting the window, while preserving the externally started dsh process.
+
 ## [1.18.2] — 2026-11-17
 
 ### Fixed

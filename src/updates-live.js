@@ -79,9 +79,9 @@ function setAvailableUpdates(found, notify) {
 
 // After the startup questions: the deferred one («Не сейчас»/Not now) — a menu item,
 // without a notification (it was just asked about).
-async function refreshAvailableUpdates() {
+async function refreshAvailableUpdates(notify = false) {
   if (updates.NO_UPDATE_CHECK) return;
-  try { setAvailableUpdates(await findUpdates(state.updateChecks), false); }
+  try { setAvailableUpdates(await findUpdates(state.updateChecks), notify); }
   catch (e) { console.error('[launcher] проверка обновлений:', e.message); }
 }
 
@@ -220,8 +220,11 @@ function showUpdateNowDialog(kind) {
     <p>${tr(`Доступна версия <code>${esc(u.version)}</code> (установлена <code>${esc(u.installed)}</code>).`,
             `Version <code>${esc(u.version)}</code> is available (installed: <code>${esc(u.installed)}</code>).`)}</p>
     ${kind === 'launcher' ? updates.notesBlockHtml(notesBetween(u.releases, u.installed, u.version, 'deb')) : ''}
-    <p class="hint">${tr('Лаунчер перезапустится, dsh будет остановлен — незаконченный ответ агента прервётся.',
-                         'The launcher will restart and dsh will be stopped — an unfinished agent reply will be interrupted.')}</p>
+    <p class="hint">${kind === 'launcher' && !state.weStartedDsh && !state.adoptedDsh
+      ? tr('Лаунчер перезапустится. Запущенный отдельно dsh продолжит работать.',
+           'The launcher will restart. The externally started dsh will keep running.')
+      : tr('Лаунчер перезапустится, dsh будет остановлен — незаконченный ответ агента прервётся.',
+           'The launcher will restart and dsh will be stopped — an unfinished agent reply will be interrupted.')}</p>
     <div class="actions">
       <button onclick="location.href='dshlauncher://update-now/?k=${kind}'">${tr('Обновить сейчас', 'Update now')}</button>
       <button onclick="location.href='dshlauncher://dialog/close/'">${tr('Позже', 'Later')}</button>
