@@ -1,0 +1,196 @@
+name: tui-go-preview
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['apps/tui-go/**', 'packages/tui-plugin-sdk/**', 'src/backend-clients.js', 'src/dsh-process.js', 'src/dsh-stop.js', 'src/signals.js', '.github/workflows/tui-go.yml']
+  push:
+    branches: [main]
+    tags: ['tui-v*']
+    paths: ['apps/tui-go/**', 'packages/tui-plugin-sdk/**', 'src/backend-clients.js', 'src/dsh-process.js', 'src/dsh-stop.js', 'src/signals.js', '.github/workflows/tui-go.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: Go tests and race detector
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: apps/tui-go/go.sum
+      - working-directory: apps/tui-go
+        run: go test -race ./...
+
+  native-build:
+    name: Build Linux binaries
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.3'
+          cache-dependency-path: apps/tui-go/go.sum
+      - name: Build Linux binaries without CGO
+        working-directory: apps/tui-go
+        run: |
+          mkdir -p ../../build/tui-go
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -o ../../build/tui-go/dsh-launcher-tui-go_linux_amd64 .
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -o ../../build/tui-go/dsh-launcher-tui-go_linux_arm64 .
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dsh-launcher-tui-go-preview
+          path: build/tui-go/dsh-launcher-tui-go_linux_*
+          if-no-files-found: error
+
+  terminal-pty:
+    name: Terminal PTY without Node
+    needs: native-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: dsh-launcher-tui-go-preview
+          path: build/tui-go
+      - name: PTY checks without Node in PATH
+        run: |
+          chmod +x build/tui-go/dsh-launcher-tui-go_linux_amd64
+          python3 -m venv build/go-pty-env
+          build/go-pty-env/bin/pip install pyte==0.8.2
+          build/go-pty-env/bin/python apps/tui-go/test/terminal_preview.py build/tui-go/dsh-launcher-tui-go_linux_amd64
+
+  integration:
+    name: Actual dsh (${{ matrix.suite }})
+    needs: native-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [chat, history, settings, goals, workbench, background, runtime, packages, account, clients]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: dsh-launcher-tui-go-preview
+          path: build/tui-go
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.1'
+          cache: npm
+          # The workflow pins dsh and Node; changing either invalidates this cache.
+          cache-dependency-path: .github/workflows/tui-go.yml
+      - name: Install package lifecycle test dependency
+        if: matrix.suite == 'packages'
+        run: npm install --prefix build/package-tools --ignore-scripts --no-audit --no-fund pnpm@12.8.1 && echo "$PWD/build/package-tools/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Install PDF preview dependency
+        if: matrix.suite == 'workbench'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+      - name: Prepare isolated protocol runtime
+        run: |
+          chmod +x build/tui-go/dsh-launcher-tui-go_linux_amd64
+          python3 -m venv build/go-pty-env
+          build/go-pty-env/bin/pip install pyte==0.8.2
+          npm install --prefix build/chat-test-runtime --ignore-scripts --no-audit --no-fund @deepseek-ai/dsh@0.2.2-rc.1
+      - name: Prepare official PTC source bootstrap missing from pinned npm package
+        if: matrix.suite == 'chat'
+        run: python3 apps/tui-go/test/prepare_ptc.py build/ptc-bootstrap
+      - name: Run actual dsh scenario
+        env:
+          SUITE: ${{ matrix.suite }}
+        run: |
+          extra=()
+          if [[ "$SUITE" == chat ]]; then
+            extra+=(--ptc-bootstrap "$PWD/build/ptc-bootstrap/process-entry.ts")
+          elif [[ "$SUITE" == runtime ]]; then
+            extra+=(--install)
+          fi
+          build/go-pty-env/bin/python "apps/tui-go/test/real_${SUITE}.py" \
+            --binary build/tui-go/dsh-launcher-tui-go_linux_amd64 \
+            --dsh "$PWD/build/chat-test-runtime/node_modules/.bin/dsh" "${extra[@]}"
+
+  linux-install:
+    name: Clean install (${{ matrix.image }})
+    needs: native-build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ['ubuntu:24.04', 'ubuntu:26.04', 'debian:13']
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v7
+        with:
+          name: dsh-launcher-tui-go-preview
+          path: build/tui-go
+      - name: Install and exercise the terminal in a clean distribution
+        env:
+          DISTRO_IMAGE: ${{ matrix.image }}
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" "$DISTRO_IMAGE" sh -eu -c '
+            apt-get update -qq
+            apt-get install -y -qq python3 python3-venv ca-certificates
+            python3 -m venv /tmp/pty
+            /tmp/pty/bin/pip -q install pyte==0.8.2
+            install -Dm755 /repo/build/tui-go/dsh-launcher-tui-go_linux_amd64 /tmp/tui-home/.local/bin/dsh-launcher-tui
+            export HOME=/tmp/tui-home PATH=/tmp/tui-home/.local/bin:$PATH
+            dsh-launcher-tui --version
+            /tmp/pty/bin/python /repo/apps/tui-go/test/terminal_preview.py /tmp/tui-home/.local/bin/dsh-launcher-tui
+          '
+
+  # Keep one stable required check and gate publication on every matrix entry.
+  terminal-preview:
+    needs: [unit, native-build, terminal-pty, integration, linux-install]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Require every check to succeed
+        env:
+          CHECK_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PYTHON'
+          import json
+          import os
+          results = json.loads(os.environ['CHECK_RESULTS'])
+          failed = {name: job['result'] for name, job in results.items() if job['result'] != 'success'}
+          if failed:
+              raise SystemExit(f'TUI checks did not pass: {failed}')
+          print('All TUI checks passed')
+          PYTHON
+
+  publish-tui:
+    if: startsWith(github.ref, 'refs/tags/tui-v')
+    needs: terminal-preview
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: dsh-launcher-tui-go-preview
+          path: binaries
+      - name: Verify the tag and prepare checksums
+        working-directory: binaries
+        run: |
+          chmod +x dsh-launcher-tui-go_linux_amd64
+          test "$(./dsh-launcher-tui-go_linux_amd64 --version)" = "${GITHUB_REF_NAME#tui-v}"
+          sha256sum dsh-launcher-tui-go_linux_* > SHA256SUMS
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          prerelease: true
+          make_latest: false
+          generate_release_notes: true
+          files: |
+            binaries/dsh-launcher-tui-go_linux_*
+            binaries/SHA256SUMS

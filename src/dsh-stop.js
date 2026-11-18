@@ -23,6 +23,22 @@ function dshLeaderExited() {
   return state.dshProc.exitCode !== null || state.dshProc.signalCode !== null;
 }
 
+// The decision is sticky: will-quit, exit and repeated signals must honor it.
+function mayStopBackendOnExit() {
+  if (state.backendExitDecision !== undefined) return state.backendExitDecision;
+  state.backendExitDecision = !state.backendClient || state.backendClient.release();
+  if (!state.backendExitDecision && state.dshProc) state.dshProc.unref();
+  return state.backendExitDecision;
+}
+async function shutdownBackend() {
+  if (!mayStopBackendOnExit()) return;
+  await stopDsh();
+  if (state.adoptedDsh) await stopAdoptedDsh();
+  const targets = () => state.backendClient?.targets() || [];
+  for (const group of targets()) killGroup(group, 'SIGTERM', true);
+  for (let i = 0; i < 40 && targets().length; i++) await sleep(100);
+  for (const group of targets()) killGroup(group, 'SIGKILL', true);
+}
 async function stopDsh() {
   if (!state.weStartedDsh || !state.dshProc || state.dshProc.pid === undefined) return;
   const pid = state.dshProc.pid;
@@ -73,4 +89,4 @@ async function stopAdoptedDsh() {
   for (const t of alive()) killGroup(t.id, 'SIGKILL', t.groupOnly);
 }
 
-Object.assign(module.exports, { killGroup, dshLeaderExited, stopDsh, adoptedTargets, stopAdoptedDsh }); // we extend, not replace: the modules require each other cyclically
+Object.assign(module.exports, { killGroup, dshLeaderExited, stopDsh, adoptedTargets, stopAdoptedDsh, mayStopBackendOnExit, shutdownBackend }); // we extend, not replace: the modules require each other cyclically

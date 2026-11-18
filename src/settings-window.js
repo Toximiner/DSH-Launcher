@@ -10,6 +10,7 @@ const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc, profileFromArgs } = require('./util');
+const { shortcutReference } = require('./shortcuts');
 const { DEFAULT_PORT, DEFAULT_PROFILE, effectiveConfig, settingValue, restartNeeded } = require('./config');
 const { SETTINGS_FILE, loadSettings, CONFIG, CWD, LANG_FORCED } = require('./env');
 const dialogs = require('./dialogs');
@@ -164,7 +165,7 @@ function spawnNewInstance() {
 }
 
 // The section of the «Настройки» (Settings) window (the left menu) — remembered while the launcher is open.
-const SETTINGS_SECTIONS = ['general', 'updates', 'dsh', 'window', 'graphics'];
+const SETTINGS_SECTIONS = ['general', 'updates', 'dsh', 'window', 'graphics', 'shortcuts'];
 
 
 function showSettingsDialog() {
@@ -198,8 +199,10 @@ function showSettingsDialog() {
           <a data-s="dsh" class="${state.settingsSection === 'dsh' ? 'on' : ''}" onclick="sec('dsh')">${tr('Запуск dsh', 'Starting dsh')}</a>
           <a data-s="window" class="${state.settingsSection === 'window' ? 'on' : ''}" onclick="sec('window')">${tr('Окно', 'Window')}</a>
           <a data-s="graphics" class="${state.settingsSection === 'graphics' ? 'on' : ''}" onclick="sec('graphics')">${tr('Графика', 'Graphics')}</a>
+          <a data-s="shortcuts" class="${state.settingsSection === 'shortcuts' ? 'on' : ''}" onclick="sec('shortcuts')">${tr('Горячие клавиши', 'Keyboard shortcuts')}</a>
         </nav>
         <div class="panes">
+          <section id="sec-shortcuts" class="form"${state.settingsSection === 'shortcuts' ? '' : ' hidden'}>${shortcutReference()}</section>
           <section id="sec-general" class="form"${state.settingsSection === 'general' ? '' : ' hidden'}>
         <div class="row"><span>${tr('Язык интерфейса', 'Interface language')}</span>
           ${LANG_FORCED ? `<code>${i18n.getLang()}</code> <span class="hint">${tr('задано переменной', 'set by')} <code>DSH_LAUNCHER_LANG</code></span>`
@@ -253,6 +256,10 @@ function showSettingsDialog() {
       </div>
       <div class="actions">${dialogs.dialogCloseButton()}</div>
       <script>
+        function filterShortcuts(query) {
+          const q = query.trim().toLocaleLowerCase();
+          for (const row of document.querySelectorAll('[data-shortcut]')) row.hidden = !row.textContent.toLocaleLowerCase().includes(q);
+        }
         function set(k, v) { location.href = 'dshlauncher://settings/set/?k=' + encodeURIComponent(k) + '&v=' + encodeURIComponent(v); }
         function go(r) { location.href = 'dshlauncher://settings/' + r + '/'; }
         // the section — immediately on the page; the launcher remembers it for redraws

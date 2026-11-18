@@ -7,6 +7,118 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 ## [Unreleased]
 
+- TUI preview.40: Plugin Market now has a centered page with cards, descriptions, versions, and catalog/installed tabs. Automation tasks has a dedicated page with status filters and counts, creation/editing forms, run times, and readable delivery history. Tasks are read through schedule/catalog without the 200-row limit. Advanced rules remain available in the F2 JSON editor; confirmation and revision checks are preserved.
+
+- TUI preview.40: Plugins follows the GUI with a dedicated page, built-in settings cards, experimental and installed packages, dsh display metadata, More, Market and Add controls. Internal modules have a separate component view. Toggles require confirmation and a baseline check; results refresh without repeating the write. Schema-based settings, operation receipts and nested-panel return remain available.
+
+- TUI preview.40: the keyboard reference now has seven topic groups, separate key/action columns and muted contexts. Tab/Left/Right and buttons switch groups; search includes section names, and the current heading stays visible while scrolling. Long descriptions wrap; the modal fits 80×24.
+
+- TUI preview.40: settings follow the GUI structure with General, Models, Built-in plugins, Agent presets and Plugin Market on the left, and values with descriptions on the right. Settings scroll independently; nested panels return to the hub. Default permissions for new sessions use the shared dsh setting and revision-checked editor. Font size is controlled by the terminal.
+
+- TUI preview.40: active conversations follow the GUI layout with a centered column up to 100 cells, right-aligned user messages, left-aligned assistant replies, a preset header and a Trajectory tab. The composer, editor, permissions and model stay at the bottom; message times, step duration and statistics come from dsh. Copy controls and Ctrl+Y copy the source text; the keyboard reference includes the new shortcut.
+
+- TUI preview.40: empty sessions use a GUI-like landing screen with a centered composer, workspace/preset controls above and editor, permissions and current model below. Labels come from dsh. Permission selection uses the advertised catalog and command with confirmation, a competing-change check and result reconciliation. Background session polling keeps the layout stable, and stale polls cannot undo an acknowledged model choice.
+
+- TUI preview.40: the sidebar follows the GUI structure with New Session, plugins, market, automation and More; actual dsh workspaces with expandable sessions; and a fixed lower settings/account menu. Added independent tree scrolling, keyboard selection without executing actions, and new sessions in the selected workspace.
+
+- Aligned GUI and TUI menu grouping: Quit ends File; TUI updates and logs move to Help, with About last. Added a direct GUI menu entry for keyboard shortcuts.
+
+- TUI preview.39: `--start` connects to an existing local dsh instead of starting a second process on an occupied port. Authentication is verified through the API without claiming an external process. Unavailable login discovery produces actionable guidance. Fixed startup diagnostic flushing, ownership preservation after failed startup, and continued logging after a `/runtime` start operation.
+
+- GUI and TUI share local dsh client leases: closing one preserves the backend for the other, and the last client stops the managed process. Signals, backend restarts, PID reuse and inherited output are handled. Both clients must be updated. Added package installation cancellation and isolated account checks.
+
+- TUI preview.38: searchable shortcut references in TUI/GUI settings; persisted light/dark theme, RU/EN and sidebar visibility; session search and stable background refresh; DeepSeek account panel; bounded image/PDF/HTML previews; declarative plugin SDK with two actual-dsh examples; package version/build controls and private durable operation receipts. CI adds package lifecycle and three clean Linux installs.
+
+- Remove the static browser/WASM TUI preview, its build job and CI artifacts; use the native Linux binary. Correct the interactive PTY environment in CI checks.
+
+- Go preview 0.2.0-preview.37 implements baseline client stages 11–13: `/runtime` adds user-local dsh installation/progress and owned processes; `/updates` adds version/release notes, dsh and TUI installation/rollback with SHA-256, atomic replacement and `.previous --rollback-tui`; `/diagnostics` adds bounded stdout/stderr, masked private tar.gz reports and journal/opt-in BEL notices. Actual isolated npm/dsh checks cover empty-home startup, restart, external-process preservation and actual TUI binary update/recovery; Go checks cover failures/cancellation and secrets. Dedicated `tui-v…` publication is prepared; public delivery remains unverified until its first release. Binary rollback does not downgrade or restore dsh profile data.
+
+- Go prototype 0.2.0-preview.36 verifies background-work clients against actual dsh: shell jobs, continuable children, schedule run/history, stopping and reconnect without duplicate work. Fixes parent-qualified child chat/history/search, direct child-ID connection, F8 parent routing and `/parent` navigation. Shared Host output omits the owner and displays scope/gaps. Tests cover retained drafts in child views and ordinary forks with inherited descriptors. Adds the actual-backend scenario to CI; team-task mutation still needs a backend API.
+
+- Go prototype 0.2.0-preview.35 adds shared preset, workspace/file, plugin/command/package, subagent/team-task/job and schedule dialogs. Multiline drafts/uploads use dsh send reconciliation; a native interactive TTY detaches with Ctrl+]. Schedule writes use CAS; actions require confirmation and never retry automatically. Isolated actual-dsh checks cover both plan decisions, files, schedule/shell lifecycle and multiline send with an attachment, plus chat regressions and Go race tests. A declarative SDK, dedicated web/OAuth adapters and team-task writes remain planned; advanced operations need dedicated actual-backend scenarios.
+
+- Go prototype 0.2.0-preview.34 begins plans/goals/presets: `/goal` displays phase/revision, rounds/cap, block reason and separate continuation activation. F3 edits the multiline objective/cap; F5 writes only changed fields through goals/edit with identity/revision checks. Conflicts retain the draft; Ctrl+R shows the fresh goal and Ctrl+B explicitly accepts its revision while preserving untouched foreign fields. A different goal cannot silently become the draft target; unconfirmed writes never retry. Actual-dsh checks cover three sizes, cancellation, reconnect and the omitted value member for an absent goal. The test makes no model calls; automatic round driving is disabled only in its isolated profile.
+
+- Go prototype 0.2.0-preview.33 completes the basic settings editor: Ctrl+E opens multiline text or JSON; the first F5 stages the edit and the next saves to dsh. Local checks cover types, required values, choices, numeric ranges/steps and lengths; backend validation remains authoritative. Revision protection, conflict drafts and secret masking remain, including refusing whole-container edits with secrets. Actual-dsh checks verify model creation through JSON, Unicode/newlines, no backend write before the second F5, and invalid-number refusal. Generic provider OAuth is explicitly tracked as a missing dsh Remote contract; DeepSeek account screens remain a dedicated adapter.
+
+- Go prototype 0.2.0-preview.32: Enter on dsh settings opens a schema form; F6 or `/providers` opens providers. Nested fields, provider/model creation, staged edits, and F5 revision-checked persistence are available. Conflicts retain drafts; Ctrl+R rereads, and same-field changes require explicit review or Ctrl+X cancellation. Ctrl+K on an `apiKeyEnv` reference opens masked new-key entry: only status is read, and the credentials API writes without automatic retries or a revision guarantee. Actual-dsh checks cover provider creation, model catalog discovery, two-client conflicts, three terminal sizes, and the new key in the next request, without user-profile edits or paid model calls. OAuth and richer editors remain pending.
+
+- Go prototype 0.2.0-preview.31 begins models/settings: F12 or `/models` opens the dsh provider catalog, session model selection, search, and adapter-owned reasoning efforts via Tab/Shift+Tab. The picker shows the requested selection and dsh’s shared-default side effect before applying. It does not restart generation; acknowledgement confirms the session choice, not completion of background default persistence. A preflight reread detects an already changed selection; unconfirmed writes block Enter until F5. Keys and private provider failures are not displayed. Tests cover cancellation, mouse, minimum layout, and the selected model in an actual dsh request.
+
+- Go prototype 0.2.0-preview.30 completes the current history increment: Ctrl+F also searches tool names, arguments, results, and error codes; Ctrl+T in the query editor selects all / messages / tools. Matching cards expand and scroll to the match without becoming message fork targets. A fixed-snapshot index folds cross-page replacements in surface order, repeated replacements, and retired nested cards; replaced text cannot reappear during search/navigation. Calls outside a result page restore tool context. Indexing is bounded to 100,000 events / 64 MiB read; failures retain the current page. Verified with actual dsh, its Session.append path, and PTC at three terminal sizes.
+
+- Go prototype 0.2.0-preview.29: history tool cards start collapsed; F6/Shift+F6 select a card and Enter or a click toggle argument/result details. Nested calls expand independently. Up to 256 expanded cards are remembered across pages of one snapshot; F5 and closing reset preferences. Tool selection cannot act as a message fork/copy target and leaves live chat and drafts unchanged. Fixed Shift+F6 decoding in live chat too. Added Go and actual dsh/PTC checks at three terminal sizes.
+
+- Go prototype 0.2.0-preview.28: syntax coloring for code blocks in committed replies and history using pinned Chroma v2.23.1. The fence language selects a lexer; unknown and unlabeled blocks remain plain. Colors follow terminal capabilities while source, search, copying, and wrapping retain their contents. Lexer errors and input/token budgets fall back to intact plain code. Actual PTY colors and dsh copying are verified at three terminal sizes.
+
+- Go prototype 0.2.0-preview.27: Ctrl+Y copies the selected history message source; Ctrl+K opens a code-block picker. Copying preserves tabs, Unicode, and blank lines; fragments over 64 KiB are refused without truncation. Linux clipboard helpers use wl-copy/xclip/xsel; OSC 52 fallback reports a sent request without claiming confirmed clipboard storage. Tests cover cancellation, failures, and exact text with actual dsh at three terminal sizes.
+
+- Go preview 0.2.0-preview.26 formats committed assistant messages and history with Markdown headings, emphasis, lists, quotes, links, code, and tables. Wide tables become labeled records without losing cells. Ctrl+R in history toggles source; search and branching retain authoritative text and event identities. Streaming text, user messages, and tool cards stay plain. Uses pinned Goldmark v1.7.8, a bounded cache, and Unicode, control-character, and branch-boundary checks.
+
+- Go preview 0.2.0-preview.25 raises the minimum terminal size to 80×24 and recommends 100×30. Below either dimension, a notice shows the current size. Drafts and dialogs survive resizing; hidden controls ignore input and clicks. Ctrl+C/Ctrl+D exit and F8 cancellation remain available. Tests and browser auto-fit use the new dimensions.
+
+- Go preview 0.2.0-preview.24 adds archive/restore through `/archive`, `/restore`, or Ctrl+X in the list; a switches active and archived sessions. State follows the shared dsh registry with reconnect support. Running activity is never stopped implicitly; refusals retain the dialog without retrying. Archived chats retain history and block sending while preserving the draft. The list fits 44×18. Permanent session deletion is tracked as a backend-dependent task because the current dsh API exposes no deletion operation.
+
+- Go preview 0.2.0-preview.23 adds branching from a selected history message. Tab/Shift+Tab or a click selects a message; Ctrl+B opens confirmation with its event number and excerpt. Search hits are selected automatically. The child inherits the exact inclusive event prefix; dsh closes an unfinished turn. Cancellation preserves the page, selection, and draft. Actual dsh covers user-message and assistant-answer cuts, inherited model context, and independent continuation.
+
+- Go preview 0.2.0-preview.22 adds `/fork` for the current session and Ctrl+B for a selected list entry. A confirmation explains the latest-completed-turn boundary; the API-created session opens afterward. The source keeps running and the draft is preserved. Uncertain creation never retries; the acknowledged child ID remains available if connecting fails. Actual dsh covers an active source, inherited history, and independent continuation.
+
+- Go preview 0.2.0-preview.21 adds `/rename` for the current session and F3 for the selected list entry. Titles come from dsh projections and appear in the session list and chat header. Saving uses the API-confirmed normalized title; errors preserve the editor without automatic retries. Actual dsh covers Unicode, cancellation, and reconnect.
+
+- Go preview 0.2.0-preview.20 adds history message search through Ctrl+F or Search, Enter to submit, and F3 for an older match. Case-insensitive literal search reads beyond the loaded window at one fixed cut and marks the matched message. Esc cancels search while preserving the live draft. Long scans use bounded batches with explicit continuation.
+
+- Go preview 0.2.0-preview.19 adds a separate session-history window via F11 or `/history`, older/newer pages, preserved scroll positions, F5 for newer messages, and mouse controls. Reads share a fixed cut without changing live chat, agent state, or the draft. Actual dsh with a local model covers 27 turns, reconnect, and 120×42, 80×24, 44×18 layouts.
+
+- Go preview 0.2.0-preview.18 adds live command stdout/stderr to tool cards, including nested PTC calls. Reconnection resumes byte offsets without rerunning commands; final results supersede previews. Loss and bounded display tails are labeled. Actual-model chat was verified with the GUI-configured Qwen3.8-27B in an isolated temporary profile.
+
+- Go preview 0.2.0-preview.17 groups nested PTC tool cards under their explicit parents with independent states, arguments, results/errors, F6 navigation, expansion, and mouse handling. Missing parents and invalid chains are labeled; reconnect restores the tree. Actual PTC integration uses a pinned official source bootstrap only in the isolated test profile because dsh 0.2.2-rc.1 npm packaging omits its worker file.
+
+- Go preview 0.2.0-preview.16 promotes a pending task to steering via F9 → Ctrl+G with explicit confirmation. dsh consumes it on the next step of the same turn without interrupting the current response; remaining tasks stay queued. Idle/stale state and observed content changes block promotion; uncertain results never retry automatically. Actual dsh with a controlled provider verifies same-turn journal events, retained FIFO work, and reconnect recovery.
+
+- Go preview 0.2.0-preview.15 adds multiline editing of pending tasks via F9 → F3. Enter inserts a line, F5 saves through the dsh API, and Esc discards the edit while preserving the chat draft. Observed conflicts, already admitted items, and stale state block saving; failed saves retain the draft without automatic retries. Actual dsh with a controlled provider verifies edited model input, FIFO order, reconnect, and the minimum 44×18 layout.
+
+- Go preview 0.2.0-preview.14 adds a queue dialog via F9, `/queue`, or the inline heading. Individual removal requires explicit confirmation and uses dsh item identity, preserving the active turn and remaining work. Uncertain mutations never retry automatically; stale state disables removal. Actual dsh with a controlled provider verifies retained work, reconnect, mouse handling, and the minimum 44×18 layout.
+
+### Changed
+
+- Disabled the public GitHub Pages demo by removing its browser runtime and advertised links. The landing page and demo placeholder are also removed. Native Go downloads remain available through direct links; live usage is documented for private Codespaces.
+
+### Added
+
+- Go preview 0.2.0-preview.13 queues follow-up tasks while the agent is running, using the dsh server inbox. Chat shows pending tasks and submission receipts; authoritative history removes admitted items without duplicates. Queue state restores on reconnect and uncertain submissions never retry automatically. F8 retains pending work. Queue cancellation/editing and steering remain subsequent increments. Actual dsh with a controlled provider verifies three individual FIFO turns and client reconnection.
+
+- Go preview 0.2.0-preview.12 adds a dedicated agent-question dialog with single/multiple choice, multiline custom answers, explicit skip, and batch navigation. F5 submits the complete batch through the dsh question channel without changing the chat draft. F7 reopens deferred requests; F8 cancels. Connected clients hold timed questions; continued questions restore from the session projection and use userQuestions/answer. Actual ask_user_question integration with a controlled provider and UI captures are included.
+
+- Go preview 0.2.0-preview.11 adds explicit one-shot permission dialogs with reason, arguments, scrolling, and allow/reject controls. Esc defers, F7 reopens, F8 cancels, and the composer draft survives. Answers use the receiving Peer; disconnected actions are disabled and uncertain answers never retry automatically. Decisions restore from dsh history. Actual dsh integration covers execution only after approval, rejection, cancellation, and reconnection using a controlled test model provider.
+
+- Go preview 0.2.0-preview.10 adds tool cards with arguments, results, errors, cancellation state, and folded long output. F6 / Shift+F6 selects cards, Enter or click expands them, and Esc restores composer focus without losing the draft. Reconnection restores cards without duplication. Actual dsh integration verifies a real file read and missing-file error using a controlled test provider. Permission and question dialogs remain pending.
+
+- Go preview 0.2.0-preview.9 sends session prompts, streams assistant text over WebSocket, supports F8 / `/stop`, and reconnects read subscriptions. History and partial output reconcile against dsh; service context is not presented as user text. Uncertain submissions are never retried automatically; `/retry-send` retains the original requestId. Adds Go/PTY checks and CI integration against actual dsh with a controlled local model endpoint. No cloud LLM was verified without credentials.
+
+- Go preview 0.2.0-preview.8 adds File/View/Help menus, modal TUI settings with persisted mouse/input-history preferences, shortcut help, and About. F10 opens the menu; F4 / Alt+T opens settings. TUI settings leave the sidebar; dialogs preserve the page, scroll, draft, and focus. Electron-specific controls are excluded. Tests cover minimum dimensions, mouse, save failures, and restart persistence.
+
+- Added a private live Codespaces deployment with Node 24, actual dsh and dshmarket, native Go TUI through ttyd, font fitting, and touch navigation.
+
+- Go preview 0.2.0-preview.7 adds a marketplace TUI with catalog search, installed packages, mouse controls, and confirmed install/update/remove actions. State is reread after operations and progress comes from dshmarket. The browser has a clearly labeled sample catalog without backend writes.
+
+- Go preview 0.2.0-preview.6 adds session attachment/creation/selection, backend-confirmed agent modes, pending plan transitions, and goal commands. `--start` offers profile-local dshmarket preinstallation with skip/remember choices and user-local pnpm. Includes API, full PTY, and real dsh checks; chat text remains local.
+
+- Adapted the browser preview for phones with automatic terminal scaling, zoom/Fit buttons, scrolling after manual enlargement, and touch navigation. The terminal adapts when the visual viewport changes, including an on-screen keyboard.
+
+- Removed the legacy JS TUI source, npm/Debian packaging, workflow, and its scenarios. Moved the shared PTY driver into the Go app. Fixed ESLint browser globals for the web adapter and excluded generated builds.
+
+- Added a static WebAssembly browser preview of the shared Go TUI model, with input, navigation, and mouse controls through xterm.js. Requires no external terminal tunnel. dsh settings are explicitly labeled as a demo snapshot; no user backend connection is made.
+
+- Go preview 0.2.0-preview.5 separates dsh and TUI settings in the sidebar. TUI settings display client information regardless of backend connection; dsh snapshot refresh is confined to its own page.
+
+- Go preview 0.2.0-preview.4 reads live dsh settings through `settings/describe`, using a login URL from `DSH_TUI_URL` or `--url`. Includes namespace navigation, scrolling, snapshot refresh, and retaining previous data after an error. Secrets are hidden; editing is unavailable. Validated the protocol, errors, PTY flow, and real dsh 0.2.2-rc.1.
+
+- Go preview 0.2.0-preview.3: click sidebar pages or the local draft, focus the composer, and scroll content under the pointer. `--no-mouse` disables mouse capture. Tests cover hit areas, SGR mouse input, and terminal mode restoration.
+
+- Go preview 0.2.0-preview.2: sidebar navigation, conversation and composer panels, connection status, and local pages. Navigation preserves drafts; narrow terminals hide the sidebar. Backend connection is still pending.
+
+- First standalone Go/Bubble Tea TUI preview: input, history with draft restoration, scrolling, resizing, and clean shutdown. The first checkpoint had no backend connection. Includes Go tests and PTY checks without Node in PATH.
+
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
 ## [1.18.3] — 2026-11-17

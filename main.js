@@ -10,7 +10,7 @@
  *  - if dsh is already running (e.g. from a terminal), attaches to it and
  *    does NOT kill it on close; if there is no valid cookie, asks to paste
  *    the URL with the token from the terminal where dsh is running;
- *  - closing the window terminates the whole dsh process tree started by the
+ *  - the last GUI/TUI client closing terminates the dsh process tree started by a
  *    launcher (and dsh "adopted" after self-revival — it is found by port):
  *    SIGTERM first, SIGKILL after 4 s;
  *  - SIGTERM/SIGINT/SIGHUP to the launcher itself: a graceful close (same as
@@ -52,7 +52,8 @@ const { setUpdatePolling, refreshAvailableUpdates } = require('./src/updates-liv
 const { spawnNewInstance } = require('./src/settings-window');
 const { dshInstallCheck } = require('./src/dsh-install');
 const { showInstallPage } = require('./src/install-page');
-const { stopDsh, stopAdoptedDsh } = require('./src/dsh-stop');
+const { shutdownBackend } = require('./src/dsh-stop');
+const { joinBackend } = require('./src/backend-clients');
 const { checkPreviousRun, clearRunMarker, maybeShowCrashNotice } = require('./src/diagnostics');
 const { showClosingWindow, CLOSING_DELAY_MS } = require('./src/closing-window');
 const { closeToTrayOn, setTray, setTrayAttention, clearAgentNotification, showMainWindow, onMainWindowClose, AGENT_POLL_MS, pollAgentState } = require('./src/tray');
@@ -120,6 +121,7 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 async function onReady() {
+  state.backendClient = joinBackend(PORT);
   checkPreviousRun(); // the "single instance" lock is already ours
   installSignalHandlers(app);
   buildAppMenu(); // «Файл», «Правка», «Вид», «Справка» (the labels follow the
@@ -297,8 +299,7 @@ app.on('before-quit', (e) => {
   // (the cleanup functions are registered by the modules via state.settleOperation)
   state.settleAllOperations();
   Promise.resolve().then(async () => {
-    await stopDsh();
-    if (state.adoptedDsh) await stopAdoptedDsh();
+    await shutdownBackend();
   }).finally(() => {
     clearTimeout(closingTimer);
     if (state.relaunchRequested) { try { spawnNewInstance(); } catch (e) { console.error('[launcher] перезапуск:', e.message); } }

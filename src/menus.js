@@ -23,7 +23,7 @@ const view = require('./view');
 /* ---------------- window menu: "About", "Check for updates" ---------------- */
 
 // The menu bar at the top of the window is always visible (autoHideMenuBar: false):
-//   "File"    — Restart dsh…, Quit (normal, stops dsh);
+//   "File"    — Settings, Restart dsh…, Quit;
 //   "Edit"    — Cut / Copy / Paste / Select all;
 //   "View"    — reload, zoom, search, spell check, full screen;
 //   "Help"    — Check for updates… (dialog window: compares GitHub and npm,
@@ -88,6 +88,8 @@ function appMenuTemplate() {
     {
       label: tr('Справка', 'Help'),
       submenu: [
+        { label: tr('Горячие клавиши', 'Keyboard shortcuts'), click: () => { state.settingsSection = 'shortcuts'; settingsWindow.showSettingsDialog(); } },
+        { type: 'separator' },
         ...upd('launcher', 'DeepSeek Harness Launcher'),
         ...upd('dsh', 'dsh'),
         ...(state.availableUpdates.launcher || state.availableUpdates.dsh ? [{ type: 'separator' }] : []),
