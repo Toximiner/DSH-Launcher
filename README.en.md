@@ -70,7 +70,16 @@ A small Electron app: a window that opens **DeepSeek Harness**
     update; for nvm and `~/.npm-global` (root would leave files there that the
     user cannot update later) — the terminal command. After success dsh starts
     with the new version immediately.
-  - In attach mode (dsh already running) no prompts are shown.
+  - In attach mode (dsh already running) the startup update prompts
+    are not shown. “Update now” still works, though: a launcher
+    update installs without stopping the foreign dsh (it keeps
+    running, the launcher re-attaches after the restart), and a
+    dsh update installs the package and then asks exactly one
+    question — “dsh was not started by the launcher… Stop dsh?”:
+    “Stop” → dsh is stopped and restarted with the new version
+    (an unfinished agent reply is interrupted); “Cancel” → a
+    notice to restart dsh where it was started (the version is
+    already installed).
   - Requests are sent right at startup, in parallel with everything else;
     before starting dsh the launcher waits for them at most ~8 s (without a
     network they fail at once and the launcher simply doesn’t ask). Disable with
@@ -80,7 +89,9 @@ A small Electron app: a window that opens **DeepSeek Harness**
     found mid-work interrupts nothing: a notice in the window corner (once per
     version) and a “Help → Update … to X…” item. Its window shows “What’s
     new” and “Update now”: the launcher restarts (dsh stops) and installs
-    the update right away, without asking again. The same buttons are in
+    the update right away, without asking again. If dsh was
+    started outside the launcher, one question about stopping it
+    appears (see the attach-mode bullet above). The same buttons are in
     “Help → Check for updates…”. Turned off with its own checkbox in
     “Settings”.
 
@@ -105,6 +116,8 @@ A small Electron app: a window that opens **DeepSeek Harness**
       Updates”);
     - “dsh log…” — the latest lines of `dsh.log`, tokens and keys hidden;
     - “Open logs folder”, “Save report…” (see “Logs and diagnostics”);
+    - “Keyboard shortcuts…” — all the window's hotkeys listed in
+      a dialog;
     - “About” — the launcher and dsh backend versions, the dsh path,
       Node.js, OS, GPU acceleration, the logs path; one click copies the
       whole block to the clipboard for a bug report.
@@ -324,7 +337,7 @@ What changed in each version is in [CHANGELOG.en.md](CHANGELOG.en.md).
 ### Building it yourself
 
 Required (on the **build machine** only): Ubuntu/Debian amd64 with `dpkg-deb`
-(the `dpkg-dev` package), Node.js 22.12+ (required by Electron 44) and
+(the `dpkg-dev` package), Node.js 22.12+ (required by Electron 45) and
 internet access (the ~290 MB Electron binary is downloaded). The package
 itself does **not** need node/npm on the target machine — Electron is
 bundled (Node.js 22+ is needed only for dsh, see “System requirements”).
@@ -453,13 +466,23 @@ tests and the package build, the Docker scenarios are run manually.
 Release: fill in the `## [Unreleased]` section of `CHANGELOG.md` and
 `CHANGELOG.en.md`, then `npm run release 1.16.0` — the section becomes
 `## [1.16.0] — <date>`, the version goes into `package.json`,
-`package-lock.json` and `deb/control`, and a “Версия 1.16.0” commit and a
-`v1.16.0` tag are created (locally). The script refuses if the section is
-empty, the branch isn't `main`, there are uncommitted changes or the version
-isn't higher than the current one. To publish — `git push origin main
-v1.16.0`: on the tag CI builds the package and publishes the release with
-the description from both CHANGELOGs. Only edit the files, no commit or tag:
-`npm run release -- 1.16.0 --no-commit`.
+`package-lock.json` and `deb/control`, and a “Версия 1.16.0” commit
+appears (no tag yet). The script refuses if the section is empty, the
+branch isn't `main`, there are uncommitted changes or the version
+isn't higher than the current one. After that — through a PR only
+(direct pushes to `main` are closed by the “Changes must be made
+through a pull request” rule): `git push origin main:release/1.16.0`,
+a PR, and when the build is green — merge: branch protection requires
+one approving review for every PR, including the owner's own; the
+owner merges their own PR with `gh pr merge <N> --merge --admin`,
+and other people's PRs (e.g. dependabot) — after one approval.
+Before publishing, run the `docker-tests` workflow manually
+(Actions → docker-tests → Run workflow, ~12 minutes: Ubuntu 24.04/
+26.04, Debian 13) to verify the .deb on clean systems. And the tag:
+`git fetch origin && git tag v1.16.0 origin/main && git push origin
+v1.16.0`. On the tag CI builds the package and publishes the release
+with the description from both CHANGELOGs. Only edit the files, no
+commit: `npm run release -- 1.16.0 --no-commit`.
 
 ## About `--no-sandbox`
 

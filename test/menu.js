@@ -134,7 +134,7 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
     // modules the menu calls into (stubs)
     updatesLive: { showUpdateNowDialog: (kind) => calls.push('update:' + kind) },
     view: { viewActions, setSpellcheck: (on) => calls.push('spell:' + on) },
-    dialogs: { showAboutDialog: () => calls.push('about'), showUpdateCheckDialog: () => calls.push('check') },
+    dialogs: { showAboutDialog: () => calls.push('about'), showUpdateCheckDialog: () => calls.push('check'), showHotkeysDialog: () => calls.push('hotkeys') },
     rollback: { showRollbackDialog: () => calls.push('rollback') },
     fileHelp: { openLogsFolder: () => calls.push('logs'), restartDsh: () => calls.push('restart') },
     diagnostics: { saveReport: () => calls.push('report') },
@@ -160,9 +160,9 @@ assert.ok(/win\.webContents\.on\('context-menu',\s*\(_e, params\) => showContext
   assert.strictEqual(item(ru[0], 'Выйти').role, 'quit', '«Выйти» — the standard quit role');
 
   // "Help": updates, logs, "About" — as the last item
-  assert.deepStrictEqual(labels(ru[3]), ['Проверить обновления…', 'Вернуть предыдущую версию…', 'Журнал dsh…', 'Открыть папку логов', 'Сохранить отчёт…', '|', 'О программе'], '«Справка»');
-  assert.deepStrictEqual(labels(en[3]), ['Check for updates…', 'Roll back to a previous version…', 'dsh log…', 'Open logs folder', 'Save report…', '|', 'About'], '«Help»');
-  for (const [label, call] of [['Проверить обновления…', 'check'], ['Вернуть предыдущую версию…', 'rollback'], ['Журнал dsh…', 'log'], ['Открыть папку логов', 'logs'], ['Сохранить отчёт…', 'report'], ['О программе', 'about']]) {
+  assert.deepStrictEqual(labels(ru[3]), ['Проверить обновления…', 'Вернуть предыдущую версию…', 'Журнал dsh…', 'Открыть папку логов', 'Сохранить отчёт…', 'Горячие клавиши…', '|', 'О программе'], '«Справка»');
+  assert.deepStrictEqual(labels(en[3]), ['Check for updates…', 'Roll back to a previous version…', 'dsh log…', 'Open logs folder', 'Save report…', 'Keyboard shortcuts…', '|', 'About'], '«Help»');
+  for (const [label, call] of [['Проверить обновления…', 'check'], ['Вернуть предыдущую версию…', 'rollback'], ['Журнал dsh…', 'log'], ['Открыть папку логов', 'logs'], ['Сохранить отчёт…', 'report'], ['Горячие клавиши…', 'hotkeys'], ['О программе', 'about']]) {
     calls.length = 0;
     item(ru[3], label).click();
     assert.deepStrictEqual(calls, [call], `«${label}» → ${call}`);

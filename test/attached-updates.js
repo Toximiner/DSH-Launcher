@@ -17,6 +17,7 @@ async function run(updateNow, installed = false, stopAt = '') {
       if (stopAt === 'gui') state.stopping = true;
     },
     startWatchdog: () => calls.push('watchdog'),
+    deferredDshUpdateInAttach: () => { calls.push('deferred-dsh'); },
     refreshAvailableUpdates: (notify) => calls.push(['updates', notify]),
   });
   await attachRunningDsh();
@@ -31,6 +32,7 @@ async function main() {
   assert.deepStrictEqual(await run('launcher', false, 'install'), ['install'], 'closing during install never opens the GUI');
   assert.deepStrictEqual(await run(null, false, 'initial'), [], 'closing before attach does no work');
   assert.deepStrictEqual(await run(null, false, 'gui'), ['gui'], 'closing during navigation never starts notifications');
+  assert.deepStrictEqual(await run('dsh'), ['gui', 'watchdog', 'deferred-dsh', ['updates', true]], 'explicit dsh update runs the deferred attach-mode update after the GUI');
   console.log('OK: attached updates — explicit installation, startup notifications and shutdown');
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

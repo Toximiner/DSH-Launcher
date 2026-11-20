@@ -78,6 +78,24 @@ function isAltKey(input) {
     (input.code === 'AltLeft' || input.code === 'AltRight');
 }
 
+/* The window's hotkeys for the «Горячие клавиши…» dialog: all 9 of them,
+   as in the README (section «Клавиши в окне»): [the keys (in <code>), the
+   action]. The list is the single source for the dialog and the README. */
+function hotkeyRows() {
+  const k = (s) => '<code>' + s + '</code>';
+  return [
+    [k('F5') + ' / ' + k('Ctrl+R'), tr('перезагрузить страницу', 'reload the page')],
+    [k('Ctrl+Shift+R'), tr('перезагрузить без кэша', 'reload without cache')],
+    [k('Ctrl+=') + ' / ' + k('Ctrl+-'), tr('шаг масштаба страницы', 'zoom step')],
+    [k('Ctrl+0'), tr('сброс масштаба', 'reset zoom')],
+    [k('Ctrl+F'), tr('поиск по странице', 'find in page')],
+    [k('F3') + ' / ' + k('Shift+F3'), tr('следующее / предыдущее совпадение', 'next / previous match')],
+    [k('F11'), tr('полноэкранный режим', 'fullscreen')],
+    [k('Ctrl+,'), tr('«Настройки»', '"Settings"')],
+    [k('Esc'), tr('закрыть диалог или поиск', 'close dialog or find')],
+  ];
+}
+
 /* Window size from the saved state: not less than WIN_MIN and not more
    than the screen's work area (the monitor may have been changed);
    garbage — the default size. */
@@ -167,4 +185,4 @@ function pickCrashDumps(files, now, maxAgeDays = 30, max = 3, maxBytes = 25 * 10
 }
 /* ===== end pickCrashDumps ===== */
 
-module.exports = { pickCrashDumps, crashRestart, agentEvent, WIN_MIN, contextMenuItems, keyAction, isAltKey, windowSize, gpuStatus, reportFileName, reportInfoText };
+module.exports = { pickCrashDumps, crashRestart, agentEvent, WIN_MIN, contextMenuItems, keyAction, isAltKey, hotkeyRows, windowSize, gpuStatus, reportFileName, reportInfoText };

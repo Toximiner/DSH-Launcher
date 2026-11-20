@@ -272,6 +272,7 @@ async function runDeferredUpdate(deps) {
 }
 /* ===== end runDeferredUpdate ===== */
 
+/* ===== showUpdateNowDialog (test test/updates-live.js) ===== */
 // «Обновить … до X…» (Update … to X…) window: what's new and a warning about the restart.
 function showUpdateNowDialog(kind) {
   const u = state.availableUpdates[kind];
@@ -300,6 +301,7 @@ function showUpdateNowDialog(kind) {
       <button onclick="location.href='dshlauncher://dialog/close/'">${tr('Позже', 'Later')}</button>
     </div>`));
 }
+/* ===== end showUpdateNowDialog ===== */
 
 function updateNow(kind) {
   if (!state.availableUpdates[kind]) return;
