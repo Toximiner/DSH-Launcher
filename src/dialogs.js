@@ -172,7 +172,7 @@ async function showUpdateCheckDialog() {
   if (!updates.NO_UPDATE_CHECK || canL || canD) {
     updatesLive.setAvailableUpdates({
       ...(canL ? { launcher: { version: latestL.version, installed: lver, releases: latestL.releases } } : {}),
-      ...(canD ? { dsh: { version: latestD.version, installed: dver } } : {}),
+      ...(canD ? { dsh: { version: latestD.version, installed: dver, releases: latestD.releases } } : {}),
     }, false);
   }
   // The dialog was closed or another opened in it — dialogShow will show nothing.
