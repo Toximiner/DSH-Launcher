@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+## [1.18.4] — 2026-11-20
+
 ### Fixed
 
 - “Update now” (dsh) in attach mode (dsh is already running, started outside the launcher): instead of an endless restart loop, the update is now installed, and one question is asked before stopping the foreign dsh — “dsh was not started by the launcher… Stop dsh?” (“No” — a toast: restart dsh where you started it).
