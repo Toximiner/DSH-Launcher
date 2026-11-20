@@ -273,7 +273,149 @@ async function main() {
   assert.strictEqual(d.restartCalls.length, 0, 'not installed — no restartDsh');
   assert.strictEqual(d.state.dshInstalledVersion, null, 'the version is still unknown');
 
+  // ------------------------------------------------------------------
+  // showUpdateNowDialog (same file, src/updates-live.js): the
+  // «Обновить … до X…» (Update … to X…) window. state.availableUpdates
+  // must hold the entry; dialogs.openDialog must return a non-null
+  // generation; the rendered page carries the version, the release notes
+  // (deb scheme for the launcher, semver + the EN part for dsh), the
+  // restart warning and the action buttons.
+  const showDeps = (stateOver = {}, openDialogResult) => {
+    const openCalls = [];
+    const schemes = [];
+    let nextGen = 'gen-1';
+    const fakeNotes = [{ version: 'v2', body: 'B2' }];
+    const notesCalled = [];
+    const dshNotesCalled = [];
+    const deps = {
+      state: Object.assign({
+        availableUpdates: {
+          dsh: { version: '0.2.2-rc.5', installed: '0.2.2-rc.1', releases: [{ version: '0.2.2-rc.2', body: 'x' }] },
+        },
+        weStartedDsh: false,
+        adoptedDsh: false,
+      }, stateOver),
+      updateName: (kind) => (kind === 'launcher' ? 'DeepSeek Harness Launcher' : 'dsh'),
+      tr: (ru) => ru,
+      dialogs: {
+        openDialog: (t) => { openCalls.push(t); if (openDialogResult !== undefined) return openDialogResult; nextGen = 'gen-1'; return nextGen; },
+        dialogShow: (gen, fn) => { deps.render = fn; },
+        dialogPage: (t, html) => { deps.pageHtml = html; },
+      },
+      updates: { notesBlockHtml: (items) => 'NOTES:' + items.map((i) => i.version + '|' + i.body).join(',') },
+      esc: (s) => String(s),
+      notesBetween: (releases, installed, latest, scheme) => { schemes.push(scheme); notesCalled.push(scheme); return fakeNotes; },
+      dshNotesPart: (b) => { dshNotesCalled.push(b); return 'EN:' + b; },
+      openCalls,
+      schemes,
+      notesCalled,
+      dshNotesCalled,
+    };
+    return deps;
+  };
+  const show = (deps, kind) => {
+    extract('showUpdateNowDialog', {
+      state: deps.state,
+      updateName: deps.updateName,
+      tr: deps.tr,
+      dialogs: deps.dialogs,
+      updates: deps.updates,
+      esc: deps.esc,
+      notesBetween: deps.notesBetween,
+      dshNotesPart: deps.dshNotesPart,
+    })(kind);
+    deps.render(); // the page is rendered on navigation — capture the html
+  };
+
+  // 13) dsh, non-empty releases: semver scheme, the EN part of the body.
+  let sd = showDeps({});
+  show(sd, 'dsh');
+  assert.deepStrictEqual(sd.openCalls, ['Обновление dsh'], 'the dialog is opened for dsh');
+  assert.deepStrictEqual(sd.schemes, ['semver'], 'dsh notes — the semver scheme');
+  assert.ok(sd.pageHtml.includes('NOTES:v2|EN:B2'), 'dsh: the notes block carries the EN part');
+  assert.deepStrictEqual(sd.notesCalled, ['semver'], 'notesBetween called once');
+  assert.deepStrictEqual(sd.dshNotesCalled, ['B2'], 'dshNotesPart called for the body');
+  assert.deepStrictEqual(sd.openCalls, ['Обновление dsh'], 'one openDialog call');
+  assert.strictEqual(sd.state.dialogCopyText, '', 'the copy buffer is cleared');
+  assert.strictEqual(sd.pageHtml.split('NOTES:').length - 1, 1, 'one notes block in the page');
+
+  // 14) dsh, empty releases: notesBetween is NOT called, the notes block
+  //     is empty.
+  sd = showDeps({ availableUpdates: { dsh: { version: '0.2.2-rc.5', installed: '0.2.2-rc.1', releases: [] } } });
+  show(sd, 'dsh');
+  assert.deepStrictEqual(sd.schemes, [], 'dsh without releases — notesBetween not called');
+  assert.deepStrictEqual(sd.notesCalled, [], 'notesBetween not called');
+  assert.ok(sd.pageHtml.includes('NOTES:'), 'an empty notes block is rendered');
+  assert.ok(!sd.pageHtml.includes('NOTES:v2'), 'no notes content');
+
+  // 15) launcher: the deb scheme, the notes as-is (no EN part).
+  sd = showDeps({ availableUpdates: { launcher: { version: '1.19.0', installed: '1.18.4', releases: [] } } });
+  show(sd, 'launcher');
+  assert.deepStrictEqual(sd.openCalls, ['Обновление DeepSeek Harness Launcher'], 'the dialog is opened for the launcher');
+  assert.deepStrictEqual(sd.schemes, ['deb'], 'launcher notes — the deb scheme');
+  assert.deepStrictEqual(sd.dshNotesCalled, [], 'dshNotesPart never called for the launcher');
+  assert.strictEqual(sd.state.dialogCopyText, '', 'the copy buffer is cleared');
+  assert.ok(sd.pageHtml.includes('NOTES:v2|B2'), 'launcher: the notes are passed as-is');
+
+  // 16) no available update for the kind — nothing is opened, no crash.
+  //     (the launcher has no availableUpdates entry in the shared state)
+  sd = showDeps({});
+  extract('showUpdateNowDialog', {
+    state: sd.state,
+    updateName: sd.updateName,
+    tr: sd.tr,
+    dialogs: sd.dialogs,
+    updates: sd.updates,
+    esc: sd.esc,
+    notesBetween: sd.notesBetween,
+    dshNotesPart: sd.dshNotesPart,
+  })('launcher');
+  assert.deepStrictEqual(sd.openCalls, [], 'no update — the dialog is not opened');
+  assert.strictEqual(sd.render, undefined, 'no page render is registered');
+  assert.deepStrictEqual(sd.schemes, [], 'no update — no notes');
+
+  // 17) dialogs.openDialog returned null — no dialogShow / dialogPage.
+  sd = showDeps({}, null);
+  extract('showUpdateNowDialog', {
+    state: sd.state,
+    updateName: sd.updateName,
+    tr: sd.tr,
+    dialogs: sd.dialogs,
+    updates: sd.updates,
+    esc: sd.esc,
+    notesBetween: sd.notesBetween,
+    dshNotesPart: sd.dshNotesPart,
+  })('dsh');
+  assert.deepStrictEqual(sd.openCalls, ['Обновление dsh'], 'openDialog was tried');
+  assert.strictEqual(sd.render, undefined, 'no dialogShow on a null generation');
+
+  // 18) the hint: launcher, an externally started dsh — dsh keeps running;
+  //     otherwise (the launcher started the dsh, or a dsh update) — it will
+  //     be stopped.
+  const launcherEntry = { version: '1.19.0', installed: '1.18.4', releases: [] };
+  sd = showDeps({ availableUpdates: { launcher: launcherEntry }, weStartedDsh: false, adoptedDsh: false });
+  show(sd, 'launcher');
+  assert.ok(sd.pageHtml.includes('продолжит работать'), 'external dsh — it keeps running');
+  assert.ok(!sd.pageHtml.includes('будет остановлен'), 'no stop warning for the external dsh');
+  sd = showDeps({ availableUpdates: { launcher: launcherEntry }, weStartedDsh: true, adoptedDsh: false });
+  show(sd, 'launcher');
+  assert.ok(sd.pageHtml.includes('будет остановлен'), 'our dsh — it will be stopped');
+  sd = showDeps({});
+  show(sd, 'dsh');
+  assert.ok(sd.pageHtml.includes('будет остановлен'), 'a dsh update — it will be stopped');
+
+  // 19) the page: the versions in <code>, the «Обновить сейчас» (Update
+  //     now) link for the kind and the «Позже» (Later) button.
+  sd = showDeps({});
+  show(sd, 'dsh');
+  assert.ok(sd.pageHtml.includes('<code>0.2.2-rc.5</code>'), 'the available version in <code>');
+  assert.ok(sd.pageHtml.includes('<code>0.2.2-rc.1</code>'), 'the installed version in <code>');
+  assert.ok(sd.pageHtml.includes("dshlauncher://update-now/?k=dsh"), 'the «Update now» link for dsh');
+  assert.ok(sd.pageHtml.includes("dshlauncher://dialog/close/"), 'the dialog-close link');
+  assert.ok(sd.pageHtml.includes('Позже'), 'the «Later» button');
+
   console.log('OK: updates-live — runDeferredUpdate');
+  console.log('OK: updates-live — showUpdateNowDialog');
 }
 
 main().catch((e) => { console.error('FAIL:', e.message); process.exit(1); });

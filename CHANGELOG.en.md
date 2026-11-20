@@ -9,6 +9,10 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+### Added
+
+- "Help" → "Keyboard shortcuts…" — a dialog listing all the window's hotkeys (F5, Ctrl+Shift+R, Ctrl+=/Ctrl+-/Ctrl+0, Ctrl+F, F3/Shift+F3, F11, Ctrl+, Esc).
+
 ## [1.18.4] — 2026-11-20
 
 ### Fixed

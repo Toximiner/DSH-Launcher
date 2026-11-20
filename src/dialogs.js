@@ -11,7 +11,7 @@ const { updateStatus, notesBetween } = require('./versions');
 const { LOG_DIR, IS_PKG_INSTALL } = require('./env');
 const fileHelp = require('./file-help');
 const menus = require('./menus');
-const { isAltKey } = require('./ui');
+const { isAltKey, hotkeyRows } = require('./ui');
 const pages = require('./pages');
 const updatesLive = require('./updates-live');
 const updates = require('./updates');
@@ -209,4 +209,28 @@ async function showUpdateCheckDialog() {
   });
 }
 
-Object.assign(module.exports, { openDialog, closeDialog, dialogOpen, dialogShow, dialogPage, dialogCloseButton, onDialogClose, onDialogCopy, showAboutDialog, showUpdateCheckDialog }); // we extend, not replace: the modules include each other in cycles
+/* ===== showHotkeysDialog (test test/hotkeys-dialog.js) =====
+   «Горячие клавиши…»: a read-only dialog — a table of the window's hotkeys
+   (hotkeyRows, src/ui.js) and a note about the layouts, the menu and the
+   saved zoom. The table's rows — as in the README (section «Клавиши в окне»). */
+function showHotkeysDialog() {
+  const title = tr('Горячие клавиши', 'Keyboard shortcuts');
+  const gen = openDialog(title);
+  if (gen === null) return;
+  const render = () => {
+    const body = `
+      <table style="border-collapse:collapse; margin-bottom:14px">
+        ${hotkeyRows().map(([k, v]) =>
+          '<tr><td style="padding:3px 14px 3px 0; white-space:nowrap">' + k + '</td>' +
+          '<td style="padding:3px 0; color:#9aa4b2">' + esc(v) + '</td></tr>').join('')}
+      </table>
+      <p class="hint">${tr('Работают при любой раскладке (RU/EN); те же действия — в меню окна. Масштаб сохраняется между запусками.',
+        'They work with any keyboard layout (RU/EN); the same actions are available from the window menu. The zoom level is remembered between launches.')}</p>
+      <div class="actions">${dialogCloseButton()}</div>`;
+    dialogPage(title, body);
+  };
+  dialogShow(gen, render);
+}
+/* ===== end showHotkeysDialog ===== */
+
+Object.assign(module.exports, { openDialog, closeDialog, dialogOpen, dialogShow, dialogPage, dialogCloseButton, onDialogClose, onDialogCopy, showAboutDialog, showUpdateCheckDialog, showHotkeysDialog }); // we extend, not replace: the modules include each other in cycles

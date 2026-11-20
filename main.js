@@ -287,6 +287,7 @@ async function attachRunningDsh() {
 }
 /* ===== end attachRunningDsh ===== */
 
+/* ===== deferredDshUpdateInAttach (test test/deferred-attach.js) ===== */
 // The deferred dsh update in attach mode. The foreign dsh is not touched until
 // the user confirms stopping it (dialog).
 async function deferredDshUpdateInAttach() {
@@ -321,6 +322,7 @@ async function deferredDshUpdateInAttach() {
     });
   } catch (e) { console.error('[launcher] обновление в режиме подключения:', e.message); }
 }
+/* ===== end deferredDshUpdateInAttach ===== */
 
 /* ---------------- close = stop ---------------- */
 

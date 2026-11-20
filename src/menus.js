@@ -96,6 +96,7 @@ function appMenuTemplate() {
         { label: tr('Журнал dsh…', 'dsh log…'), click: () => dshLog.showLogDialog() },
         { label: tr('Открыть папку логов', 'Open logs folder'), click: () => { void fileHelp.openLogsFolder(); } },
         { label: tr('Сохранить отчёт…', 'Save report…'), click: () => { void diagnostics.saveReport(); } },
+        { label: tr('Горячие клавиши…', 'Keyboard shortcuts…'), click: () => dialogs.showHotkeysDialog() },
         { type: 'separator' },
         { label: tr('О программе', 'About'), click: () => { void dialogs.showAboutDialog(); } },
       ],
