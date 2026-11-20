@@ -8,6 +8,7 @@ const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc, timedCheck, withRouteKey, CSP_META } = require('./util');
 const { compareDebianVer, compareSemVer, tagToPackageVersion, notesBetween } = require('./versions');
+const { dshNotesPart } = require('./notes'); // the EN part of a dsh GitHub release — «Что нового»
 const { updatePollMs, announceUpdates } = require('./updates-logic');
 const { LOG_DIR, LAUNCHER_LOG_FILE, ROUTE_KEY } = require('./env');
 const { probeDsh } = require('./dsh-install');
@@ -56,7 +57,7 @@ async function findUpdates(checks) {
     if (r.ok) state.dshInstalledVersion = r.version;
   }
   if (d && d.version && state.dshInstalledVersion && compareSemVer(d.version, state.dshInstalledVersion) > 0) {
-    found.dsh = { version: d.version, installed: state.dshInstalledVersion };
+    found.dsh = { version: d.version, installed: state.dshInstalledVersion, releases: d.releases };
   }
   return found;
 }
@@ -207,6 +208,70 @@ function onToastRequest(route, url) {
   return noContentResponse();
 }
 
+/* ===== runDeferredUpdate (test test/updates-live.js) =====
+   «Обновить сейчас» (Update now) restarts the launcher with DSH_LAUNCHER_UPDATE_NOW:
+   the new instance applies the update without a prompt. When dsh is already
+   running OUTSIDE the launcher (attach mode), the old instance left the flag
+   behind and the new one goes the attach branch — launchDsh() (the only caller
+   of the offer* functions) never runs, so the flag would be silently dropped
+   and the toast would return in an endless restart loop. So in attach mode
+   the deferred update is run here, after the connection:
+   - launcher: offerLauncherUpdate() — the .deb is installed, the success page
+     restarts the launcher; dsh keeps running, the new instance re-attaches;
+   - dsh: offerDshUpdate() installs the npm package (the first choice is
+     «install» — the user already pressed «Обновить сейчас»). The running dsh
+     is FOREIGN (the launcher did not start it), so before stopping it the
+     user is asked once: yes — it is adopted (pid from the port,
+     state.adoptedDsh — window close stops it, restartDsh works) and
+     restarted to come up with the new version; no — a toast tells them to
+     restart it where they started it (the version is already installed on
+     disk, the package is not touched again). state.availableUpdates is NOT
+     read here: in attach mode nothing populates it yet. */
+async function runDeferredUpdate(deps) {
+  const { state, UPDATE_NOW, PORT, tr, portListenerPid, compareSemVer, offers, probe, restartDsh, confirmStop, toast, console } = deps;
+  const kind = UPDATE_NOW;
+  if (!kind) return; // no «Update now» pending (UPDATE_NOW is read from env.js)
+  if (state.stopping || state.launching || state.restarting) return;
+  if (kind === 'launcher') {
+    await offers.offerLauncherUpdate(); // on success — success page + restartLauncher()
+    return;
+  }
+  if (!state.dshInstalledVersion && probe) {
+    const r = await probe(state.dshBin);
+    if (r.ok) state.dshInstalledVersion = r.version;
+  }
+  if (!offers || !state.dshInstalledVersion) return; // not installed / probe broken
+  const before = state.dshInstalledVersion;
+  await offers.offerDshUpdate(); // UPDATE_NOW === 'dsh' — the first choice is «install», no question
+  if (state.stopping || state.restarting) return; // the launcher went to its own restart
+  const r = probe ? await probe(state.dshBin) : { ok: false };
+  if (!r.ok || compareSemVer(r.version, before) <= 0) {
+    return; // not installed (a manual command is on the page) — the next run will offer it again
+  }
+  // Installed — but the running dsh is foreign (attach mode): ask before
+  // stopping it, then adopt and restart so it comes up with the new version.
+  const pid = (portListenerPid && PORT) ? portListenerPid(PORT) : null;
+  if (!pid) return; // the dsh died in the meantime — nothing to restart
+  const ok = await confirmStop(r.version);
+  if (!ok) {
+    toast({
+      title: tr(`dsh обновлён до ${r.version}`, `dsh updated to ${r.version}`),
+      sub: tr('перезапустите dsh там, где запускали', 'restart dsh where you started it'),
+      buttons: [],
+    });
+    return;
+  }
+  state.weStartedDsh = false;
+  state.adoptedDsh = true; // window close stops the adopted dsh (by the port)
+  state.adoptedOldPgid = null; // no old group: the process was never ours
+  state.dshProc = null;
+  state.dshFatal = false;
+  state.portState = 'up'; // the watchdog does not double-drive the window
+  console.log(`[launcher] dsh обновлён до ${r.version} — перезапускаю работающий dsh (pid ${pid})`);
+  await restartDsh({ confirm: false });
+}
+/* ===== end runDeferredUpdate ===== */
+
 // «Обновить … до X…» (Update … to X…) window: what's new and a warning about the restart.
 function showUpdateNowDialog(kind) {
   const u = state.availableUpdates[kind];
@@ -219,7 +284,12 @@ function showUpdateNowDialog(kind) {
   dialogs.dialogShow(gen, () => dialogs.dialogPage(title, `
     <p>${tr(`Доступна версия <code>${esc(u.version)}</code> (установлена <code>${esc(u.installed)}</code>).`,
             `Version <code>${esc(u.version)}</code> is available (installed: <code>${esc(u.installed)}</code>).`)}</p>
-    ${kind === 'launcher' ? updates.notesBlockHtml(notesBetween(u.releases, u.installed, u.version, 'deb')) : ''}
+    ${kind === 'launcher'
+      ? updates.notesBlockHtml(notesBetween(u.releases, u.installed, u.version, 'deb'))
+      : updates.notesBlockHtml((u.releases || []).length
+          ? notesBetween(u.releases, u.installed, u.version, 'semver')
+              .map((r) => ({ version: r.version, body: dshNotesPart(r.body) }))
+          : [])}
     <p class="hint">${kind === 'launcher' && !state.weStartedDsh && !state.adoptedDsh
       ? tr('Лаунчер перезапустится. Запущенный отдельно dsh продолжит работать.',
            'The launcher will restart. The externally started dsh will keep running.')
@@ -237,4 +307,4 @@ function updateNow(kind) {
   settingsWindow.relaunchLauncher(`чтобы обновить ${updateName(kind)} до ${state.availableUpdates[kind].version}`);
 }
 
-Object.assign(module.exports, { setAvailableUpdates, refreshAvailableUpdates, setUpdatePolling, toastPageUrl, placeToast, showToast, onToastRequest, showUpdateNowDialog, updateNow }); // we extend, not replace: the modules require each other in a cycle
+Object.assign(module.exports, { setAvailableUpdates, refreshAvailableUpdates, setUpdatePolling, toastPageUrl, placeToast, showToast, onToastRequest, showUpdateNowDialog, updateNow, runDeferredUpdate }); // we extend, not replace: the modules require each other in a cycle

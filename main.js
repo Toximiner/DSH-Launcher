@@ -23,7 +23,7 @@
  * — signals and hard stop of dsh.
  */
 
-const { app, BrowserWindow, crashReporter, protocol, screen } = require('electron');
+const { app, BrowserWindow, crashReporter, dialog, protocol, screen } = require('electron');
 const fs = require('fs');
 
 const state = require('./src/state'); // shared state (window, dsh process, flags)
@@ -46,11 +46,14 @@ const { killDshNow, installSignalHandlers } = require('./src/signals');
 const { launchDsh } = require('./src/launch');
 const { zoomFile, viewActions, initSpellcheck } = require('./src/view');
 const { buildAppMenu, showContextMenu } = require('./src/menus');
-const { startUpdateChecks, restartLauncher, offerLauncherUpdate } = require('./src/updates');
+const { startUpdateChecks, restartLauncher, offerLauncherUpdate, offerDshUpdate } = require('./src/updates');
+const { compareSemVer } = require('./src/versions');
+const { portListenerPid } = require('./src/system');
+const { restartDsh } = require('./src/file-help'); // «Перезапустить dsh» — и для принятого (adopted) чужого dsh
 const { showPage, loadLangPref, showStatus } = require('./src/pages');
-const { setUpdatePolling, refreshAvailableUpdates } = require('./src/updates-live');
+const { setUpdatePolling, refreshAvailableUpdates, showToast, toastPageUrl, runDeferredUpdate } = require('./src/updates-live');
 const { spawnNewInstance } = require('./src/settings-window');
-const { dshInstallCheck } = require('./src/dsh-install');
+const { dshInstallCheck, probeDsh } = require('./src/dsh-install');
 const { showInstallPage } = require('./src/install-page');
 const { stopDsh, stopAdoptedDsh } = require('./src/dsh-stop');
 const { checkPreviousRun, clearRunMarker, maybeShowCrashNotice } = require('./src/diagnostics');
@@ -273,11 +276,51 @@ async function attachRunningDsh() {
   await openRunningGui('подключение');
   if (state.stopping) return;
   startWatchdog();
+  // «Обновить сейчас» (Update now) pressed before the restart: the flag must be
+  // applied here, otherwise launchDsh() — the only caller of the offer* functions —
+  // never runs in this branch, the version stays the same and the toast returns
+  // on every restart (an endless loop).
+  if (UPDATE_NOW === 'dsh') void deferredDshUpdateInAttach();
   // Attaching skips startup update questions, so announce available versions
   // after the GUI loads instead of silently waiting for the 12-hour poll.
   void refreshAvailableUpdates(true);
 }
 /* ===== end attachRunningDsh ===== */
+
+// The deferred dsh update in attach mode. The foreign dsh is not touched until
+// the user confirms stopping it (dialog).
+async function deferredDshUpdateInAttach() {
+  const confirmStop = async (version) => {
+    const { response } = await dialog.showMessageBox(state.win, {
+      type: 'question',
+      buttons: [tr('Остановить dsh', 'Stop dsh'), tr('Отмена', 'Cancel')],
+      defaultId: 0,
+      cancelId: 1,
+      title: tr('Обновление dsh', 'dsh update'),
+      message: tr('dsh запущен не лаунчером', 'dsh was not started by the launcher'),
+      detail: tr(`Новая версия уже установлена. Остановить работающий dsh (незаконченный ответ агента прервётся), чтобы он перезапустился с версией ${version}?`,
+                 `The new version is already installed. Stop the running dsh (an unfinished agent reply will be interrupted) so it restarts with version ${version}?`),
+    });
+    return response === 0;
+  };
+  const toast = (t) => showToast(toastPageUrl({ title: t.title, sub: t.sub, buttons: t.buttons }));
+  try {
+    await runDeferredUpdate({
+      state,
+      UPDATE_NOW,
+      PORT,
+      tr,
+      portListenerPid,
+      compareSemVer,
+      offers: { offerLauncherUpdate, offerDshUpdate },
+      probe: probeDsh,
+      restartDsh,
+      confirmStop,
+      toast,
+      console,
+    });
+  } catch (e) { console.error('[launcher] обновление в режиме подключения:', e.message); }
+}
 
 /* ---------------- close = stop ---------------- */
 
