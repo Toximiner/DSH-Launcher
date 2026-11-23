@@ -40,12 +40,19 @@ const { pushErr, stderrTail, portOpen, waitForPort, waitForAuthUrl } = require('
 async function main() {
   // 1) слушателя нет — false (connection refused, без ожидания таймаута)
   assert.strictEqual(await portOpen(), false, 'нет слушателя → false');
+  // адрес, до которого SYN доходит никогда (TEST-NET-1, RFC 5737) — срабатывает
+  // именно timeout-ветка portOpen, а не error/connection-refused
+  assert.strictEqual(await portOpen(32999, '192.0.2.1'), false, 'таймаут соединения → false');
 
-  // 2) процесс dsh уже завершился (или fatal) — waitForPort не ждёт до дедлайна
-  state.dshProc = { exitCode: 1, dshFatal: false };
+  // 2) процесс dsh уже завершился (или fatal) — waitForPort не ждёт до дедлайна.
+  //    state.dshFatal — флаг на state (его ставит обработчик 'error' в dsh-process.js),
+  //    не поле dshProc: при ENOENT у процесса exitCode остаётся null
+  state.dshProc = { exitCode: 1 };
   assert.strictEqual(await waitForPort(), false, 'dsh завершился → досрочный выход');
-  state.dshProc = { exitCode: null, dshFatal: true };
+  state.dshProc = { exitCode: null };
+  state.dshFatal = true;
   assert.strictEqual(await waitForPort(), false, 'dshFatal → досрочный выход');
+  state.dshFatal = false;
   state.dshProc = null;
 
   // 3) слушатель появился — true

@@ -23,7 +23,7 @@ function pushErr(line) {
 // One connection check: dsh answers fast or it does not
 const PORT_OPEN_TIMEOUT_MS = 800;
 
-function portOpen() {
+function portOpen(port = PORT, host = HOST) {
   return new Promise((resolve) => {
     const s = new nodeNet.Socket();
     const done = (ok) => {
@@ -34,7 +34,7 @@ function portOpen() {
     s.once('connect', () => done(true));
     s.once('timeout', () => done(false));
     s.once('error', () => done(false));
-    s.connect(PORT, HOST);
+    s.connect(port, host);
   });
 }
 
