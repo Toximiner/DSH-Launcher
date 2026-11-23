@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+## [1.18.6] — 2026-11-23
+
 ### Fixed
 
 - The `DSH_PORT` environment variable is now validated: an invalid value (`abc`, `99999`, `0x10`) no longer produces a broken address (`http://127.0.0.1:NaN/`) — the value from `settings.json` or the default port is used.
