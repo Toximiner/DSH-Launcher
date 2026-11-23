@@ -78,8 +78,8 @@ const LOG_FILE = path.join(LOG_DIR, 'dsh.log');
 const LAUNCHER_LOG_FILE = path.join(LOG_DIR, 'launcher.log');
 // 2 MB — beyond that the file is rolled to *.1 (DSH_LAUNCHER_LOG_MAX_BYTES — for tests).
 // The old *.1 is replaced at the same time: at most two files per log.
-const MAX_LOG_BYTES = Number(process.env.DSH_LAUNCHER_LOG_MAX_BYTES) > 0
-  ? Number(process.env.DSH_LAUNCHER_LOG_MAX_BYTES) : 2 * 1024 * 1024;
+const maxLogEnv = Number(process.env.DSH_LAUNCHER_LOG_MAX_BYTES);
+const MAX_LOG_BYTES = maxLogEnv > 0 ? maxLogEnv : 2 * 1024 * 1024;
 
 // Language of the launcher's windows: DSH_LAUNCHER_LANG=ru|en, otherwise chosen by the
 // RU | EN switch in the window (userData/ui-lang.json, picked up in onReady), otherwise by the

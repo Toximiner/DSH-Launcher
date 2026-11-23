@@ -158,8 +158,6 @@ async function launcherVersionRaw() {
 }
 /* ===== end launcherVersionRaw ===== */
 
-// The dsh version: if DSH_BIN runs — we ask for it (--version), otherwise —
-// the version found by installCheck at start.
 // The dsh version for the windows ("About", "Check for updates…") — without running
 // dsh --version (see launcherInstalledVersion): from the package.json of the
 // @deepseek-ai/dsh package that the dsh program points to (a link → …/bin.js), otherwise
@@ -175,6 +173,8 @@ function dshPackageVersion(bin) {
   return null;
 }
 
+// The dsh version: the package version or the one found by installCheck at start,
+// and only if both are missing — we ask dsh itself (--version).
 async function dshVersionRaw() {
   const v = (state.dshBin && dshPackageVersion(state.dshBin)) || state.dshInstalledVersion;
   if (v) return v;

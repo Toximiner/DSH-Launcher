@@ -14,9 +14,14 @@ function effectiveConfig(env, settings, home) {
   const src = {};
   const from = (key, where) => { src[key] = where; };
 
+  // The same rule for env and the settings file (the "Settings" window is even
+  // stricter: 1024..65535, non-root user): an integer from 1 to 65535. A bad
+  // value (DSH_PORT=abc → NaN, DSH_PORT=99999) is ignored — the file or default wins.
+  const portOk = (v) => Number.isInteger(v) && v >= 1 && v <= 65535;
+  const envPort = /^\d+$/.test(String(env.DSH_PORT || '')) ? Number(env.DSH_PORT) : NaN;
   let port = DEFAULT_PORT;
-  if (env.DSH_PORT) { port = Number(env.DSH_PORT); from('port', 'env'); }
-  else if (Number.isInteger(s.port) && s.port >= 1 && s.port <= 65535) { port = s.port; from('port', 'settings'); }
+  if (portOk(envPort)) { port = envPort; from('port', 'env'); }
+  else if (portOk(s.port)) { port = s.port; from('port', 'settings'); }
   else from('port', 'default');
 
   let args;

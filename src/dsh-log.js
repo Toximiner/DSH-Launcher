@@ -14,8 +14,6 @@ const dialogs = require('./dialogs');
 // the GUI login token («dsh web: …?token=…») — we replace it and anything
 // resembling a key with *** on display and on copy.
 
-
-
 /* ===== logTail (test test/dsh-log.js) =====
  * fs — the 'fs' module (replaced in the test; the functions openSync/fstatSync/
  * readSync/closeSync themselves are used as-is). */

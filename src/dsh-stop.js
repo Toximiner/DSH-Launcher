@@ -38,15 +38,6 @@ async function stopDsh() {
   console.log('[launcher] dsh stopped by launcher');
 }
 
-// pid of the process listening on the port (Linux, pure fs — no fuser/ss):
-// the LISTEN socket inodes are taken from /proc/net/tcp{,6}, then the fd
-// socket:[inode] is searched among /proc/[pid]/fd/*.
-
-
-// pgid of a process: field 5 of /proc/<pid>/stat (comm in parentheses may contain
-// spaces — we count from the last ")").
-
-
 // What to kill for the "adopted" dsh (after self-revival). We have no handles
 // on the new process, so:
 //  - the process on the port: kill its group by pgid — it may not be the

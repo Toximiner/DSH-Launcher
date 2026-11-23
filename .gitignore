@@ -10,3 +10,5 @@ dsh.desktop
 test/docker/.work/
 __pycache__/
 coverage/
+# артефакты сборки tui-go (go-cache/go-path, golden-файлы) — не исходники этого репозитория
+apps/

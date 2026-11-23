@@ -58,6 +58,11 @@ const HOME = '/home/u';
   assert.deepStrictEqual(cfg({ DSH_PORT: '4000' }, {}, HOME).args, ['--profile', 'web', '--no-open', '--port', '4000'],
     'DSH_PORT without DSH_ARGS — dsh listens on that port');
   assert.strictEqual(cfg({ DSH_LAUNCHER_OZONE: 'bogus' }, { ozone: 'x11' }, HOME).ozone, 'x11', 'invalid env var — take the file');
+  for (const bad of ['abc', '99999', '0', '0x10', '30.5'])
+    assert.strictEqual(cfg({ DSH_PORT: bad }, {}, HOME).port, 3080, `DSH_PORT="${bad}" — garbage, default wins`);
+  assert.strictEqual(cfg({ DSH_PORT: '99999' }, { port: 3090 }, HOME).port, 3090, 'garbage DSH_PORT — the file wins');
+  assert.strictEqual(cfg({ DSH_PORT: '1' }, {}, HOME).port, 1, 'DSH_PORT=1 — within the file rule (1..65535)');
+  assert.strictEqual(cfg({ DSH_PORT: '65535' }, {}, HOME).port, 65535, 'DSH_PORT=65535 — boundary');
 }
 
 // ---- settingValue: field validation; restartNeeded ----
