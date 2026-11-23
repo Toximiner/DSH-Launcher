@@ -9,6 +9,18 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+### Fixed
+
+- The `DSH_PORT` environment variable is now validated: an invalid value (`abc`, `99999`, `0x10`) no longer produces a broken address (`http://127.0.0.1:NaN/`) — the value from `settings.json` or the default port is used.
+- The login link captured from dsh's output is parsed by a single function that checks the address and the token: a link with extra parameters (after `&`) is no longer truncated, and links from other hosts are not picked up.
+
+### Changed
+
+- The input history on the dsh page reuses the same pure functions as the unit tests: the ↑/↓ navigation is no longer duplicated in the embedded script, and the 50-entry limit is a single constant.
+- The install plan (npm/pkexec/sudo) is a single function now — its three copies (dsh install, dsh update, plugin install) were replaced with it.
+- Shared helpers: the live-log page state, the “Saved/error” note, the window zoom clamp (±5).
+- Internal: unit tests for the dsh process lifecycle (self-revival/adoption), the settings window, `dshlauncher://` routes and updates (.deb download with sha256 verification); the full test run went from 121 s to 1.5 s.
+
 ## [1.18.5] — 2026-11-20
 
 ### Added
