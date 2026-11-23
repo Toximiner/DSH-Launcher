@@ -7,7 +7,8 @@ const state = require('./state');
 const { crashRestart } = require('./ui');
 const i18n = require('./i18n');
 const { tr } = i18n;
-const { DSH_ARGS, CWD, LOG_DIR, LOG_FILE } = require('./env');
+const { DSH_ARGS, CWD, LOG_DIR, LOG_FILE, PLAIN_URL } = require('./env');
+const { authUrlFromOutput } = require('./system');
 const { rotateLog, openDshLog } = require('./log');
 const { dshEnv } = require('./dsh-install');
 const { sleep, pushErr, portOpen } = require('./port'); // pure module — direct require, no registry
@@ -58,11 +59,10 @@ function startDsh() {
       if (!line.trim()) continue;
       console.log('[dsh]', line.trim());
       logStream.write(line + '\n');
-      const m = /dsh web:\s*(https?:\/\/\S+)/.exec(line) ||
-                /(https?:\/\/[^\s]*\?token=[^\s&]+)/.exec(line);
-      if (m) {
+      const u = authUrlFromOutput(line, PLAIN_URL); // «dsh web: <url>?token=…», тот же origin, token в query
+      if (u) {
         console.log('[launcher] captured auth URL');
-        state.authUrl = m[1];
+        state.authUrl = u;
       }
     }
   });
@@ -100,7 +100,17 @@ function startDsh() {
  * cookies are still alive then — the signing secret is stored in ~/.dsh/.credentials.yaml and
  * survives the restart.
  */
+/* ===== handleDshExit (test test/dsh-exit.js) =====
+   What to do once our dsh exited: port alive again — "adopt" the new
+   process, crash — restart (at most 3 times in 10 minutes), a normal exit —
+   a page. adoptionCheck/crashHistory live in the block: the state of the
+   machine, so the test extracts the whole thing as one closure. */
+// How long to wait for the port after dsh has exited (the adoption check)
+const ADOPTION_WAIT_MS = 8000;
+const ADOPTION_POLL_MS = 500;
+
 let adoptionCheck = false;
+let crashHistory = []; // times of auto-restarts after a crash
 
 async function handleDshExit(code, signal) {
   console.log('[launcher] dsh process exited:', { code, signal });
@@ -114,9 +124,9 @@ async function handleDshExit(code, signal) {
          Проверяю, не запустился ли новый процесс…</p>`,
       `<p>The <code>dsh</code> process exited (code=${code}).<br>
          Checking whether a new process has started…</p>`), false));
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + ADOPTION_WAIT_MS;
     let up = await portOpen();
-    while (!up && Date.now() < deadline) { await sleep(500); up = await portOpen(); }
+    while (!up && Date.now() < deadline) { await sleep(ADOPTION_POLL_MS); up = await portOpen(); }
     if (up && !state.stopping && state.win && !state.win.isDestroyed()) {
       console.log('[launcher] порт снова открыт — dsh перезапустился сам, перехожу в режим подключения');
       state.weStartedDsh = false; // the new process is not our child (we hold no handles on it)
@@ -158,8 +168,7 @@ async function handleDshExit(code, signal) {
          within 8 seconds.</p>`)) + retryButton() + pages.stderrBlock(), true));
   }
 }
-
-let crashHistory = []; // times of auto-restarts after a crash
+/* ===== end handleDshExit ===== */
 
 // "dsh was restarted after a crash" toast — shown once the GUI has loaded again.
 function maybeShowDshCrashNotice() {

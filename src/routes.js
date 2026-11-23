@@ -13,11 +13,11 @@ const { PORT, PLAIN_URL, DSH_ARGS, ROUTE_KEY } = require('./env');
 const { sleep, portOpen } = require('./port');
 const { launcherRoute, stripRouteKey } = require('./util');
 const { loadInWin, showPastePage, showPage, showStatus, liveRedraw, onLangSwitch } = require('./pages');
-const { envWithBinDir, listenerAuthUrl } = require('./system');
+const { listenerAuthUrl } = require('./system');
 const { blankResponse, noContentResponse } = require('./respond'); // pure module — direct require, no registry
 const { pushInputHistory } = require('./input-history'); // input history (↑/↓ in the dsh field); texts are not written to the log
 const { runWithLiveLog } = require('./proc-log');
-const { dshInstallCheck, pkexecNpmArgs } = require('./dsh-install');
+const { dshInstallCheck, npmRunPlan } = require('./dsh-install');
 const { DSH_NPM_PKG } = require('./updates-github');
 const { retryButton } = require('./dsh-process');
 const { launchDsh } = require('./launch');
@@ -58,11 +58,12 @@ async function plainUrlResponds() {
   }
 }
 
-// Window — to the GUI of a dsh that is already running but was not started
-// by the launcher (restart from the market, terminal): cookie valid → GUI;
-// otherwise the login link from the process output on the port
-// (listenerAuthUrl); otherwise the cookie once more — the port opens before
-// dsh is ready to check login — and only then the paste page.
+/* ===== openRunningGui (test test/routes-live.js) =====
+   Window — to the GUI of a dsh that is already running but was not started
+   by the launcher (restart from the market, terminal): cookie valid → GUI;
+   otherwise the login link from the process output on the port
+   (listenerAuthUrl); otherwise the cookie once more — the port opens before
+   dsh is ready to check login — and only then the paste page. */
 const AUTH_WAIT_MS = 5000;
 
 async function openRunningGui(why) {
@@ -87,7 +88,11 @@ async function openRunningGui(why) {
   console.log(`[launcher] ${why}: валидного куки и ссылки входа нет — страница вставки токена`);
   showPastePage();
 }
+/* ===== end openRunningGui ===== */
 
+/* ===== onPasteRequest (test test/routes-live.js) =====
+   A token / URL pasted from the dsh paste page: http(s) only, only if the
+   window is alive; malformed percent-encoding — logged, not fatal. */
 function onPasteRequest(route) {
   try {
     const pasted = decodeURIComponent(route.replace(/^\/paste\//, ''));
@@ -100,9 +105,11 @@ function onPasteRequest(route) {
   }
   return blankResponse();
 }
+/* ===== end onPasteRequest ===== */
 
-// «Проверить снова» (Check again) on the fatal page: if dsh was started
-// manually (e.g. in a terminal) and the window was left open — return to the GUI.
+/* ===== onRetryRequest (test test/routes-live.js) =====
+   «Проверить снова» (Check again) on the fatal page: if dsh was started
+   manually (e.g. in a terminal) and the window was left open — return to the GUI. */
 async function onRetryRequest() {
   try {
     if (state.win && !state.win.isDestroyed() && !state.stopping) {
@@ -137,6 +144,7 @@ async function onRetryRequest() {
   }
   return blankResponse();
 }
+/* ===== end onRetryRequest ===== */
 
 // «Скопировать команду» (Copy command) on the dsh install page.
 async function onInstallCopy() {
@@ -175,32 +183,32 @@ async function onInstallRecheck() {
   return blankResponse();
 }
 
-// «Установить» (Install): npm install -g directly from the window, with a live log.
+/* ===== onInstallRun (test test/routes-live.js) =====
+   «Установить» (Install): npm install -g directly from the window, with a
+   live log; system npm (root's prefix) — via pkexec. */
 async function onInstallRun() {
   try {
     if (installState.running || !state.win || state.win.isDestroyed() || state.stopping) return blankResponse();
     await refreshInstallState();
     if (installState.running) return blankResponse(); // while checking, an installation has already been started
     const npmInfo = installState.npmInfo;
-    // System npm (root's prefix): install via pkexec — polkit will ask for
-    // the password in a system dialog, as when updating the launcher.
-    const viaPkexec = !npmInfo.canAuto && npmInfo.rootMode === 'pkexec';
-    if (!npmInfo.canAuto && !viaPkexec) {
+    // System npm (root's prefix): install via pkexec (npmRunPlan) — polkit
+    // will ask for the password in a system dialog, as when updating the
+    // launcher.
+    // @latest — explicit: the bare spec in npm 10.x (Node 22) with a latest
+    // prerelease resolves as * and fails with ETARGET (see INSTALL_CMD in
+    // dsh-install.js).
+    const plan = npmRunPlan(npmInfo, ['install', '-g', `${DSH_NPM_PKG}@latest`]);
+    if (plan.needTerminal) {
       showInstallPage(() => tr('Кнопка «Установить» недоступна: глобальный npm prefix требует sudo — выполните команду в терминале.', '“Install” is unavailable: the global npm prefix requires sudo — run the command in a terminal.'), true);
       return blankResponse();
     }
     console.log(`[launcher] установка dsh из окна: ${npmInfo.command}`);
     installState.running = true; // the page shows "running" — immediately, before the first line
     showInstallPage();
-    // @latest — explicit: the bare spec in npm 10.x (Node 22) with a latest
-    // prerelease resolves as * and fails with ETARGET (see INSTALL_CMD in
-    // dsh-install.js).
-    const args = ['install', '-g', `${DSH_NPM_PKG}@latest`];
-    const code = await runWithLiveLog(installState,
-      viaPkexec ? npmInfo.pkexec : npmInfo.npm,
-      viaPkexec ? pkexecNpmArgs(npmInfo.npm, args) : args,
+    const code = await runWithLiveLog(installState, plan.cmd, plan.args,
       {
-        env: viaPkexec ? undefined : envWithBinDir(npmInfo.npm),
+        env: plan.env,
         // running — otherwise the installation is over and the page has
         // already switched (success/error), and the extra redraw would
         // overwrite its note.
@@ -226,6 +234,7 @@ async function onInstallRun() {
   }
   return blankResponse();
 }
+/* ===== end onInstallRun ===== */
 
 /* ===== matchRoute (test test/routes.js) =====
    dshlauncher:// route table (order matters: /menu/rollback/ before

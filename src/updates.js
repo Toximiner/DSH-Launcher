@@ -8,14 +8,13 @@ const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
 const { esc, timedCheck } = require('./util');
-const { envWithBinDir } = require('./system');
 const { runWithLiveLog, LOG_MAX_LINES, REDRAW_MS } = require('./proc-log');
 const { prefFile, readPref, writePref } = require('./prefs');
 const { compareDebianVer, compareSemVer, tagToPackageVersion, dpkgStatusVersion, notesBetween } = require('./versions');
 const { releaseNotesLang, mdToHtml, dshNotesPart } = require('./notes');
 const { GITHUB_TOKEN, UPDATE_NOW, INSTALL_VERSION, CONFIG } = require('./env');
 const { restartLauncherArgs } = require('./ozone-startup');
-const { probeDsh, findBin, MIN_NODE_MAJOR, npmInstallInfo, pkexecNpmArgs } = require('./dsh-install');
+const { probeDsh, findBin, MIN_NODE_MAJOR, npmInstallInfo, npmRunPlan } = require('./dsh-install');
 const { httpGet } = require('./updates-http');
 const { DSH_NPM_PKG, UPDATE_GITHUB_REPO, fetchLauncherLatest, fetchDshLatest } = require('./updates-github');
 const pages = require('./pages');
@@ -251,6 +250,9 @@ function askUpdate(note, noteIsError) {
   });
 }
 
+/* ===== onUpdateChoice (test test/updates-offer.js) =====
+   A button on the update page: 'copy'/'restart' act without resolving the
+   question; the other choices resolve it — but only while nothing runs. */
 function onUpdateChoice(choice) {
   if (choice === 'copy') {
     if (updateState.manualCmd) {
@@ -270,6 +272,7 @@ function onUpdateChoice(choice) {
   }
   return blankResponse();
 }
+/* ===== end onUpdateChoice ===== */
 
 // An install step with a live log on the page (the live log —
 // pages.liveLogTick: lines are appended without reloading the page, the
@@ -288,10 +291,11 @@ function runUpdateStep(cmd, args, env) {
   });
 }
 
-// Downloading the .deb from the release into userData/updates/. The
-// progress — in the log on the page (the same ticks as install). The
-// sha256 is computed over the bytes from the network (not over the file
-// on disk) and, if GitHub knows it, is compared with the digest.
+/* ===== downloadDeb (test test/updates-offer.js) =====
+   Downloading the .deb from the release into userData/updates/. The
+   progress — in the log on the page (the same ticks as install). The
+   sha256 is computed over the bytes from the network (not over the file
+   on disk) and, if GitHub knows it, is compared with the digest. */
 async function downloadDeb(url, expectedSha256) {
   updateState.running = true;
   updateState.mode = 'running';
@@ -357,6 +361,7 @@ async function downloadDeb(url, expectedSha256) {
     updateState.running = false;
   }
 }
+/* ===== end downloadDeb ===== */
 
 // The restart after a launcher update: we release the single-instance
 // lock so the new instance takes it at once, spawn the new one detached
@@ -466,12 +471,13 @@ const manual = (manualCmd, note) => {
 // How the choice handler («recheck»/«install») is told "stop, with a result".
 const done = (value) => ({ return: value });
 
-// The update loop (common for the launcher and dsh): the question;
-// "never" — don't ask about this version, "later" — exit; "check again" /
-// "install" — installStep(choice). { note, noteIsError } — ask again with
-// a note; done(...) — exit (the value is the function's result: true —
-// the launcher is updated and will restart now, the new instance will
-// raise dsh).
+/* ===== offerUpdateFlow (test test/updates-offer.js) =====
+   The update loop (common for the launcher and dsh): the question;
+   "never" — don't ask about this version, "later" — exit; "check again" /
+   "install" — installStep(choice). { note, noteIsError } — ask again with
+   a note; done(...) — exit (the value is the function's result: true —
+   the launcher is updated and will restart now, the new instance will
+   raise dsh). */
 async function offerUpdateFlow({ kind, version, laterLog, installStep }) {
   let note = null;
   let noteIsError = false;
@@ -488,6 +494,7 @@ async function offerUpdateFlow({ kind, version, laterLog, installStep }) {
     noteIsError = r.noteIsError;
   }
 }
+/* ===== end offerUpdateFlow ===== */
 
 // true — the launcher is updated and will restart now: dsh is not started
 // by this instance (the new one will raise it).
@@ -573,6 +580,10 @@ async function offerLauncherUpdate() {
   });
 }
 
+/* ===== offerDshUpdate (test test/updates-offer.js) =====
+   The dsh update offer: probe the installed version, compare semver,
+   npm install -g (own prefix, or system prefix via pkexec), otherwise a
+   terminal command. */
 async function offerDshUpdate() {
   const latest = await state.updateChecks.dsh;
   if (!latest || !latest.version) return;
@@ -624,7 +635,8 @@ async function offerDshUpdate() {
       // choice === 'install'
       const npmInfo = await npmInstallInfo();
       if (state.stopping) return done(undefined);
-      if (!npmInfo.hasNpm || (!npmInfo.canAuto && npmInfo.rootMode !== 'pkexec')) {
+      const plan = npmRunPlan(npmInfo, ['install', '-g', `${DSH_NPM_PKG}@${latest.version}`]);
+      if (!npmInfo.hasNpm || plan.needTerminal) {
         // The global prefix is not available without sudo (or there's no
         // npm) — a command for the terminal. If the prefix is system
         // (root) but there's no pkexec — also here.
@@ -639,15 +651,9 @@ async function offerDshUpdate() {
           note = tr('Эта команда требует sudo — выполните её в терминале и нажмите «Проверить ещё раз».',
                     'This command needs sudo — run it in a terminal and click "Check again".');
         }
-        return manual(npmInfo.hasNpm ? `sudo ${cmdAuto}` : cmdAuto, note);
+        return manual(plan.terminalCmd, note);
       }
-      const code = npmInfo.canAuto
-        ? await runUpdateStep(npmInfo.npm, ['install', '-g', `${DSH_NPM_PKG}@${latest.version}`], envWithBinDir(npmInfo.npm))
-        // A system prefix: npm under pkexec — polkit asks for the password
-        // in a system dialog, as with a launcher update. We don't touch
-        // our own user prefix (nvm, ~/.npm-global) that way — there root
-        // would leave files the user can't update later (rootInstallMode).
-        : await runUpdateStep(npmInfo.pkexec, pkexecNpmArgs(npmInfo.npm, ['install', '-g', `${DSH_NPM_PKG}@${latest.version}`]));
+      const code = await runUpdateStep(plan.cmd, plan.args, plan.env);
       if (state.stopping) return done(undefined);
       if (code === 0) {
         const r = await probeDsh(state.dshBin);
@@ -673,5 +679,7 @@ async function offerDshUpdate() {
     },
   });
 }
+
+/* ===== end offerDshUpdate ===== */
 
 Object.assign(module.exports, { DSH_NPM_PKG, UPDATE_GITHUB_REPO, UPDATE_CHECK_TIMEOUT, NO_UPDATE_CHECK, launcherInstalledVersion, fetchLauncherLatest, notesBlockHtml, fetchDshLatest, startUpdateChecks, updateState, updatePrefFile, updatePrefs, onUpdateChoice, restartLauncher, offerLauncherUpdate, offerDshUpdate, readLastUpdate }); // extend, don't replace: the modules require each other in a circle

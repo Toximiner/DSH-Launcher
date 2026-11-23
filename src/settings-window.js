@@ -64,41 +64,46 @@ function updateDismissals() {
 
 let settingsNote = null; // { text, error }
 
+/* ===== applySetting (test test/settings-window.js) =====
+   One «Settings» field → its immediate effect (language, spellcheck, tray,
+   update polling, the dsh page) + the settings.json patch (null — the field
+   is dropped, the default applies); the result — the note for the window. */
+function applySetting(key, value) {
+  try {
+    if (key === 'lang') setLanguage(value);
+    else if (key === 'spellcheck') view.setSpellcheck(value);
+    else if (key === 'gpu' || key === 'ozone') saveSettings({ [key]: value === 'auto' ? null : value });
+    else if (key === 'port') saveSettings({ port: value === DEFAULT_PORT ? null : value });
+    else if (key === 'profile') saveSettings({ profile: value === DEFAULT_PROFILE ? null : value });
+    else if (key === 'checkUpdates') saveSettings({ checkUpdates: value ? null : false });
+    else if (key === 'pollUpdates') { saveSettings({ pollUpdates: value ? null : false }); updatesLive.setUpdatePolling(value); }
+    else if (key === 'closeToTray') { saveSettings({ closeToTray: value ? true : null }); tray.setTray(value); }
+    else if (key === 'attention') saveSettings({ attention: value ? null : false });
+    else if (key === 'sandbox') saveSettings({ sandbox: value ? true : null });
+    else if (key === 'attentionSound') { saveSettings({ attentionSound: value ? true : null }); if (value && state.win) tray.playAgentSound(); } // immediately — to hear it
+    else if (key === 'inputHistory') { // immediately: inject into the already open dsh page
+      saveSettings({ inputHistory: value ? null : false });
+      try {
+        if (state.win && !state.win.isDestroyed()) {
+          const js = value ? inputHistoryScript() : 'window.__dshInputHistory && window.__dshInputHistory.setEnabled(false); 1';
+          void state.win.webContents.executeJavaScript(js).catch(() => {});
+        }
+      } catch { /* noop */ }
+    }
+    else saveSettings({ [key]: value || null }); // dshPath, cwd: '' — the default
+    console.log(`[launcher] настройки: ${key} = ${key === 'dshPath' || key === 'cwd' ? (value || '(по умолчанию)') : value}`);
+    return { text: tr('Сохранено', 'Saved'), error: false };
+  } catch (e) {
+    return { text: e.message, error: true };
+  }
+}
+/* ===== end applySetting ===== */
+
 function onSettingsSet(url) {
   const q = new URL(url).searchParams;
   const key = q.get('k');
   const r = settingValue(key, q.get('v'));
-  if (r.error) {
-    settingsNote = { text: r.error, error: true };
-  } else {
-    try {
-      if (key === 'lang') setLanguage(r.value);
-      else if (key === 'spellcheck') view.setSpellcheck(r.value);
-      else if (key === 'gpu' || key === 'ozone') saveSettings({ [key]: r.value === 'auto' ? null : r.value });
-      else if (key === 'port') saveSettings({ port: r.value === DEFAULT_PORT ? null : r.value });
-      else if (key === 'profile') saveSettings({ profile: r.value === DEFAULT_PROFILE ? null : r.value });
-      else if (key === 'checkUpdates') saveSettings({ checkUpdates: r.value ? null : false });
-      else if (key === 'pollUpdates') { saveSettings({ pollUpdates: r.value ? null : false }); updatesLive.setUpdatePolling(r.value); }
-      else if (key === 'closeToTray') { saveSettings({ closeToTray: r.value ? true : null }); tray.setTray(r.value); }
-      else if (key === 'attention') saveSettings({ attention: r.value ? null : false });
-      else if (key === 'sandbox') saveSettings({ sandbox: r.value ? true : null });
-      else if (key === 'attentionSound') { saveSettings({ attentionSound: r.value ? true : null }); if (r.value && state.win) tray.playAgentSound(); } // immediately — to hear it
-      else if (key === 'inputHistory') { // immediately: inject into the already open dsh page
-        saveSettings({ inputHistory: r.value ? null : false });
-        try {
-          if (state.win && !state.win.isDestroyed()) {
-            const js = r.value ? inputHistoryScript() : 'window.__dshInputHistory && window.__dshInputHistory.setEnabled(false); 1';
-            void state.win.webContents.executeJavaScript(js).catch(() => {});
-          }
-        } catch { /* noop */ }
-      }
-      else saveSettings({ [key]: r.value || null }); // dshPath, cwd: '' — the default
-      console.log(`[launcher] настройки: ${key} = ${key === 'dshPath' || key === 'cwd' ? (r.value || '(по умолчанию)') : r.value}`);
-      settingsNote = { text: tr('Сохранено', 'Saved'), error: false };
-    } catch (e) {
-      settingsNote = { text: e.message, error: true };
-    }
-  }
+  settingsNote = r.error ? { text: r.error, error: true } : applySetting(key, r.value);
   if (state.dialogRender) state.dialogRender(false);
   return noContentResponse();
 }
