@@ -49,9 +49,6 @@ function nvmBinDirs() {
   } catch { return []; } // no nvm
 }
 
-// An environment with the binary's directory first in PATH (for `#!/usr/bin/env node` scripts).
-
-
 // An executable: next to dsh, in PATH, otherwise in nvm (when started from
 // the link, nvm is not in PATH).
 function findBin(name) {
@@ -127,10 +124,6 @@ async function dshInstallCheck() {
 // @latest — explicitly: the bare specifier of npm 10.x (Node 22) on a latest
 // prerelease resolves as the range * and fails ETARGET (all dsh versions — prereleases).
 const INSTALL_CMD = 'npm install -g @deepseek-ai/dsh@latest';
-// The write permission is checked on the nearest existing directory: on a
-// clean system <prefix>/lib/node_modules does not exist yet (it appears on the
-// first global install), and an ENOENT from it earlier wrongly meant "no npm".
-
 
 // dsh needs Node.js 22+. npm installs it even on an older Node without a
 // single warning (Ubuntu 24.04: Node 18 from apt), and then dsh does not start.
@@ -171,6 +164,25 @@ function pkexecNpmArgs(npm, npmArgs) {
 }
 /* ===== end pkexecNpmArgs ===== */
 
+/* ===== npmRunPlan (test test/dsh-install.js) =====
+   How an npm/pnpm install command is run (market, the install window, the dsh
+   update): a system npm (root's prefix) — via pkexec (polkit asks for the
+   password in a system dialog); otherwise — the npm itself with its directory
+   first in PATH. needTerminal — neither works (root in nvm/~/.npm-global —
+   not allowed): terminalCmd is for a human (sudo, if the npm was found). */
+function npmRunPlan(npmInfo, args) {
+  const viaPkexec = !npmInfo.canAuto && npmInfo.rootMode === 'pkexec';
+  return {
+    viaPkexec,
+    needTerminal: !npmInfo.canAuto && !viaPkexec,
+    terminalCmd: `${npmInfo.hasNpm ? 'sudo ' : ''}npm ${args.join(' ')}`,
+    cmd: viaPkexec ? npmInfo.pkexec : npmInfo.npm,
+    args: viaPkexec ? pkexecNpmArgs(npmInfo.npm, args) : args,
+    env: viaPkexec ? undefined : envWithBinDir(npmInfo.npm),
+  };
+}
+/* ===== end npmRunPlan ===== */
+
 async function npmInstallInfo() {
   const npm = findNpm();
   if (!npm) return { hasNpm: false, canAuto: false, command: INSTALL_CMD };
@@ -193,4 +205,4 @@ async function npmInstallInfo() {
   }
 }
 
-module.exports = { dshEnv, probeDsh, findBin, dshInstallCheck, MIN_NODE_MAJOR, rootInstallMode, pkexecNpmArgs, npmInstallInfo };
+module.exports = { dshEnv, probeDsh, findBin, dshInstallCheck, MIN_NODE_MAJOR, rootInstallMode, pkexecNpmArgs, npmRunPlan, npmInstallInfo };

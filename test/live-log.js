@@ -6,6 +6,7 @@
 'use strict';
 const assert = require('assert');
 const { extract } = require('./_extract');
+const { LOG_MAX_LINES } = require('../src/proc-log');
 
 // A fake document with a single <pre id="live-log">.
 const mkDoc = () => {
@@ -13,7 +14,7 @@ const mkDoc = () => {
   return { pre, document: { getElementById: (id) => (id === 'live-log' ? pre : null) } };
 };
 
-const append = extract('liveLogAppend', {});
+const append = extract('liveLogAppend', { LOG_MAX_LINES });
 const fresh = extract('liveLogFresh', {});
 
 // No <pre> on the page (already navigated away) — false

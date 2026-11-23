@@ -31,6 +31,7 @@ const i18n = require('./src/i18n');
 const { tr } = i18n;
 const { guardNavigation, restrictPermissions, denyExternalOpen } = require('./src/guard');
 const { WIN_MIN, keyAction, isAltKey, windowSize } = require('./src/ui');
+const { clampZoom } = require('./src/util');
 
 // Launch parameters and the launcher log — first: env.js removes the CI
 // token from the environment, log.js starts writing launcher.log.
@@ -168,8 +169,10 @@ async function onReady() {
   state.win.once('show', () => { shownOnce = true; });
   // Safety net: on native Wayland ready-to-show may arrive much later
   // (or not at all) — a window with show:false stays invisible.
-  // If it was not shown even once within 8 s — we show it manually. Exactly "not
-  // even once": a window that has already been hidden to the tray must not be restored.
+  // If it was not shown even once within SHOW_SAFETY_NET_MS — we show it
+  // manually. Exactly "not even once": a window that has already been
+  // hidden to the tray must not be restored.
+  const SHOW_SAFETY_NET_MS = 8000;
   setTimeout(() => {
     // isDestroyed: the window may have been closed (and app.quit()) before the timer —
     // methods on a destroyed window throw.
@@ -177,7 +180,7 @@ async function onReady() {
       console.log('[launcher] ready-to-show не пришло за 8 с — показываю окно вручную');
       state.win.show();
     }
-  }, 8000);
+  }, SHOW_SAFETY_NET_MS);
   // The zoom restored at startup (see setZoomLevel below) does not persist
   // after navigating to the dsh page — every cross-origin navigation in
   // Chromium resets zoom to 0. So we keep it here and carry it over to the
@@ -185,6 +188,8 @@ async function onReady() {
   let savedZoomPending = null;
   state.win.webContents.on('did-finish-load', () => {
     // first load of the dsh GUI — show "What's new" if the launcher was updated
+    // The origin check is the same as in tray.js (pollAgentState): the dsh
+    // page is recognized by our origin, a service page is not.
     try {
       if (new URL(state.win.webContents.getURL()).origin === new URL(PLAIN_URL).origin) {
         // The window is on the dsh page, not a service one: a language change
@@ -217,7 +222,7 @@ async function onReady() {
   try {
     const savedZoom = JSON.parse(fs.readFileSync(zoomFile(), 'utf8'));
     if (Number.isFinite(savedZoom.zoomLevel)) {
-      const z = Math.max(-5, Math.min(5, savedZoom.zoomLevel));
+      const z = clampZoom(savedZoom.zoomLevel);
       state.win.webContents.setZoomLevel(z);
       savedZoomPending = z; // we will carry it over to the dsh page (see did-finish-load above)
       console.log(`[launcher] восстановлен масштаб: ${savedZoom.zoomLevel}`);

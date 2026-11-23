@@ -27,11 +27,13 @@ function historyPush(items, text, limit = inputHistoryLimit) {
 }
 /* ===== end historyPush ===== */
 
-/* ===== historyStep (test test/input-history.js) ===== */
+/* ===== historyReset (test test/input-history.js) ===== */
 function historyReset() {
   return { active: false, index: -1, saved: '' };
 }
+/* ===== end historyReset ===== */
 
+/* ===== historyStep (test test/input-history.js) ===== */
 // A step of ↑/↓: dir −1 — up (toward older), 1 — down (toward newer).
 // nav: { active, index, saved } — history mode; ctx: { canEnter — the field is empty
 // or the cursor is at the start, current — the field's text now }.
@@ -62,14 +64,20 @@ function historyExit(nav) {
 /* ===== end historyExit ===== */
 
 /* ===== buildInputHistoryScript (test test/input-history.js) ===== */
-// The script text for the dsh page (injected from main.js after load). Self-contained:
-// it mirrors historyPush/historyStep, because the page has no access to the modules.
-// A repeated injection — setItems + reusing the listeners (installed).
+// The script text for the dsh page (injected from main.js after load). The tested
+// pure functions are embedded verbatim (toString) — the page cannot diverge from
+// the module. A repeated injection — setItems + reusing the listeners (installed).
 function buildInputHistoryScript(routeKey, items) {
   const cfg = JSON.stringify({ key: String(routeKey || ''), items: Array.isArray(items) ? items : [] });
   return `(() => {
   const cfg = ${cfg};
-  const reset = () => ({ active: false, index: -1, saved: '' });
+  const LIMIT = ${inputHistoryLimit};
+  // The same tested pure functions as in the main process, embedded verbatim.
+  const historyPush = ${historyPush.toString()};
+  const historyReset = ${historyReset.toString()};
+  const historyStep = ${historyStep.toString()};
+  const historyExit = ${historyExit.toString()};
+  const reset = historyReset;
   const S = window.__dshInputHistory = window.__dshInputHistory || {};
   S.setItems = (list) => { S.items = Array.isArray(list) ? list : []; S.nav = reset(); };
   S.setEnabled = (on) => { S.enabled = !!on; if (!on) S.nav = reset(); };
@@ -104,15 +112,17 @@ function buildInputHistoryScript(routeKey, items) {
       ed.dispatchEvent(new InputEvent('beforeinput', { inputType: 'insertText', data: String(text), bubbles: true, cancelable: true }));
     } catch (e) { /* noop */ } finally { S.self = false; }
   };
-  // Record to history: a mirror of historyPush + a route to the main process.
+  // Record to history: the same historyPush as in the main process + a route to it.
   // The text goes only to our own dshlauncher:// protocol (locally), not to the log.
   const push = (text) => {
     const t = String(text || '').trim();
     if (!t) return;
-    if (S.items.length && S.items[0] === t) { S.nav = reset(); return; }
-    S.items = [t].concat(S.items).slice(0, 50);
+    const next = historyPush(S.items, t, LIMIT);
     S.nav = reset();
-    try { window.location.href = 'dshlauncher://' + cfg.key + '/history/push/?text=' + encodeURIComponent(t); } catch (e) { /* noop */ }
+    if (next !== S.items) {
+      S.items = next;
+      try { window.location.href = 'dshlauncher://' + cfg.key + '/history/push/?text=' + encodeURIComponent(t); } catch (e) { /* noop */ }
+    }
   };
   document.addEventListener('keydown', (e) => {
     try {
@@ -122,12 +132,12 @@ function buildInputHistoryScript(routeKey, items) {
       if (e.ctrlKey || e.metaKey || e.altKey || e.isComposing) return; // other shortcuts (Alt+↑/↓ are taken by dsh)
       if (e.key === 'Enter') { if (!e.shiftKey) push(textOf(ed)); return; } // Shift+Enter — line break
       if (e.key === 'Escape') {
-        if (!S.nav.active) return;
+        const r = historyExit(S.nav);
+        if (r.action.type === 'none') return;
         e.preventDefault();
         e.stopPropagation();
-        const saved = S.nav.saved || '';
-        S.nav = reset();
-        setText(ed, saved);
+        S.nav = r.nav;
+        setText(ed, r.action.text);
         return;
       }
       const dir = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
@@ -135,28 +145,12 @@ function buildInputHistoryScript(routeKey, items) {
       if (ed.getAttribute('aria-disabled') === 'true') return;
       if (!S.items.length) return;
       const cur = textOf(ed);
-      const canEnter = cur.trim() === '' || caretAtStart(ed);
-      let nav = null;
-      let text = null;
-      if (!S.nav.active) {
-        if (dir !== -1 || !canEnter) return;
-        nav = { active: true, index: 0, saved: cur };
-        text = S.items[0];
-      } else if (dir === -1) {
-        if (S.nav.index >= S.items.length - 1) return;
-        nav = { active: true, index: S.nav.index + 1, saved: S.nav.saved };
-        text = S.items[nav.index];
-      } else if (S.nav.index > 0) {
-        nav = { active: true, index: S.nav.index - 1, saved: S.nav.saved };
-        text = S.items[nav.index];
-      } else {
-        nav = reset();
-        text = S.nav.saved || '';
-      }
+      const r = historyStep(S.items, S.nav, dir, { canEnter: cur.trim() === '' || caretAtStart(ed), current: cur });
+      if (r.action.type === 'none') return;
       e.preventDefault();
       e.stopPropagation();
-      S.nav = nav;
-      setText(ed, text);
+      S.nav = r.nav;
+      setText(ed, r.action.text);
     } catch (e) { /* noop */ }
   }, true);
   // The user started typing — history mode is disabled, the text is left alone.

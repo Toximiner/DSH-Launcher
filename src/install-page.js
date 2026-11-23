@@ -3,8 +3,9 @@
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
-const { esc } = require('./util');
+const { esc, noteHtml } = require('./util');
 const { DSH_BIN_DEFAULT, DSH_BIN_EXPLICIT } = require('./env');
+const { settleLiveState } = require('./proc-log');
 const { dshInstallCheck, MIN_NODE_MAJOR, npmInstallInfo } = require('./dsh-install');
 const pages = require('./pages');
 
@@ -19,11 +20,7 @@ let installState = { check: null, npmInfo: null, running: false, log: [], timer:
 
 // Closing the launcher: the install process and the redraw timer (before-quit →
 // state.settleAllOperations, main.js).
-function settleInstallState() {
-  if (installState.proc) { try { installState.proc.kill('SIGTERM'); } catch { /* noop */ } }
-  clearInterval(installState.timer);
-}
-state.settleOperation(settleInstallState);
+state.settleOperation(() => settleLiveState(installState));
 
 async function refreshInstallState() {
   [installState.check, installState.npmInfo] = await Promise.all([dshInstallCheck(), npmInstallInfo()]);
@@ -40,11 +37,8 @@ async function showInstallPage(note, noteIsError = false) {
   const check = installState.check;
   const npmInfo = installState.npmInfo;
   const installing = installState.running;
-  const noteHtml = note
-    ? `<p style="color:${noteIsError ? '#f85149' : '#3fb950'}">${esc(note)}</p>`
-    : '';
   const body = `
-    ${noteHtml}
+    ${noteHtml(note, noteIsError)}
     <p>${installing
       ? tr(`Лаунчер не может запустить DeepSeek Harness: идёт установка <code>dsh</code>.`,
            `The launcher cannot start DeepSeek Harness: <code>dsh</code> is being installed.`)

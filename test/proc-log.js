@@ -8,7 +8,7 @@
  */
 
 const assert = require('assert');
-const { runWithLiveLog, LOG_MAX_LINES, REDRAW_MS } = require('../src/proc-log');
+const { runWithLiveLog, settleLiveState, LOG_MAX_LINES, REDRAW_MS } = require('../src/proc-log');
 
 const node = process.execPath;
 
@@ -63,5 +63,15 @@ const node = process.execPath;
   }
   // the live redraw period — pages use it for the progress tick too
   assert.strictEqual(REDRAW_MS, 800, 'REDRAW_MS');
+  // settleLiveState — install-page.js / market.js use it for their page states
+  {
+    let killed = null;
+    settleLiveState({ proc: { kill: (s) => { killed = s; } }, timer: setInterval(() => {}, 1000) });
+    assert.strictEqual(killed, 'SIGTERM', 'the process is terminated');
+    let threw = false;
+    try { settleLiveState({ proc: { kill: () => { throw new Error('boom'); } } }); } catch { threw = true; }
+    assert.ok(!threw, 'a kill error does not escape (the window is closing)');
+    settleLiveState({}); // no proc, no timer — nothing to do
+  }
   console.log('OK: proc-log — all checks passed');
 })().catch((e) => { console.error(e); process.exit(1); });

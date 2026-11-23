@@ -7,6 +7,7 @@ const { esc, withRouteKey, CSP_META } = require('./util');
 const { prefFile, readPref, writePref } = require('./prefs');
 const { PLAIN_URL, LANG_FORCED, ROUTE_KEY } = require('./env');
 const { stderrTail } = require('./port'); // pure module — direct require, no registry
+const { LOG_MAX_LINES } = require('./proc-log'); // the live log keeps the same limit
 const menus = require('./menus');
 const { blankResponse } = require('./respond'); // pure module — direct require, no registry
 
@@ -112,8 +113,11 @@ function pageHtml(title, body, isError, opts = {}) {
 }
 /* ===== end pageHtml ===== */
 
+// How many log lines the error pages show
+const STDERR_BLOCK_LINES = 50;
+
 function stderrBlock() {
-  return `<pre>${esc(stderrTail.slice(-50).join('\n') || tr('нет данных журнала', 'no log data'))}</pre>`;
+  return `<pre>${esc(stderrTail.slice(-STDERR_BLOCK_LINES).join('\n') || tr('нет данных журнала', 'no log data'))}</pre>`;
 }
 
 // The current service page as a render function: the RU | EN switcher
@@ -214,9 +218,9 @@ function showPastePage() {
 const livePushed = new Map(); // st → logSeq of the last line already on the page
 
 /* ===== liveLogAppend (pure function, test test/live-log.js) ===== */
-// A page function: append lines to <pre id="live-log">. The limit is 500 —
-// the same as LOG_MAX_LINES in proc-log.js: when exceeded, the old lines drop
-// from the top. false — the page has no such <pre> (it is no longer our page).
+// A page function: append lines to <pre id="live-log">. The limit is
+// LOG_MAX_LINES (proc-log.js): when exceeded, the old lines drop from the
+// top. false — the page has no such <pre> (it is no longer our page).
 function liveLogAppend(document, lines) {
   const pre = document.getElementById('live-log');
   if (!pre) return false;
@@ -226,7 +230,7 @@ function liveLogAppend(document, lines) {
     if (t.trim() === '…') t = '';
     t = t ? t + '\n' + lines.join('\n') : lines.join('\n');
     const ls = t.split('\n');
-    if (ls.length > 500) t = ls.slice(ls.length - 500).join('\n');
+    if (ls.length > LOG_MAX_LINES) t = ls.slice(ls.length - LOG_MAX_LINES).join('\n');
     pre.textContent = t;
   }
   if (pinned) pre.scrollTop = pre.scrollHeight;

@@ -97,10 +97,20 @@ function redactLog(text) {
     .replace(/((?:api[_-]?key|apikey|secret|password|passwd|access[_-]?token|auth[_-]?token)["']?\s*[:=]\s*["']?)[^\s"'&,;]+/gi, '$1***');
 }
 
+/* A note on the utility pages: null — no note at all, isError — red,
+   otherwise green (the «dsh is not installed» and market pages). */
+const noteHtml = (note, isError = false) => note
+  ? `<p style="color:${isError ? '#f85149' : '#3fb950'}">${esc(note)}</p>`
+  : '';
+
+/* The window's zoom level is limited to -5..+5 (View → applyZoom and
+   restoring the saved level in main.js). */
+const clampZoom = (z) => Math.max(-5, Math.min(5, z));
+
 // The CSP of the utility data: pages: no external resources (defense in
 // depth together with esc() — in case of an injection into the logs), only
 // inline scripts and styles (the pages' buttons and styles use them) and
 // data: images are allowed.
 const CSP_META = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;">`;
 
-module.exports = { splitArgs, firstErrLine, esc, profileFromArgs, timedCheck, launcherRoute, withRouteKey, stripRouteKey, validRouteKey, redactLog, CSP_META };
+module.exports = { splitArgs, firstErrLine, esc, profileFromArgs, timedCheck, launcherRoute, withRouteKey, stripRouteKey, validRouteKey, redactLog, noteHtml, clampZoom, CSP_META };

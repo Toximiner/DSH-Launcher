@@ -6,12 +6,11 @@ const path = require('path');
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
-const { esc, profileFromArgs } = require('./util');
-const { envWithBinDir } = require('./system');
-const { runWithLiveLog } = require('./proc-log');
+const { esc, noteHtml, profileFromArgs } = require('./util');
+const { runWithLiveLog, settleLiveState } = require('./proc-log');
 const { prefFile, readPref, writePref } = require('./prefs');
 const { DSH_ARGS, CWD } = require('./env');
-const { dshEnv, findBin, npmInstallInfo, pkexecNpmArgs } = require('./dsh-install');
+const { dshEnv, findBin, npmInstallInfo, npmRunPlan } = require('./dsh-install');
 const pages = require('./pages');
 const { blankResponse } = require('./respond'); // pure module — direct require, no registry
 
@@ -62,11 +61,7 @@ let marketState = { resolve: null, running: false, log: [], timer: null, proc: n
 
 // Closing the launcher: the install process and the redraw timer (before-quit →
 // state.settleAllOperations, main.js).
-function settleMarketState() {
-  if (marketState.proc) { try { marketState.proc.kill('SIGTERM'); } catch { /* noop */ } }
-  clearInterval(marketState.timer);
-}
-state.settleOperation(settleMarketState);
+state.settleOperation(() => settleLiveState(marketState));
 
 function marketCommand() {
   return `${state.dshBin} plugin --profile ${DSH_PROFILE} add ${MARKET_PKG}`;
@@ -76,14 +71,11 @@ function showMarketPage(note, noteIsError = false) {
   state.currentPage = () => showMarketPage(note, noteIsError);
   if (typeof note === 'function') note = note();
   const installing = marketState.running;
-  const noteHtml = note
-    ? `<p style="color:${noteIsError ? '#f85149' : '#3fb950'}">${esc(note)}</p>`
-    : '';
   const body = installing
     ? `<p>${tr('Выполняю', 'Running')} <code>${esc(marketState.cmdLine || marketCommand())}</code></p>
        <p>${tr('Последние строки установки:', 'Latest install output:')}</p>
        ${pages.liveLogPre(marketState.log)}`
-    : `${noteHtml}
+    : `${noteHtml(note, noteIsError)}
        <p>${tr(`В профиле <code>${esc(DSH_PROFILE)}</code> не найден плагин маркета
           <code>${MARKET_PKG}</code>. Установить его перед запуском dsh?`,
           `The marketplace plugin <code>${MARKET_PKG}</code> is not installed in the
@@ -168,11 +160,11 @@ async function offerMarketIfMissing() {
       const npmInfo = await npmInstallInfo();
       if (state.stopping) return;
       const pnpmArgs = ['install', '-g', 'pnpm'];
-      // System npm — we install via pkexec (polkit will ask for the password), otherwise
-      // we ask to run it in a terminal: root in nvm/~/.npm-global — not allowed.
-      const viaPkexec = !npmInfo.canAuto && npmInfo.rootMode === 'pkexec';
-      if (!npmInfo.canAuto && !viaPkexec) {
-        const cmd = npmInfo.hasNpm ? 'sudo npm install -g pnpm' : 'npm install -g pnpm';
+      // System npm — via pkexec (npmRunPlan), otherwise — a command for the
+      // terminal: root in nvm/~/.npm-global — not allowed.
+      const plan = npmRunPlan(npmInfo, pnpmArgs);
+      if (plan.needTerminal) {
+        const cmd = plan.terminalCmd;
         console.log(`[launcher] pnpm нет, поставить сами не можем — прошу «${cmd}»`);
         marketState.log = [];
         note = () => tr(`Для плагинов dsh нужен pnpm, а его в системе нет. Выполните в терминале «${cmd}» и нажмите «Установить» ещё раз.`,
@@ -180,11 +172,8 @@ async function offerMarketIfMissing() {
         noteIsError = true;
         continue;
       }
-      console.log(viaPkexec ? '[launcher] pnpm нет — ставлю через pkexec' : '[launcher] pnpm нет — ставлю через npm');
-      const pc = await runMarketInstall(
-        viaPkexec ? npmInfo.pkexec : npmInfo.npm,
-        viaPkexec ? pkexecNpmArgs(npmInfo.npm, pnpmArgs) : pnpmArgs,
-        viaPkexec ? undefined : envWithBinDir(npmInfo.npm));
+      console.log(plan.viaPkexec ? '[launcher] pnpm нет — ставлю через pkexec' : '[launcher] pnpm нет — ставлю через npm');
+      const pc = await runMarketInstall(plan.cmd, plan.args, plan.env);
       if (state.stopping) return;
       if (pc !== 0 || !findBin('pnpm')) {
         console.error(`[launcher] установка pnpm не удалась (код ${pc})`);

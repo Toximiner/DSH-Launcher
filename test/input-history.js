@@ -5,9 +5,16 @@ const assert = require('assert');
 const { extract } = require('./_extract');
 
 const historyPush = extract('historyPush', {});
-const historyStep = extract('historyStep', {});
+const historyReset = extract('historyReset', {});
+const historyStep = extract('historyStep', { historyReset });
 const historyExit = extract('historyExit', {});
-const buildInputHistoryScript = extract('buildInputHistoryScript', {});
+const buildInputHistoryScript = extract('buildInputHistoryScript', {
+  inputHistoryLimit: 50,
+  historyPush,
+  historyReset,
+  historyStep,
+  historyExit,
+});
 
 // ---- historyPush: newest on top, consecutive repeats not duplicated ----
 assert.deepStrictEqual(historyPush([], 'привет'), ['привет']);
@@ -72,5 +79,51 @@ assert.ok(js.includes('history/push/'), 'the write route into main');
 assert.ok(js.includes('__dshInputHistory'), 'the control point for the settings');
 assert.ok(buildInputHistoryScript('', null).includes('[]'), 'an empty history does not break the script');
 assert.ok(buildInputHistoryScript().includes('"key":""'), 'no key — empty string, not undefined');
+// The script embeds the real tested functions (not a mirror):
+assert.ok(js.includes('function historyStep'), 'the script has the real historyStep');
+assert.ok(js.includes('function historyPush'), 'the script has the real historyPush');
+assert.ok(js.includes('function historyExit'), 'the script has the real historyExit');
+assert.ok(js.includes('const LIMIT = 50;'), 'a single limit constant in the script');
+assert.ok(!js.includes('slice(0, 50)'), 'no second hard-coded limit');
 
-console.log('OK: input-history — historyPush/historyStep/historyExit/buildInputHistoryScript');
+// ---- the generated script runs on a fake "page": navigation behaves as historyStep ----
+{
+  const vm = require('vm');
+  const sent = [];
+  const ed = {
+    innerText: '',
+    textContent: '',
+    focus: () => {},
+    contains: () => true,
+    getAttribute: () => null,
+    dispatchEvent: (ev) => { sent.push(ev.data); ed.innerText = ev.data; },
+  };
+  const listeners = {};
+  const document = {
+    querySelector: () => ed,
+    createRange: () => ({ selectNodeContents: () => {} }),
+    addEventListener: (t, fn) => { listeners[t] = fn; },
+  };
+  const window = {
+    getSelection: () => ({ removeAllRanges: () => {}, addRange: () => {} }),
+    location: { href: '' },
+  };
+  const context = { window, document, InputEvent: class { constructor(type, init) { Object.assign(this, init); } }, encodeURIComponent };
+  vm.createContext(context);
+  assert.strictEqual(vm.runInContext(buildInputHistoryScript('k', ['a', 'b']), context), 'history:installed');
+  const key = (k) => listeners.keydown({ key: k, ctrlKey: false, metaKey: false, altKey: false, isComposing: false, shiftKey: false, target: ed, preventDefault() { this.pd = true; }, stopPropagation() {} });
+  key('ArrowUp');
+  assert.strictEqual(ed.innerText, 'a', '↑ — the newest entry');
+  key('ArrowUp');
+  assert.strictEqual(ed.innerText, 'b', '↑ — the older entry');
+  key('ArrowUp');
+  assert.strictEqual(ed.innerText, 'b', 'nothing older — the cursor is free');
+  key('ArrowDown');
+  assert.strictEqual(ed.innerText, 'a', '↓ — back to the newer entry');
+  key('ArrowDown');
+  assert.strictEqual(ed.innerText, '', 'below the newest — restore the (empty) draft');
+  key('Escape');
+  assert.deepStrictEqual(sent, ['a', 'b', 'a', ''], 'setText calls: up, up, down, down-restore');
+}
+
+console.log('OK: input-history — historyPush/historyStep/historyExit/buildInputHistoryScript (+vm smoke)');

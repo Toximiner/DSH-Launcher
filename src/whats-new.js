@@ -13,6 +13,9 @@ const dialogs = require('./dialogs');
 const menus = require('./menus');
 const updates = require('./updates');
 
+// Wait before retrying the release list (the network may be slow)
+const RETRY_WAIT_MS = 5000;
+
 /* ---------------- «Что нового» (What's new) after an update ---------------- */
 
 // The version the launcher was started from last time. It became higher —
@@ -67,7 +70,7 @@ async function maybeShowWhatsNew(freshLatest) {
     // We can't remember the version until the changes are shown.
     for (let i = 0; i < 2 && (!latest || !latest.releases); i++) {
       if (state.stopping) return;
-      await sleep(5000);
+      await sleep(RETRY_WAIT_MS);
       latest = (await timedCheck(updates.fetchLauncherLatest(), updates.UPDATE_CHECK_TIMEOUT)) || null;
     }
     if (!latest || !latest.releases) return; // we'll retry on the nearest successful check (retryWhatsNew)

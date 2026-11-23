@@ -49,4 +49,12 @@ async function runWithLiveLog(st, cmd, args, { env, cwd, redraw } = {}) {
   }
 }
 
-module.exports = { runWithLiveLog, LOG_MAX_LINES, REDRAW_MS };
+/* Close a live-log page on shutdown (dsh installation, market plugin):
+   stop the running process and the redraw timer. Common for
+   install-page.js and market.js (state.settleAllOperations, main.js). */
+function settleLiveState(st) {
+  if (st.proc) { try { st.proc.kill('SIGTERM'); } catch { /* already exited */ } }
+  clearInterval(st.timer);
+}
+
+module.exports = { runWithLiveLog, settleLiveState, LOG_MAX_LINES, REDRAW_MS };

@@ -242,6 +242,8 @@ const AGENT_PROBE = `(() => ({
 async function pollAgentState() {
   refreshTrayStatus(); // the dsh status on the icon — independent of the agent
   if (!state.win || state.win.isDestroyed() || state.stopping) return;
+  // The origin check is the same as in main.js (did-finish-load): the agent
+  // state is read only on the dsh page, a service page is not.
   try { if (new URL(state.win.webContents.getURL()).origin !== new URL(PLAIN_URL).origin) { agent = { running: false, waiting: null }; return; } } catch { return; }
   let cur;
   try { cur = await state.win.webContents.executeJavaScript(AGENT_PROBE, true); } catch { return; }

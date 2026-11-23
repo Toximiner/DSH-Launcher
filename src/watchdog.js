@@ -36,6 +36,10 @@ let recovering = false; // the window recovery is already in progress — don't 
 // How long to wait for dsh readiness after the port opens: the boot after
 // a plugin update (loading, the bili connection) can take a few seconds.
 const READY_WAIT_MS = 15000;
+// The port flap guard: an automatic recovery sooner than this is ignored
+const FLAP_GUARD_MS = 3000;
+// The watchdog poll period
+const WATCHDOG_POLL_MS = 1500;
 
 /* ===== waitForReady (test test/watchdog.js) =====
    The dsh port opens earlier than the app is ready. We wait until
@@ -84,7 +88,7 @@ async function recoverWindow(force = false) {
   if (!state.win || state.win.isDestroyed() || state.stopping) return;
   if (recovering) return; // the recovery is already in progress (waiting for readiness)
   const now = Date.now();
-  if (!force && now - lastAutoReloadAt < 3000) return; // protection against port flapping
+  if (!force && now - lastAutoReloadAt < FLAP_GUARD_MS) return; // protection against port flapping
   lastAutoReloadAt = now;
   recovering = true;
   try {
@@ -127,7 +131,7 @@ function startWatchdog() {
         console.log(`[launcher] порт ${PORT} закрыт — если dsh перезапустят, окно восстановится само`);
         state.portState = now;
       }
-    }, 1500);
+    }, WATCHDOG_POLL_MS);
   })();
 }
 

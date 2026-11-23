@@ -7,7 +7,7 @@ const { guardNavigation } = require('./guard');
 const state = require('./state');
 const i18n = require('./i18n');
 const { tr } = i18n;
-const { esc, withRouteKey, CSP_META } = require('./util');
+const { esc, clampZoom, withRouteKey, CSP_META } = require('./util');
 const { ROUTE_KEY } = require('./env');
 const menus = require('./menus');
 const settingsWindow = require('./settings-window');
@@ -26,7 +26,7 @@ let zoomSaveTimer = null;
 
 function applyZoom(level, note) {
   if (!state.win || state.win.isDestroyed()) return;
-  const z = Math.max(-5, Math.min(5, level));
+  const z = clampZoom(level);
   state.win.webContents.setZoomLevel(z);
   clearTimeout(zoomSaveTimer);
   zoomSaveTimer = setTimeout(() => {

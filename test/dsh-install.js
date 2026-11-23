@@ -10,7 +10,11 @@
  *    user can't update later);
  *  - pkexecNpmArgs: npm is a JS script with `#!/usr/bin/env node`, and
  *    pkexec runs a program with a minimal PATH; the npm directory must be
- *    in PATH, and the arguments — passed via "$@" (no string gluing).
+ *    in PATH, and the arguments — passed via "$@" (no string gluing);
+ *  - npmRunPlan: the one rule (market, the install window, the dsh update)
+ *    for running an npm/pnpm install — a system prefix goes via pkexec,
+ *    an available one — the npm itself with its directory in PATH, neither —
+ *    a command for a human (sudo, if the npm was found).
  */
 
 const assert = require('assert');
@@ -73,4 +77,46 @@ test('pkexecNpmArgs: npm directory in PATH, arguments via "$@"', () => {
   assert.strictEqual(evil[evil.length - 1], 'pkg@1.0.0; rm -rf /', 'argument passed as-is');
 });
 
-console.log('OK: dsh-install — rootInstallMode, pkexecNpmArgs');
+test('npmRunPlan: a system prefix — via pkexec (cmd/args/env)', () => {
+  const plan = extract('npmRunPlan', {
+    pkexecNpmArgs: (npm, args) => ['pkexec', npm, ...args],
+    envWithBinDir: (npm) => ({ PATH: `BIN:${npm}` }),
+  });
+  const p = plan({ hasNpm: true, canAuto: false, rootMode: 'pkexec', npm: '/usr/bin/npm', pkexec: '/usr/bin/pkexec' },
+    ['install', '-g', '@deepseek-ai/dsh@latest']);
+  assert.strictEqual(p.viaPkexec, true);
+  assert.strictEqual(p.needTerminal, false);
+  assert.strictEqual(p.cmd, '/usr/bin/pkexec', 'the program — pkexec');
+  assert.deepStrictEqual(p.args, ['pkexec', '/usr/bin/npm', 'install', '-g', '@deepseek-ai/dsh@latest']);
+  assert.strictEqual(p.env, undefined, 'no env — pkexec starts with its own');
+});
+
+test('npmRunPlan: an available prefix — the npm itself, the directory in PATH', () => {
+  const plan = extract('npmRunPlan', {
+    pkexecNpmArgs: (npm, args) => ['pkexec', npm, ...args],
+    envWithBinDir: (npm) => ({ PATH: `BIN:${npm}` }),
+  });
+  const p = plan({ hasNpm: true, canAuto: true, rootMode: null, npm: '/home/u/.nvm/versions/node/v22.1.0/bin/npm' },
+    ['install', '-g', 'pnpm']);
+  assert.strictEqual(p.viaPkexec, false);
+  assert.strictEqual(p.needTerminal, false);
+  assert.strictEqual(p.cmd, '/home/u/.nvm/versions/node/v22.1.0/bin/npm');
+  assert.deepStrictEqual(p.args, ['install', '-g', 'pnpm']);
+  assert.deepStrictEqual(p.env, { PATH: 'BIN:/home/u/.nvm/versions/node/v22.1.0/bin/npm' });
+});
+
+test('npmRunPlan: neither works — a terminal command (sudo if there is npm)', () => {
+  const plan = extract('npmRunPlan', {
+    pkexecNpmArgs: (npm, args) => ['pkexec', npm, ...args],
+    envWithBinDir: (npm) => ({ PATH: `BIN:${npm}` }),
+  });
+  const p = plan({ hasNpm: true, canAuto: false, rootMode: 'manual', npm: '/usr/bin/npm' },
+    ['install', '-g', 'pnpm']);
+  assert.strictEqual(p.needTerminal, true, 'root in nvm/~/.npm-global — not allowed');
+  assert.strictEqual(p.terminalCmd, 'sudo npm install -g pnpm');
+  const q = plan({ hasNpm: false, canAuto: false, npm: null }, ['install', '-g', 'pnpm']);
+  assert.strictEqual(q.needTerminal, true, 'no npm at all');
+  assert.strictEqual(q.terminalCmd, 'npm install -g pnpm', 'no sudo — npm not found');
+});
+
+console.log('OK: dsh-install — rootInstallMode, pkexecNpmArgs, npmRunPlan');

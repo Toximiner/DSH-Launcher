@@ -8,7 +8,7 @@ const assert = require('assert');
 const { extract } = require('./_extract');
 
 // ---- splitArgs: parsing DSH_ARGS like a shell ----
-const { splitArgs, launcherRoute, profileFromArgs, firstErrLine, esc } = require('../src/util');
+const { splitArgs, launcherRoute, profileFromArgs, firstErrLine, esc, noteHtml, clampZoom } = require('../src/util');
 const { envWithBinDir, withoutUnitEnv } = require('../src/system');
 const { proxyUrlFromRule } = require('../src/updates-logic');
 const { dpkgStatusVersion } = require('../src/versions');
@@ -199,6 +199,15 @@ assert.strictEqual(proxyUrlFromRule('proxy p:1'), 'http://p:1', 'case-insensitiv
   assert.strictEqual(auth('see http://127.0.0.1:3080/?token=a', PLAIN), null, 'not a «dsh web:» line — null');
   assert.strictEqual(auth('dsh web: http://127.0.0.1:3080/?token=a\ndsh web: http://[', PLAIN),
     'http://127.0.0.1:3080/?token=a', 'a fragment at the end of the tail — skipped');
+}
+
+// noteHtml / clampZoom — the shared helpers (install-page.js, market.js, view.js)
+{
+  assert.strictEqual(noteHtml(null), '', 'no note — empty');
+  assert.strictEqual(noteHtml('ok'), '<p style="color:#3fb950">ok</p>', 'green by default');
+  assert.strictEqual(noteHtml('bad', true), '<p style="color:#f85149">bad</p>', 'red on error');
+  assert.strictEqual(noteHtml('<i>x</i>'), '<p style="color:#3fb950">&lt;i&gt;x&lt;/i&gt;</p>', 'the note is escaped');
+  for (const [z, want] of [[3, 3], [-5, -5], [5, 5], [-9, -5], [12, 5]]) assert.strictEqual(clampZoom(z), want, `clampZoom(${z})`);
 }
 
 console.log('OK: parsing — all checks passed');
