@@ -33,7 +33,7 @@ async function stopDsh() {
   for (let i = 0; i < 40 && groupAlive(pid, groupOnly); i++) await sleep(100); // up to 4 s
   if (groupAlive(pid, groupOnly)) {
     killGroup(pid, 'SIGKILL');
-    for (let i = 0; i < 20 && groupAlive(pid); i++) await sleep(100);
+    for (let i = 0; i < 20 && groupAlive(pid, groupOnly); i++) await sleep(100);
   }
   console.log('[launcher] dsh stopped by launcher');
 }

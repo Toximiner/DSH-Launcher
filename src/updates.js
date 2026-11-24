@@ -316,7 +316,7 @@ async function downloadDeb(url, expectedSha256) {
     const total = Number(res.headers['content-length'] || 0);
     const name = url.split('/').pop() || 'dsh-launcher.deb';
     const dest = path.join(dir, name);
-    updateState.log.push(total ? `${name} (${(total / MB).toFixed(1)} МБ)` : name);
+    updateState.log.push(total ? tr(`${name} (${(total / MB).toFixed(1)} МБ)`, `${name} (${(total / MB).toFixed(1)} MB)`) : name);
     updateState.logSeq++;
     pages.liveRedraw(updateState, () => updateState.mode === 'running', showUpdatePage)();
     const out = fs.createWriteStream(dest);
@@ -324,8 +324,9 @@ async function downloadDeb(url, expectedSha256) {
     let got = 0;
     updateState.timer = setInterval(() => {
       updateState.log.push(total
-        ? `${(got / MB).toFixed(1)} / ${(total / MB).toFixed(1)} МБ (${Math.round((100 * got) / total)}%)`
-        : `${(got / MB).toFixed(1)} МБ`);
+        ? tr(`${(got / MB).toFixed(1)} / ${(total / MB).toFixed(1)} МБ (${Math.round((100 * got) / total)}%)`,
+            `${(got / MB).toFixed(1)} / ${(total / MB).toFixed(1)} MB (${Math.round((100 * got) / total)}%)`)
+        : tr(`${(got / MB).toFixed(1)} МБ`, `${(got / MB).toFixed(1)} MB`));
       if (updateState.log.length > LOG_MAX_LINES) updateState.log.shift();
       updateState.logSeq++;
       pages.liveRedraw(updateState, () => updateState.mode === 'running', showUpdatePage)();
@@ -372,7 +373,9 @@ function restartLauncher() {
   const exe = process.env.DSH_LAUNCHER_RESTART_BIN || '/usr/bin/dsh-launcher';
   app.releaseSingleInstanceLock();
   let started = false;
+  let graceTimer = null;
   const fail = (e) => {
+    if (graceTimer) { clearTimeout(graceTimer); graceTimer = null; } // error — the app must not quit
     state.restarting = false;
     state.launcherUpdatedOnDisk = false; // don't restart again on every process crash
     app.requestSingleInstanceLock(); // we stay the only instance
@@ -396,8 +399,8 @@ function restartLauncher() {
   p.unref();
   // We give the 'error' event a chance (missing exe — it fires at once):
   // if the process didn't start, we don't close the app — the error is shown.
-  setTimeout(() => {
-    if (!started) return;
+  graceTimer = setTimeout(() => {
+    if (!started || !state.restarting) return;
     console.log(`[launcher] запущена новая версия (${exe}), закрываю старую`);
     app.quit();
   }, RESTART_SPAWN_GRACE_MS);
