@@ -63,6 +63,7 @@ function updateDismissals() {
 }
 
 let settingsNote = null; // { text, error }
+let relaunchAsk = false; // «Перезапустить лаунчер» в баннере: уже спрошено подтверждение
 
 /* ===== applySetting (test test/settings-window.js) =====
    One «Settings» field → its immediate effect (language, spellcheck, tray,
@@ -130,6 +131,21 @@ function onSettingsResetUpdates() {
   return noContentResponse();
 }
 
+// «Перезапустить лаунчер» in the banner — two steps: the banner first asks
+// for the confirmation (the restart stops dsh and interrupts an unfinished
+// reply), then «Перезапустить» goes to the usual relaunch route.
+function onSettingsRelaunchAsk() {
+  relaunchAsk = true;
+  if (state.dialogRender) state.dialogRender(false);
+  return noContentResponse();
+}
+
+function onSettingsRelaunchAskCancel() {
+  relaunchAsk = false;
+  if (state.dialogRender) state.dialogRender(false);
+  return noContentResponse();
+}
+
 // Launcher restart (apply settings). Not app.relaunch(): Electron starts
 // the new instance while the old one still holds the "single instance"
 // lock, and the new one closes right away. That's why it goes like this:
@@ -177,6 +193,7 @@ function showSettingsDialog() {
   const gen = dialogs.openDialog(title);
   if (gen === null) return;
   settingsNote = null;
+  relaunchAsk = false;
   state.dialogCopyText = '';
   const render = () => {
     const next = effectiveConfig(process.env, loadSettings(), os.homedir());
@@ -193,8 +210,13 @@ function showSettingsDialog() {
     const gpu = fileHelp.gpuStatusNow();
     const dshShown = next.dshBin || tr(`автоматически (сейчас: ${state.dshBin})`, `automatic (now: ${state.dshBin})`);
     const body = `
-      ${pending.length ? `<div class="banner">${tr('Изменения вступят в силу после перезапуска лаунчера.', 'Changes take effect after the launcher restarts.')}
-        <button onclick="go('relaunch')">${tr('Перезапустить лаунчер', 'Restart the launcher')}</button></div>` : ''}
+      ${(pending.length || relaunchAsk) ? (relaunchAsk
+        ? `<div class="banner">${tr('Перезапустить лаунчер? dsh будет остановлен — незаконченный ответ агента прервётся, сессии сохранятся.',
+            'Restart the launcher? dsh will be stopped — an unfinished agent reply will be interrupted; sessions are kept.')}
+          <button onclick="go('relaunch')">${tr('Перезапустить', 'Restart')}</button>
+          <button onclick="go('relaunch-ask-cancel')">${tr('Отмена', 'Cancel')}</button></div>`
+        : `<div class="banner">${tr('Изменения вступят в силу после перезапуска лаунчера.', 'Changes take effect after the launcher restarts.')}
+          <button onclick="go('relaunch-ask')">${tr('Перезапустить лаунчер', 'Restart the launcher')}</button></div>`) : ''}
       ${settingsNote ? `<p class="${settingsNote.error ? 'pop err' : 'pop'}" role="status">${esc(settingsNote.text)}</p>` : ''}
       <div class="sett">
         <nav>
@@ -272,4 +294,4 @@ function showSettingsDialog() {
   dialogs.dialogShow(gen, render);
 }
 
-Object.assign(module.exports, { onSettingsSet, onSettingsPick, onSettingsResetUpdates, relaunchLauncher, spawnLauncherAfterExit, spawnNewInstance, SETTINGS_SECTIONS, showSettingsDialog }); // extend rather than replace: the modules require each other in a circle
+Object.assign(module.exports, { onSettingsSet, onSettingsPick, onSettingsResetUpdates, onSettingsRelaunchAsk, onSettingsRelaunchAskCancel, relaunchLauncher, spawnLauncherAfterExit, spawnNewInstance, SETTINGS_SECTIONS, showSettingsDialog }); // extend rather than replace: the modules require each other in a circle

@@ -113,6 +113,23 @@ function pageHtml(title, body, isError, opts = {}) {
 }
 /* ===== end pageHtml ===== */
 
+/* ===== keyNavScript (pure function, test test/pages.js) =====
+   Keyboard for the button pages: Enter — the primary action,
+   Esc — the safe one («later»/«skip»). A <script> snippet for the page
+   body; '' — that key is disabled. The keys are ignored while the focus
+   is on a control other than <body> (a button keeps its native click,
+   an input keeps its typing). */
+function keyNavScript(primaryHref, cancelHref) {
+  if (!primaryHref && !cancelHref) return '';
+  return `<script>const __navP = ${JSON.stringify(primaryHref)}, __navC = ${JSON.stringify(cancelHref)};
+document.addEventListener('keydown', (e) => {
+  if (e.repeat || (e.target && e.target.tagName !== 'BODY')) return;
+  if (e.key === 'Enter' && __navP) { e.preventDefault(); location.href = __navP; }
+  else if (e.key === 'Escape' && __navC) { location.href = __navC; }
+});</script>`;
+}
+/* ===== end keyNavScript ===== */
+
 // How many log lines the error pages show
 const STDERR_BLOCK_LINES = 50;
 
@@ -287,4 +304,4 @@ async function liveLogTick(st) {
   }
 }
 
-Object.assign(module.exports, { pageHtml, stderrBlock, showPage, langPrefFile, loadLangPref, onLangSwitch, loadInWin, showStatus, showPastePage, liveLogPre, liveLogSync, liveLogTick, liveRedraw }); // we extend, not replace: the modules require each other cyclically
+Object.assign(module.exports, { pageHtml, keyNavScript, stderrBlock, showPage, langPrefFile, loadLangPref, onLangSwitch, loadInWin, showStatus, showPastePage, liveLogPre, liveLogSync, liveLogTick, liveRedraw }); // we extend, not replace: the modules require each other cyclically

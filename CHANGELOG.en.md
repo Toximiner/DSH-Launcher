@@ -9,6 +9,11 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+### Changed
+
+- Keyboard on the update and marketplace-plugin question pages: Enter — the primary action, Esc — “Not now”.
+- Restarting the launcher from Settings now asks for a confirmation (the restart stops dsh and interrupts an unfinished reply).
+
 ### Fixed
 
 - The “DeepSeek Harness is closing…” window now appears on Wayland even when the ready-to-show event never fires (8-second fallback, same as the main window).

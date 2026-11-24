@@ -29,7 +29,7 @@ const { onFindRequest } = require('./view');
 const { openLogsFolder, restartDsh, onDialogGpuEnable } = require('./file-help');
 const { saveReport } = require('./diagnostics');
 const { showLogDialog } = require('./dsh-log');
-const { onSettingsSet, onSettingsPick, onSettingsResetUpdates, relaunchLauncher, SETTINGS_SECTIONS, showSettingsDialog } = require('./settings-window');
+const { onSettingsSet, onSettingsPick, onSettingsResetUpdates, onSettingsRelaunchAsk, onSettingsRelaunchAskCancel, relaunchLauncher, SETTINGS_SECTIONS, showSettingsDialog } = require('./settings-window');
 const { onDialogClose, onDialogCopy, showAboutDialog, showUpdateCheckDialog } = require('./dialogs');
 const { showRollbackDialog, rollbackTo } = require('./rollback');
 
@@ -276,6 +276,8 @@ const ROUTE_TABLE = [
   ['/settings/pick-cwd/', 'settings/pick-cwd'],
   ['/settings/reset-updates/', 'settings/reset-updates'],
   ['/settings/relaunch/', 'settings/relaunch'],
+  ['/settings/relaunch-ask/', 'settings/relaunch-ask'],
+  ['/settings/relaunch-ask-cancel/', 'settings/relaunch-ask-cancel'],
   ['/menu/close-context/', 'menu/close-context'],
   ['/dialog/gpu-enable/', 'dialog/gpu-enable'],
   ['/menu/restart-dsh/', 'menu/restart-dsh'],
@@ -336,6 +338,8 @@ const ROUTE_HANDLERS = {
   'settings/pick-cwd': () => onSettingsPick('cwd'),
   'settings/reset-updates': () => onSettingsResetUpdates(),
   'settings/relaunch': () => { relaunchLauncher(); return noContentResponse(); },
+  'settings/relaunch-ask': () => { onSettingsRelaunchAsk(); return noContentResponse(); },
+  'settings/relaunch-ask-cancel': () => { onSettingsRelaunchAskCancel(); return noContentResponse(); },
   'menu/close-context': () => { if (state.openContextMenu) state.openContextMenu.closePopup(); return noContentResponse(); },
   'dialog/gpu-enable': () => onDialogGpuEnable(),
   'menu/restart-dsh': () => { void restartDsh({ confirm: false }); return noContentResponse(); },
