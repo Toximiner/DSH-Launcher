@@ -71,6 +71,7 @@ async function githubReleases({ force = false } = {}) {
 // the published ones (not a draft, not a prerelease); the descriptions of
 // the rest — for «Что нового» (What's new) (the changes between the
 // installed and the new version).
+/* ===== fetchLauncherLatest (test test/updates-github.js) ===== */
 async function fetchLauncherLatest({ force = false } = {}) {
   const list = await githubReleases({ force });
   const rels = (Array.isArray(list) ? list : []).filter((r) => r && !r.draft && !r.prerelease && r.tag_name);
@@ -90,14 +91,17 @@ async function fetchLauncherLatest({ force = false } = {}) {
   if (fake) meta.version = fake;
   return meta;
 }
+/* ===== end fetchLauncherLatest ===== */
 
 // A stub "latest" version (development/tests): the value of the variable or,
 // if it is a path, the contents of the file (read on every check).
+/* ===== fakeLatest (test test/updates-github.js) ===== */
 function fakeLatest(name) {
   const v = process.env[name];
   if (!v || !v.startsWith('/')) return v || null;
   try { return fs.readFileSync(v, 'utf8').trim() || null; } catch { return null; }
 }
+/* ===== end fakeLatest ===== */
 
 // dsh releases — from the project's GitHub repository (deepseek-harness):
 // the npm registry does not serve version descriptions, while the GitHub

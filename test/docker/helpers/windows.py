@@ -440,7 +440,8 @@ class PastePage(UpdatePrompt):
         """Paste a link or token into the field and press Enter — like a user.
         Enter is a synthetic event; under CI load the navigation after it
         could be lost (a 26.04 flake): we check that the window left the paste page,
-        — if it did not, we repeat."""
+        — if it did not, we repeat; after 3 lost Enters — a hard failure
+        instead of continuing on the wrong page."""
         for _ in range(3):
             start = self.drv.url()
             self.drv.eval(f"(() => {{ const el = document.getElementById('u'); el.value = {json.dumps(value)};"
@@ -448,3 +449,4 @@ class PastePage(UpdatePrompt):
             time.sleep(1.5)
             if self.drv.url() != start:
                 return
+        raise AssertionError(f'window stayed on the paste page after 3 Enters (url={self.drv.url()!r})')

@@ -5,15 +5,20 @@ const { app } = require('electron');
 const fs = require('fs');
 const path = require('path');
 
+/* ===== prefFile (test test/prefs.js) ===== */
 const prefFile = (name) => path.join(app.getPath('userData'), name);
+/* ===== end prefFile ===== */
 
 // File missing or corrupted — null.
+/* ===== readPref (test test/prefs.js) ===== */
 function readPref(name) {
   try { return JSON.parse(fs.readFileSync(prefFile(name), 'utf8')); }
   catch { return null; }
 }
+/* ===== end readPref ===== */
 
 // Write error goes to the log, no exception: the setting simply won't be remembered.
+/* ===== writePref (test test/prefs.js) ===== */
 function writePref(name, obj) {
   try {
     fs.mkdirSync(path.dirname(prefFile(name)), { recursive: true });
@@ -24,5 +29,6 @@ function writePref(name, obj) {
     return false;
   }
 }
+/* ===== end writePref ===== */
 
 module.exports = { prefFile, readPref, writePref };
