@@ -4,6 +4,8 @@
 // time the window is already hidden but the process is still alive — without
 // the window, exit looks hung. We show it only if the stop drags on
 // (CLOSING_DELAY_MS): a fast exit goes by without flicker. Closes with the app.
+// Like the main window (main.js), it has an 8-second fallback for the case
+// when ready-to-show never comes (native Wayland).
 const { BrowserWindow } = require('electron');
 const fs = require('fs');
 const path = require('path');
@@ -11,6 +13,7 @@ const { tr } = require('./i18n');
 const { esc, CSP_META } = require('./util');
 
 const CLOSING_DELAY_MS = 300;
+const SHOW_SAFETY_NET_MS = 8000; // as in main.js: on Wayland ready-to-show may never come
 
 /* ===== closingHtml (test test/pages.js) =====
    The window markup: icon, spinner, heading and explanation. No scripts. */
@@ -55,6 +58,14 @@ function showClosingWindow(relaunch = false) {
     win.once('ready-to-show', () => { if (win && !win.isDestroyed()) win.show(); });
     win.on('closed', () => { win = null; });
     win.loadURL(closingHtml(title, text, iconDataUrl())).catch(() => {});
+    // Safety net: on native Wayland ready-to-show may never come — the window
+    // with show:false stays invisible (the same net as main.js).
+    setTimeout(() => {
+      if (win && !win.isDestroyed() && !win.isVisible()) {
+        console.log('[launcher] ready-to-show окна «закрывается…» не пришло за 8 с — показываю вручную');
+        win.show();
+      }
+    }, SHOW_SAFETY_NET_MS);
     console.log('[launcher] окно «закрывается…» показано');
   } catch (e) {
     console.error('[launcher] окно «закрывается…»:', e.message);
