@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+## [1.18.8] — 2026-11-25
+
 ### Changed
 
 - Keyboard on the update and marketplace-plugin question pages: Enter — the primary action, Esc — “Not now”.
