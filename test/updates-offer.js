@@ -198,6 +198,7 @@ function dlEnv(over = {}) {
     MB: 1024 * 1024,
     DOWNLOAD_PROGRESS_MS: 10,
     crypto,
+    tr,
   };
   const downloadDeb = extract('downloadDeb', d);
   return { downloadDeb, tmp, updateState };

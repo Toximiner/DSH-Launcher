@@ -373,7 +373,11 @@ function registerProtocol() {
       const url = new URL(request.url);
       const handler = ROUTE_HANDLERS[matchRoute(route)];
       return handler ? handler(route, url) : onPasteRequest(route);
-    } catch { return blankResponse(); } // as before: a handler failure — a blank page
+    } catch (e) {
+      // as before: a handler failure — a blank page; the error now goes to the log
+      console.error('[launcher] dshlauncher handler:', e.message);
+      return blankResponse();
+    }
   });
 }
 

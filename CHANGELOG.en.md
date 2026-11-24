@@ -14,6 +14,14 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 - Keyboard on the update and marketplace-plugin question pages: Enter — the primary action, Esc — “Not now”.
 - Restarting the launcher from Settings now asks for a confirmation (the restart stops dsh and interrupts an unfinished reply).
 
+### Fixed
+
+- The “DeepSeek Harness is closing…” window now appears on Wayland even when the ready-to-show event never fires (8-second fallback, same as the main window).
+- Launcher auto-restart after an update: if the new version fails to start, the old instance no longer quits at the same time the error is shown (the restart timer is cancelled).
+- Errors in dshlauncher:// route handlers are now logged instead of being swallowed silently.
+- The SIGKILL wait when stopping dsh now checks the process group the same way as SIGTERM: a reused PID no longer causes an extra 2-second stall.
+- Update download progress no longer shows “МБ” in the English UI (now “MB”).
+
 ## [1.18.7] — 2026-11-25
 
 ### Changed
