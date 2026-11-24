@@ -267,7 +267,13 @@ class SettingsDialog(Dialog):
         """The window field's value (input field text does not land in innerText)."""
         return self.drv.eval(f"(document.getElementById({json.dumps(element_id)}) || {{}}).value", page=self.TITLE)
 
+    def relaunch_ask(self):
+        """The banner confirmation question shown before the restart."""
+        self.go('dshlauncher://settings/relaunch-ask/')
+        self.wait_text(r'Restart the launcher\?', 10)
+
     def relaunch(self):
+        self.relaunch_ask()
         self.go('dshlauncher://settings/relaunch/')
 
 

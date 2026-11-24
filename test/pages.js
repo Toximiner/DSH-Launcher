@@ -59,6 +59,21 @@ const { extract } = require('./_extract');
   assert.ok(bad.includes('<div class="wrap err">'), 'error → err class');
   assert.ok(bad.includes('a&lt;b'), 'the title is escaped');
 
+  // ---- keyNavScript: keyboard for the button pages (Enter — primary, Esc — safe) ----
+  {
+    const keyNavScript = extract('keyNavScript', {});
+    assert.strictEqual(keyNavScript('', ''), '', 'no hrefs — no script at all');
+    const both = keyNavScript('dshlauncher://update/install/', 'dshlauncher://update/later/');
+    assert.ok(both.startsWith('<script>') && both.endsWith('</script>'), 'a <script> snippet');
+    assert.ok(both.includes('dshlauncher://update/install/') && both.includes('dshlauncher://update/later/'), 'the hrefs in the script');
+    assert.ok(both.includes("e.key === 'Enter'") && both.includes("e.key === 'Escape'"), 'the Enter and Esc keys');
+    assert.ok(both.includes("e.target.tagName !== 'BODY'"), 'ignored while a control has focus');
+    assert.ok(both.includes('e.repeat'), 'aut-repeat is ignored');
+    const primaryOnly = keyNavScript('dshlauncher://update/restart/', '');
+    assert.ok(primaryOnly.includes('__navC = ""'), 'no cancel href → empty (Esc is disabled)');
+    assert.ok(primaryOnly.includes('&& __navC'), 'the Esc branch is guarded by the href');
+  }
+
   // ---- groupAlive: whether a process or its whole group is alive ----
   const { groupAlive } = require('../src/system');
   assert.strictEqual(groupAlive(process.pid), true, 'own pid → alive');

@@ -33,7 +33,9 @@ def test_settings_apply(start, gui):
     assert settings_file() == {'profile': 'second', 'cwd': '/tmp'}, settings_file()
     assert wait_for(settings.restart_banner, 5, 0.2), 'the «changes — after a restart» banner is shown'
 
-    settings.relaunch()
+    settings.relaunch_ask()
+    assert launcher.wait_exit(2) is None, 'before the confirmation the launcher must not restart'
+    settings.go('dshlauncher://settings/relaunch/')
 
     assert launcher.wait_exit(20) is not None, 'the previous instance exited'
     new = launcher.successor()

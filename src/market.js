@@ -86,7 +86,7 @@ function showMarketPage(note, noteIsError = false) {
          <button onclick="location.href='dshlauncher://market/install/'">${tr('Установить', 'Install')}</button>
          <button onclick="location.href='dshlauncher://market/skip/'">${tr('Не сейчас', 'Not now')}</button>
          <button onclick="location.href='dshlauncher://market/never/'">${tr('Не спрашивать больше', 'Don’t ask again')}</button>
-       </div>`;
+       </div>${pages.keyNavScript('dshlauncher://market/install/', 'dshlauncher://market/skip/')}`;
   if (installing) pages.liveLogSync(marketState);
   pages.showStatus(installing ? tr(`Устанавливаю ${MARKET_PKG}…`, `Installing ${MARKET_PKG}…`)
     : tr(`Установить ${MARKET_PKG}?`, `Install ${MARKET_PKG}?`), body, noteIsError);

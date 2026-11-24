@@ -199,7 +199,7 @@ function showUpdatePage(note, noteIsError = false) {
         `Version <code>${esc(updateState.latest)}</code> is installed. The app will restart in a couple of seconds (or click the button).`)}</p>
       <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap">
         <button onclick="location.href='dshlauncher://update/restart/'">${tr('Перезапустить сейчас', 'Restart now')}</button>
-      </div>`;
+      </div>${pages.keyNavScript('dshlauncher://update/restart/', '')}`;
   } else if (mode === 'manual') {
     title = tr('Обновить вручную', 'Update manually');
     body = `
@@ -217,7 +217,7 @@ function showUpdatePage(note, noteIsError = false) {
         <button onclick="location.href='dshlauncher://update/recheck/'">${tr('Проверить ещё раз', 'Check again')}</button>
         <button onclick="location.href='dshlauncher://update/later/'">${tr('Не сейчас', 'Not now')}</button>
         <button onclick="location.href='dshlauncher://update/never/'">${tr('Не спрашивать больше', 'Don’t ask again')}</button>
-      </div>`;
+      </div>${pages.keyNavScript('dshlauncher://update/recheck/', 'dshlauncher://update/later/')}`;
   } else {
     // ask
     title = kind === 'dsh'
@@ -234,7 +234,7 @@ function showUpdatePage(note, noteIsError = false) {
         <button onclick="location.href='dshlauncher://update/later/'">${tr('Не сейчас', 'Not now')}</button>
         <button onclick="location.href='dshlauncher://update/never/'">${tr('Не спрашивать больше', 'Don’t ask again')}</button>
         ${link}
-      </div>`;
+      </div>${pages.keyNavScript('dshlauncher://update/install/', 'dshlauncher://update/later/')}`;
   }
   if (mode === 'running') pages.liveLogSync(updateState);
   pages.showStatus(title, body, noteIsError);
