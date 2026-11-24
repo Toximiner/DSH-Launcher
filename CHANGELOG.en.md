@@ -9,6 +9,8 @@ The `## [X.Y.Z]` section becomes the description of the `vX.Y.Z` GitHub release.
 
 <!-- сюда дописать изменения для следующего релиза (### Добавлено / Изменено / Исправлено) -->
 
+## [1.18.7] — 2026-11-25
+
 ### Changed
 
 - Internal: updated Electron to 45.4.1 — backported security fixes from Chromium, ANGLE, V8, etc. (the app runtime, shipped in the `.deb`).
