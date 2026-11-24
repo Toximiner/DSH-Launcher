@@ -3,8 +3,10 @@ name: build-deb
 # How to make a release:
 #   1. Complete the `## [Unreleased]` section in CHANGELOG.md (Russian) and
 #      CHANGELOG.en.md (English) — both become the release description.
-#   2. (optional) Actions → docker-tests → Run workflow: scenarios of the
-#      installed package on Ubuntu 24.04 / 26.04 and Debian 13 (~15 minutes).
+#   2. If the release touches runtime behavior (anything beyond docs, CI
+#      and dev tooling) — run docker-tests: Actions → docker-tests → Run
+#      workflow (scenarios of the installed package on Ubuntu 24.04 / 26.04
+#      and Debian 13, ~15 minutes) and wait for green before merging.
 #   3. npm run release X.Y.Z — the section becomes `## [X.Y.Z] — <date>`,
 #      the version — in package.json, package-lock.json and deb/control; a
 #      «Version X.Y.Z» commit (the tag is not created — applied after the merged PR).
